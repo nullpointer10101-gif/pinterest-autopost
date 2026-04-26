@@ -655,6 +655,7 @@ function renderVideoPlayer(container, videoUrl) {
   video.autoplay = true;
   video.muted = true;
   video.playsInline = true;
+  video.crossOrigin = 'anonymous';
   video.style.cssText = 'width:100%;height:580px;border-radius:12px;background:#000;object-fit:contain;display:block;';
   video.src = proxied;
 

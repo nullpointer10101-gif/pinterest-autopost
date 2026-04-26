@@ -47,7 +47,7 @@ router.get('/proxy', async (req, res) => {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
         'Referer': 'https://www.instagram.com/',
         'Origin': 'https://www.instagram.com',
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept': '*/*',
         'Accept-Language': 'en-US,en;q=0.9',
         'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="123", "Google Chrome";v="123"',
         'sec-ch-ua-mobile': '?1',
