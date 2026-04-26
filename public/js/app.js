@@ -999,7 +999,12 @@ function renderHistory() {
   list.innerHTML = items.map(item => {
     const date = new Date(item.createdAt || item.postedAt || item.timestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, month: 'short', day: 'numeric', year: 'numeric' });
     const title = item.aiContent?.title || item.title || 'Untitled';
-    const username = item.reelData?.username || item.username || 'unknown';
+    let username = item.reelData?.username || item.username || '';
+    
+    // Smart Fallback for Username
+    if (!username || username === 'unknown' || username === 'creator') {
+        username = extractUsername(item.url || '') || 'Instagram Creator';
+    }
     const thumb = item.reelData?.thumbnailUrl || item.thumbnailUrl || '';
     const pinUrl = item.pinterestPin?.url || '#';
     const status = item.status || 'success';
@@ -1168,6 +1173,10 @@ function renderQueueMini() {
 
   list.innerHTML = activeItems.slice(0, 3).map(item => {
     const isActive = item.status === 'processing';
+    let username = item.username || item.reelData?.username || '';
+    if (!username || username === 'unknown') {
+        username = extractUsername(item.mediaUrl || item.sourceUrl || '') || 'Creator';
+    }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
     const thumbUrl = thumb ? `https://images.weserv.nl/?url=${encodeURIComponent(thumb)}&w=60&h=80&fit=cover` : fallback;
@@ -1206,6 +1215,10 @@ function renderQueue() {
     const date = new Date(item.addedAt || item.timestamp || Date.now()).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, month: 'short', day: 'numeric', year: 'numeric' });
     const status = (item.status || 'pending').toUpperCase();
     const isActive = item.status === 'processing';
+    let username = item.username || item.reelData?.username || '';
+    if (!username || username === 'unknown') {
+        username = extractUsername(item.sourceUrl || item.mediaUrl || '') || 'Instagram Creator';
+    }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
     const thumbUrl = thumb ? `https://images.weserv.nl/?url=${encodeURIComponent(thumb)}&w=120&h=160&fit=cover` : fallback;
