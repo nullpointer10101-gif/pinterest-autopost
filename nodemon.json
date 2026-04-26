@@ -1,0 +1,6 @@
+{
+  "watch": ["server.js", "routes", "services", "public"],
+  "ext": "js,mjs,cjs",
+  "ignore": ["data/*", "*.json", ".env", "node_modules", "public/error_screenshot.png"],
+  "delay": 500
+}

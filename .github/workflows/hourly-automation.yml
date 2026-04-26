@@ -1,0 +1,64 @@
+name: Unlimited Pinterest Automation (Public Mode)
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  automation-mission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache Puppeteer Browser
+        id: cache-puppeteer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Puppeteer Browser
+        if: steps.cache-puppeteer.outputs.cache-hit != 'true'
+        run: npx puppeteer browsers install chrome
+
+      - name: Run automation mission
+        run: node scripts/run-hourly-automation.js
+        env:
+          NODE_ENV: production
+          AUTOMATION_TIMEZONE: ${{ secrets.AUTOMATION_TIMEZONE || 'Asia/Calcutta' }}
+          AUTOMATION_MAX_POSTS_PER_DAY: 60
+          AUTOMATION_MAX_POSTS_PER_RUN: 2
+          AUTOMATION_ENGAGEMENTS_PER_HOUR: 5
+          AUTOMATION_ENGAGEMENTS_HARD_CAP: 10
+          # Maximum Safety: Long, randomized human-like delays
+          AUTOMATION_ENGAGEMENT_START_JITTER_MIN_MS: 60000
+          AUTOMATION_ENGAGEMENT_START_JITTER_MAX_MS: 180000
+          AUTOMATION_ENGAGEMENT_MIN_GAP_MS: 120000
+          AUTOMATION_ENGAGEMENT_MAX_GAP_MS: 300000
+          AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
+          PINTEREST_POSTING_MODE: bot
+          PINTEREST_SESSION_COOKIE: ${{ secrets.PINTEREST_SESSION_COOKIE }}
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_REFRESH_TOKEN: ${{ secrets.PINTEREST_REFRESH_TOKEN }}
+          PINTEREST_APP_ID: ${{ secrets.PINTEREST_APP_ID }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          APP_STATE_KEY: ${{ secrets.APP_STATE_KEY || 'pinterest_autopost_state_v1' }}

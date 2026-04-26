@@ -1,0 +1,28 @@
+{
+  "name": "reel-to-pinterest-autoposter",
+  "version": "1.0.0",
+  "description": "Automatically convert Instagram Reels to Pinterest posts",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "automation:hourly": "node scripts/run-hourly-automation.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "form-data": "^4.0.0",
+    "instagram-url-direct": "^2.0.7",
+    "lowdb": "^1.0.0",
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^2.7.0",
+    "openai": "^4.20.1",
+    "puppeteer": "^24.41.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

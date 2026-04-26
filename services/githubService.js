@@ -1,0 +1,35 @@
+const axios = require('axios');
+
+async function triggerAutomation() {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = 'pinterest-autopost';
+  const owner = 'nullpointer10101-gif';
+
+  if (!token) {
+    console.warn('[GitHub] No GITHUB_TOKEN configured. Manual trigger skipped.');
+    return { success: false, error: 'GITHUB_TOKEN missing' };
+  }
+
+  try {
+    console.log(`[GitHub] Triggering workflow for ${owner}/${repo}...`);
+    const res = await axios.post(
+      `https://api.github.com/repos/${owner}/${repo}/actions/workflows/hourly-automation.yml/dispatches`,
+      { ref: 'main' },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      }
+    );
+
+    console.log('[GitHub] Workflow trigger sent successfully.');
+    return { success: true };
+  } catch (err) {
+    console.error('[GitHub] Failed to trigger workflow:', err.response?.data || err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+module.exports = { triggerAutomation };

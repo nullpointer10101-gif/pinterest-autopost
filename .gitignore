@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Environment variables (NEVER commit these)
+.env
+.env.local
+.env.production
+
+# Local database (ephemeral — persisted via Vercel KV or /tmp in production)
+data/db.json
+data/*.json
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Local secrets / scratch
+UPSTASH_CREDENTIALS.txt
+scratch/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Puppeteer cached browser (too large for deployment)
+.local-chromium/
+.cache/puppeteer/
+
+# Media & Screenshots
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+
+# Build artifacts
+dist/
+build/
