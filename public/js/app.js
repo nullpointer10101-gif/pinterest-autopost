@@ -639,11 +639,12 @@ function renderMediaPreview() {
   }
 
   const img = document.createElement('img');
-  const proxied = `/api/proxy?url=${btoa(mediaUrl)}`;
-  img.src = proxied;
+  // Use Google's Focus Proxy as the primary high-authority image delivery system
+  const googleProxy = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(mediaUrl)}`;
+  img.src = googleProxy;
   img.alt = 'Media preview';
   img.style.cssText = 'width:100%;border-radius:8px;';
-  img.onerror = () => { img.src = mediaUrl; };
+  img.onerror = () => { img.src = `/api/proxy?url=${btoa(mediaUrl)}`; };
   container.appendChild(img);
   hide('mute-toggle');
 }
@@ -1011,8 +1012,9 @@ function renderHistory() {
     const igUrl = item.url || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
     
-    // Use the improved Stealth Ghost Proxy with Base64 Bridge for zero corruption
-    const thumbUrl = thumb ? `/api/proxy?url=${btoa(thumb)}` : fallback;
+    // ULTIMATE FIX: Using Google's High-Authority Proxy for Activity Thumbnails
+    const googleProxy = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(thumb)}`;
+    const thumbUrl = thumb ? googleProxy : fallback;
 
     let statusBadge = 'Posted';
     let tagClass = '';
@@ -1179,7 +1181,7 @@ function renderQueueMini() {
     }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? `/api/proxy?url=${btoa(thumb)}` : fallback;
+    const thumbUrl = thumb ? `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(thumb)}` : fallback;
 
     return `
       <div style="display:flex; align-items:center; gap:12px; padding:12px; background:rgba(255,255,255,0.02); border-radius:8px; border: 1px solid ${isActive ? 'var(--accent)' : 'transparent'}">
@@ -1221,7 +1223,7 @@ function renderQueue() {
     }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? `/api/proxy?url=${btoa(thumb)}` : fallback;
+    const thumbUrl = thumb ? `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(thumb)}` : fallback;
     
     let statusClass = '';
     if (item.status === 'failed') statusClass = 'tag-error';
