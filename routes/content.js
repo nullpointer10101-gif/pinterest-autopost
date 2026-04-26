@@ -44,17 +44,24 @@ router.get('/proxy', async (req, res) => {
     const response = await axios.get(url, {
       responseType: 'stream',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Referer': 'https://www.instagram.com/'
-      }
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': 'https://www.instagram.com/',
+        'Accept': 'video/mp4,image/*,*/*'
+      },
+      timeout: 10000
     });
     
-    res.setHeader('Content-Type', response.headers['content-type'] || 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24h
+    // Forward essential headers
+    const contentType = response.headers['content-type'];
+    if (contentType) res.setHeader('Content-Type', contentType);
+    
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
     response.data.pipe(res);
   } catch (err) {
-    console.error('[Proxy] Error fetching media:', err.message);
-    res.status(500).send('Error fetching media');
+    console.error('[Proxy] Error:', err.message);
+    res.status(500).send('Proxy failure');
   }
 });
 
