@@ -164,7 +164,7 @@ async function processNextInQueue() {
         hashtags: aiContent?.hashtags || [],
       },
       pinterestPin: {
-        id: result?.pin?.id || `pin_${Date.now()}`,
+        id: item.id || result?.pin?.id || `pin_${Date.now()}`,
         url: result?.pin?.url || '#',
         method,
       },
@@ -189,7 +189,9 @@ async function processNextInQueue() {
         description: item.description || '',
         hashtags: item.aiContent?.hashtags || [],
       },
-      pinterestPin: null,
+      pinterestPin: {
+        id: item.id || `fail_${Date.now()}`
+      },
       status: 'error',
       error: error.message,
       postedAt: new Date().toISOString(),
