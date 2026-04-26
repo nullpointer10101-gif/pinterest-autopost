@@ -639,7 +639,8 @@ function renderMediaPreview() {
   }
 
   const img = document.createElement('img');
-  img.src = `/api/proxy?url=${encodeURIComponent(mediaUrl)}`;
+  const proxied = `/api/proxy?url=${btoa(mediaUrl)}`;
+  img.src = proxied;
   img.alt = 'Media preview';
   img.style.cssText = 'width:100%;border-radius:8px;';
   img.onerror = () => { img.src = mediaUrl; };
@@ -648,7 +649,7 @@ function renderMediaPreview() {
 }
 
 function renderVideoPlayer(container, videoUrl) {
-  const proxied = `/api/proxy?url=${encodeURIComponent(videoUrl)}`;
+  const proxied = `/api/proxy?url=${btoa(videoUrl)}`;
   const video = document.createElement('video');
   video.id = 'preview-video';
   video.controls = true;
@@ -1010,8 +1011,8 @@ function renderHistory() {
     const igUrl = item.url || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
     
-    // Use the improved Stealth Ghost Proxy for high-reliability rendering
-    const thumbUrl = thumb ? `/api/proxy?url=${encodeURIComponent(thumb)}` : fallback;
+    // Use the improved Stealth Ghost Proxy with Base64 Bridge for zero corruption
+    const thumbUrl = thumb ? `/api/proxy?url=${btoa(thumb)}` : fallback;
 
     let statusBadge = 'Posted';
     let tagClass = '';
@@ -1178,7 +1179,7 @@ function renderQueueMini() {
     }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? `/api/proxy?url=${encodeURIComponent(thumb)}` : fallback;
+    const thumbUrl = thumb ? `/api/proxy?url=${btoa(thumb)}` : fallback;
 
     return `
       <div style="display:flex; align-items:center; gap:12px; padding:12px; background:rgba(255,255,255,0.02); border-radius:8px; border: 1px solid ${isActive ? 'var(--accent)' : 'transparent'}">
@@ -1220,7 +1221,7 @@ function renderQueue() {
     }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? `/api/proxy?url=${encodeURIComponent(thumb)}` : fallback;
+    const thumbUrl = thumb ? `/api/proxy?url=${btoa(thumb)}` : fallback;
     
     let statusClass = '';
     if (item.status === 'failed') statusClass = 'tag-error';

@@ -36,10 +36,13 @@ router.post('/generate', async (req, res) => {
 });
 
 router.get('/proxy', async (req, res) => {
-  const { url } = req.query;
-  if (!url) return res.status(400).send('URL required');
+  const { url: encodedUrl } = req.query;
+  if (!encodedUrl) return res.status(400).send('URL required');
   
   try {
+    // Decode Base64 URL to prevent corruption from special characters
+    const url = Buffer.from(encodedUrl, 'base64').toString('utf8');
+    
     const axios = require('axios');
     const response = await axios.get(url, {
       responseType: 'stream',
@@ -58,7 +61,7 @@ router.get('/proxy', async (req, res) => {
         'priority': 'i',
         'connection': 'keep-alive'
       },
-      timeout: 12000,
+      timeout: 15000,
       maxRedirects: 5,
       validateStatus: false
     });
@@ -66,13 +69,12 @@ router.get('/proxy', async (req, res) => {
     const contentType = response.headers['content-type'];
     if (contentType) res.setHeader('Content-Type', contentType);
     
-    // Add strong caching so it doesn't have to fetch from IG every time
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.setHeader('Access-Control-Allow-Origin', '*');
     
     response.data.pipe(res);
   } catch (err) {
-    console.error('[Titanium Proxy] Error:', err.message);
+    console.error('[Base64 Proxy] Error:', err.message);
     res.status(500).send('Proxy failure');
   }
 });
