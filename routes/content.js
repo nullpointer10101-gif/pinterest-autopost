@@ -44,14 +44,21 @@ router.get('/proxy', async (req, res) => {
     const response = await axios.get(url, {
       responseType: 'stream',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
         'Referer': 'https://www.instagram.com/',
-        'Accept': 'video/mp4,image/*,*/*'
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua-platform': '"iOS"',
+        'sec-fetch-dest': 'image',
+        'sec-fetch-mode': 'no-cors',
+        'sec-fetch-site': 'cross-site'
       },
-      timeout: 10000
+      timeout: 10000,
+      validateStatus: false
     });
     
-    // Forward essential headers
     const contentType = response.headers['content-type'];
     if (contentType) res.setHeader('Content-Type', contentType);
     
@@ -60,7 +67,7 @@ router.get('/proxy', async (req, res) => {
     
     response.data.pipe(res);
   } catch (err) {
-    console.error('[Proxy] Error:', err.message);
+    console.error('[Ghost Proxy] Error:', err.message);
     res.status(500).send('Proxy failure');
   }
 });

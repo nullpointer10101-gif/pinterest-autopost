@@ -639,12 +639,10 @@ function renderMediaPreview() {
   }
 
   const img = document.createElement('img');
-  // Use weserv.nl as a permanent, high-reliability external image proxy for thumbnails
-  const proxiedImg = `https://images.weserv.nl/?url=${encodeURIComponent(mediaUrl)}&w=600&fit=cover`;
-  img.src = proxiedImg;
+  img.src = `/api/proxy?url=${encodeURIComponent(mediaUrl)}`;
   img.alt = 'Media preview';
   img.style.cssText = 'width:100%;border-radius:8px;';
-  img.onerror = () => { img.src = `/api/proxy?url=${encodeURIComponent(mediaUrl)}`; };
+  img.onerror = () => { img.src = mediaUrl; };
   container.appendChild(img);
   hide('mute-toggle');
 }
@@ -1011,8 +1009,8 @@ function renderHistory() {
     const igUrl = item.url || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
     
-    // PERMANENT FIX: Use weserv.nl for high-reliability thumbnail rendering
-    const thumbUrl = thumb ? `https://images.weserv.nl/?url=${encodeURIComponent(thumb)}&w=120&h=160&fit=cover` : fallback;
+    // Use the improved Stealth Ghost Proxy for high-reliability rendering
+    const thumbUrl = thumb ? `/api/proxy?url=${encodeURIComponent(thumb)}` : fallback;
 
     let statusBadge = 'Posted';
     let tagClass = '';
@@ -1179,7 +1177,7 @@ function renderQueueMini() {
     }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? `https://images.weserv.nl/?url=${encodeURIComponent(thumb)}&w=60&h=80&fit=cover` : fallback;
+    const thumbUrl = thumb ? `/api/proxy?url=${encodeURIComponent(thumb)}` : fallback;
 
     return `
       <div style="display:flex; align-items:center; gap:12px; padding:12px; background:rgba(255,255,255,0.02); border-radius:8px; border: 1px solid ${isActive ? 'var(--accent)' : 'transparent'}">
@@ -1221,7 +1219,7 @@ function renderQueue() {
     }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? `https://images.weserv.nl/?url=${encodeURIComponent(thumb)}&w=120&h=160&fit=cover` : fallback;
+    const thumbUrl = thumb ? `/api/proxy?url=${encodeURIComponent(thumb)}` : fallback;
     
     let statusClass = '';
     if (item.status === 'failed') statusClass = 'tag-error';
