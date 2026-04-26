@@ -44,30 +44,35 @@ router.get('/proxy', async (req, res) => {
     const response = await axios.get(url, {
       responseType: 'stream',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
         'Referer': 'https://www.instagram.com/',
+        'Origin': 'https://www.instagram.com',
         'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
-        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="123", "Google Chrome";v="123"',
         'sec-ch-ua-mobile': '?1',
         'sec-ch-ua-platform': '"iOS"',
         'sec-fetch-dest': 'image',
         'sec-fetch-mode': 'no-cors',
-        'sec-fetch-site': 'cross-site'
+        'sec-fetch-site': 'cross-site',
+        'priority': 'i',
+        'connection': 'keep-alive'
       },
-      timeout: 10000,
+      timeout: 12000,
+      maxRedirects: 5,
       validateStatus: false
     });
     
     const contentType = response.headers['content-type'];
     if (contentType) res.setHeader('Content-Type', contentType);
     
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    // Add strong caching so it doesn't have to fetch from IG every time
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.setHeader('Access-Control-Allow-Origin', '*');
     
     response.data.pipe(res);
   } catch (err) {
-    console.error('[Ghost Proxy] Error:', err.message);
+    console.error('[Titanium Proxy] Error:', err.message);
     res.status(500).send('Proxy failure');
   }
 });
