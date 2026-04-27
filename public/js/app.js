@@ -106,8 +106,13 @@ function bindTabA11y() {
 function switchTab(tab) {
   state.currentTab = tab;
 
-  // Sidebar Nav Items
+  // Desktop Sidebar
   document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.remove('active');
+  });
+  
+  // Mobile Bottom Nav
+  document.querySelectorAll('.nav-btn').forEach(el => {
     el.classList.remove('active');
   });
   
@@ -117,31 +122,30 @@ function switchTab(tab) {
   });
 
   const navEl = document.getElementById(`nav-${tab}`);
+  const mobileNavEl = document.getElementById(`m-nav-${tab}`);
   const panelEl = document.getElementById(`panel-${tab}`);
   const pageTitle = document.getElementById('page-title');
 
   if (navEl) navEl.classList.add('active');
+  if (mobileNavEl) mobileNavEl.classList.add('active');
   if (panelEl) panelEl.classList.remove('hidden');
   if (pageTitle) {
     const titles = {
         'dashboard': 'Dashboard',
         'queue': 'Mission Queue',
-        'lab': 'Algorithm Booster',
-        'engagements': 'Engagement Logs',
+        'lab': 'Algorithm Lab',
         'history': 'Activity History',
-        'settings': 'System Settings'
+        'settings': 'Settings'
     };
-    pageTitle.textContent = titles[tab] || 'Command Center';
+    pageTitle.textContent = titles[tab] || 'Command';
   }
 
-  // Close sidebar on mobile after clicking
-  if (window.innerWidth <= 1024) {
-    document.getElementById('sidebar').classList.remove('open');
-  }
+  // Scroll to top on tab switch
+  const container = document.querySelector('.main-container');
+  if (container) container.scrollTop = 0;
 
   if (tab === 'dashboard') refreshOverview();
   if (tab === 'queue') loadQueue();
-  if (tab === 'engagements') loadEngagements();
   if (tab === 'history') loadHistory();
   if (tab === 'settings') {
     loadSystemStatus();
@@ -1050,17 +1054,16 @@ function renderHistory() {
 
     return `
       <div class="list-item">
-        <img class="item-thumb" src="${escHtml(thumbUrl)}" onerror="this.onerror=null; this.src='${fallback}';" />
-        <div class="item-content">
-          <div class="flex-between">
-            <div class="item-title">${escHtml(title)}</div>
+        <img class="thumb" src="${escHtml(thumbUrl)}" onerror="this.onerror=null; this.src='${fallback}';" />
+        <div class="item-info">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="item-name">${escHtml(title)}</div>
             <span class="badge ${status === 'error' ? 'badge-error' : 'badge-success'}">${status === 'error' ? 'Failed' : 'Posted'}</span>
           </div>
-          <div class="item-meta">@${escHtml(username)} • ${date}</div>
+          <div class="item-sub">@${escHtml(username)} • ${date}</div>
         </div>
-        <div style="display: flex; gap: 8px;">
-          <a href="${escHtml(pinUrl)}" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 6px 10px; font-size:11px;">Pin</a>
-          <button class="btn btn-secondary" onclick="deleteHistoryItem('${item.id}')" style="padding: 6px 10px; font-size:11px;">&times;</button>
+        <div style="display: flex; gap: 8px; margin-left: 12px;">
+          <a href="${escHtml(pinUrl)}" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 6px 12px; min-height: 32px; font-size: 11px;">View</a>
         </div>
       </div>`;
   }).join('');
@@ -1204,13 +1207,13 @@ function renderQueueMini() {
     const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
 
     return `
-      <div class="list-item" style="border: none;">
-        <img src="${escHtml(thumbUrl)}" class="item-thumb" style="width:32px; height:32px; border-radius:4px;" />
-        <div class="item-content">
-          <div class="item-title" style="font-size:12px;">${escHtml(item.title)}</div>
-          <div class="item-meta" style="font-size:10px;">${isActive ? 'Active Mission' : 'Scheduled'}</div>
+      <div class="list-item">
+        <img src="${escHtml(thumbUrl)}" class="thumb" style="width:36px; height:36px;" />
+        <div class="item-info">
+          <div class="item-name" style="font-size:13px;">${escHtml(item.title)}</div>
+          <div class="item-sub">${isActive ? 'Bot is processing...' : 'In Mission Queue'}</div>
         </div>
-        <span class="badge ${isActive ? 'badge-success' : 'badge-warning'}" style="font-size:8px;">${isActive ? 'LIVE' : 'WAIT'}</span>
+        <span class="badge ${isActive ? 'badge-success' : 'badge-warning'}">${isActive ? 'LIVE' : 'WAIT'}</span>
       </div>`;
   }).join('');
 }
@@ -1255,18 +1258,18 @@ function renderQueue() {
 
     return `
       <div class="list-item">
-        <img class="item-thumb" src="${escHtml(thumbUrl)}" />
-        <div class="item-content">
-          <div class="flex-between">
-            <div class="item-title">${escHtml(item.title || 'Untitled')}</div>
+        <img class="thumb" src="${escHtml(thumbUrl)}" />
+        <div class="item-info">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="item-name">${escHtml(item.title || 'Untitled')}</div>
             <span class="badge ${badgeClass}">${statusLabel}</span>
           </div>
-          <div class="item-meta">
+          <div class="item-sub">
             ${item.status === 'pending' 
-              ? `🚀 Pre-heating bot... Starts in <span class="countdown-timer">20</span>s` 
-              : `Added to mission list on ${date}`}
+              ? `🚀 Bot arrival in <span class="countdown-timer">20</span>s` 
+              : `Added on ${date}`}
           </div>
-          ${item.error ? `<div class="item-meta" style="color:var(--error); margin-top:8px;">${escHtml(String(item.error)).substring(0, 100)}</div>` : ''}
+          ${item.error ? `<div class="item-sub" style="color:var(--error); margin-top:8px;">${escHtml(String(item.error)).substring(0, 100)}</div>` : ''}
         </div>
       </div>`;
   }).join('');
