@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Enterprise Pinterest Automation. AI-powered Instagram Reel repurposing.">
-    <title>Pinterest Command | Enterprise</title>
+    <meta name="description" content="Pinterest Automation for Enterprise. Minimalist workflow for Instagram Reels.">
+    <title>Pinterest Command</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
@@ -15,37 +15,37 @@
         <!-- ── SIDEBAR ──────────────────────────────────── -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-logo">P</div>
-                <div class="sidebar-title">Pinterest Command</div>
+                <div class="sidebar-logo"></div>
+                <div class="sidebar-title">Command</div>
             </div>
 
             <nav class="nav-group">
-                <div class="nav-label">Navigation</div>
+                <div class="nav-label">Menu</div>
                 <a href="#" class="nav-item active" id="nav-dashboard" onclick="switchTab('dashboard')">
-                    <span>&#x1F4CA;</span> Dashboard
+                    Dashboard
                 </a>
                 <a href="#" class="nav-item" id="nav-queue" onclick="switchTab('queue')">
-                    <span>&#x1F4D1;</span> Mission Queue
+                    Mission Queue
                 </a>
                 <a href="#" class="nav-item" id="nav-lab" onclick="switchTab('lab')">
-                    <span>&#x1F9EA;</span> Algorithm Lab
+                    Algorithm Lab
                 </a>
                 <a href="#" class="nav-item" id="nav-engagements" onclick="switchTab('engagements')">
-                    <span>&#x1F4AC;</span> Engagement Log
+                    Engagements
                 </a>
                 <a href="#" class="nav-item" id="nav-history" onclick="switchTab('history')">
-                    <span>&#x1F552;</span> Activity History
+                    History
                 </a>
 
-                <div class="nav-label">Configuration</div>
+                <div class="nav-label">System</div>
                 <a href="#" class="nav-item" id="nav-settings" onclick="switchTab('settings')">
-                    <span>&#9881;&#65039;</span> Settings
+                    Settings
                 </a>
             </nav>
 
-            <div class="sidebar-footer">
-                <div id="pinterest-status" class="badge badge-warning">
-                    Syncing...
+            <div style="margin-top: auto; padding: 12px;">
+                <div id="pinterest-status" class="badge badge-warning" style="width: 100%; text-align: center;">
+                    Checking...
                 </div>
             </div>
         </aside>
@@ -54,13 +54,12 @@
         <main class="main-content">
             
             <header class="top-bar">
-                <div style="display: flex; align-items: center; gap: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
                     <button class="menu-toggle" onclick="toggleSidebar()">&#9776;</button>
                     <div class="page-title" id="page-title">Dashboard</div>
                 </div>
-                
                 <div id="connection-indicator" class="badge badge-success">
-                    Cloud Bot Online
+                    Active
                 </div>
             </header>
 
@@ -71,78 +70,64 @@
                     
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-header">
-                                <span class="stat-title">Total Published</span>
-                                <span class="stat-icon">&#x1F680;</span>
-                            </div>
+                            <div class="stat-title">Published</div>
                             <div class="stat-value" id="stat-total-posts">0</div>
-                            <div class="stat-footer">Synced via API</div>
+                            <div class="stat-footer">Total lifecycle posts</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-header">
-                                <span class="stat-title">Active Queue</span>
-                                <span class="stat-icon">&#x1F4D1;</span>
-                            </div>
+                            <div class="stat-title">In Queue</div>
                             <div class="stat-value" id="stat-queue-pending">0</div>
-                            <div class="stat-footer">Next run in <span id="queue-countdown">--</span></div>
+                            <div class="stat-footer">Next run scheduled</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-header">
-                                <span class="stat-title">Success Rate</span>
-                                <span class="stat-icon">&#x2705;</span>
-                            </div>
+                            <div class="stat-title">Success Rate</div>
                             <div class="stat-value" id="stat-success-rate">0%</div>
-                            <div class="stat-footer" style="color:var(--success)">Performance: Peak</div>
+                            <div class="stat-footer" style="color:var(--success)">Performance stable</div>
                         </div>
                     </div>
 
                     <div class="hub-grid">
-                        <!-- LEFT: INPUT AREA -->
+                        <!-- MISSION INPUT -->
                         <div class="card">
                             <div class="card-header">
-                                <h3 class="stat-title" style="color:white; font-size:14px;">New Mission</h3>
-                                <p class="item-meta">Paste an Instagram Reel URL to start extraction.</p>
+                                <h3 class="card-title">New Mission</h3>
                             </div>
                             <div class="card-body">
-                                <div class="url-input-container">
-                                    <input type="text" id="reel-url" class="input-box" placeholder="https://www.instagram.com/reel/...">
+                                <div class="input-container">
+                                    <input type="text" id="reel-url" class="input-box" placeholder="Instagram URL...">
                                     <button id="fetch-btn" class="btn btn-primary" onclick="handleFetch()">Extract</button>
                                 </div>
 
-                                <!-- PREVIEW SECTION (HIDDEN BY DEFAULT) -->
                                 <div id="preview-section" class="preview-container hidden">
                                     <div class="media-box" id="media-preview"></div>
                                     <div class="form-area">
                                         <div class="form-group">
-                                            <label>Pinterest Title</label>
-                                            <input type="text" id="field-title" placeholder="Catchy title...">
+                                            <label>Title</label>
+                                            <input type="text" id="field-title" placeholder="Mission title">
                                         </div>
                                         <div class="form-group">
                                             <label>Description</label>
-                                            <textarea id="field-description" rows="5" placeholder="Description and tags..."></textarea>
+                                            <textarea id="field-description" rows="5"></textarea>
                                         </div>
                                         <div class="form-group">
-                                            <label>Source Link</label>
+                                            <label>Source</label>
                                             <input type="text" id="field-link">
                                         </div>
                                         <div style="display: flex; gap: 12px;">
-                                            <button id="post-btn" class="btn btn-red" style="flex:1;" onclick="handlePost()">Post Now</button>
-                                            <button id="queue-btn" class="btn btn-secondary" style="flex:1;" onclick="handleQueue()">Queue</button>
+                                            <button id="post-btn" class="btn btn-primary" style="flex: 1;" onclick="handlePost()">Post Now</button>
+                                            <button id="queue-btn" class="btn btn-secondary" style="flex: 1;" onclick="handleQueue()">Add to Queue</button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- RIGHT: MINI QUEUE -->
+                        <!-- Mini History -->
                         <div class="card">
-                            <div class="card-header flex-between">
-                                <h3 class="stat-title" style="color:white; font-size:14px;">Recent Queue</h3>
-                                <button class="btn btn-secondary" style="padding: 4px 8px; font-size:10px;" onclick="processQueueNow()">Trigger Now</button>
+                            <div class="card-header">
+                                <h3 class="card-title">Recent</h3>
                             </div>
-                            <div class="list-container" id="queue-list-mini">
-                                <!-- Mini queue items here -->
-                            </div>
+                            <div class="list-container" id="queue-list-mini"></div>
                         </div>
                     </div>
                 </section>
@@ -150,9 +135,9 @@
                 <!-- ── PANEL: QUEUE ──────────────────────────── -->
                 <section id="panel-queue" class="panel hidden">
                     <div class="card">
-                        <div class="card-header flex-between">
-                            <h2 class="stat-title" style="color:white; font-size:16px;">Full Mission Queue</h2>
-                            <button class="btn btn-secondary" onclick="clearQueue()">Clear Queue</button>
+                        <div class="card-header">
+                            <h2 class="card-title">Mission Queue</h2>
+                            <button class="btn btn-secondary" onclick="clearQueue()">Clear</button>
                         </div>
                         <div class="list-container" id="queue-list"></div>
                     </div>
@@ -160,28 +145,24 @@
 
                 <!-- ── PANEL: LAB ────────────────────────────── -->
                 <section id="panel-lab" class="panel hidden">
-                    <div class="card" style="max-width: 600px; margin: 0 auto;">
+                    <div class="card" style="max-width: 500px; margin: 0 auto;">
                         <div class="card-header">
-                            <h2 class="stat-title" style="color:white; font-size:16px;">Algorithm Booster Lab</h2>
-                            <p class="item-meta">Simulate engagement to boost account authority.</p>
+                            <h2 class="card-title">Algorithm Booster</h2>
                         </div>
                         <div class="card-body">
                             <div class="form-group">
-                                <label>Target Niche</label>
+                                <label>Niche</label>
                                 <select id="engage-niche">
-                                    <option value="all">General Growth</option>
-                                    <option value="fashion">Fashion & Style</option>
-                                    <option value="home">Home Decor</option>
-                                    <option value="travel">Travel</option>
+                                    <option value="all">General</option>
+                                    <option value="fashion">Fashion</option>
+                                    <option value="home">Home</option>
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>Interaction Count</label>
+                                <label>Intensity</label>
                                 <input type="range" id="engage-count" min="1" max="5" value="2">
                             </div>
-                            <button id="engage-btn" class="btn btn-primary" style="width: 100%; padding: 16px;" onclick="startEngager()">
-                                Launch Booster Mission
-                            </button>
+                            <button id="engage-btn" class="btn btn-primary" style="width: 100%;" onclick="startEngager()">Start Mission</button>
                         </div>
                     </div>
                 </section>
@@ -189,9 +170,8 @@
                 <!-- ── PANEL: ENGAGEMENTS ────────────────────── -->
                 <section id="panel-engagements" class="panel hidden">
                     <div class="card">
-                        <div class="card-header flex-between">
-                            <h2 class="stat-title" style="color:white; font-size:16px;">Engagement History</h2>
-                            <button class="btn btn-secondary" onclick="clearEngagements()">Clear Logs</button>
+                        <div class="card-header">
+                            <h2 class="card-title">Engagement Log</h2>
                         </div>
                         <div class="list-container" id="engagement-list"></div>
                     </div>
@@ -200,9 +180,8 @@
                 <!-- ── PANEL: HISTORY ────────────────────────── -->
                 <section id="panel-history" class="panel hidden">
                     <div class="card">
-                        <div class="card-header flex-between">
-                            <h2 class="stat-title" style="color:white; font-size:16px;">Mission History</h2>
-                            <button class="btn btn-secondary" onclick="exportHistoryJson()">Export JSON</button>
+                        <div class="card-header">
+                            <h2 class="card-title">Activity History</h2>
                         </div>
                         <div class="list-container" id="history-list"></div>
                     </div>
@@ -210,24 +189,24 @@
 
                 <!-- ── PANEL: SETTINGS ───────────────────────── -->
                 <section id="panel-settings" class="panel hidden">
-                    <div class="stats-grid">
+                    <div class="hub-grid" style="grid-template-columns: 1fr 1fr;">
                         <div class="card">
-                            <div class="card-header">Pinterest Connection</div>
+                            <div class="card-header">Connection</div>
                             <div class="card-body">
-                                <div id="settings-pinterest-status" style="margin-bottom: 20px;"></div>
+                                <div id="settings-pinterest-status" style="margin-bottom: 24px;"></div>
                                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                                    <a href="/api/pinterest/auth" class="btn btn-primary">Link OAuth</a>
+                                    <a href="/api/pinterest/auth" class="btn btn-primary">OAuth Connect</a>
                                     <div style="display: flex; gap: 8px;">
-                                        <input type="password" id="session-cookie-input" class="input-box" placeholder="Session Cookie...">
+                                        <input type="password" id="session-cookie-input" class="input-box" placeholder="Cookie">
                                         <button class="btn btn-secondary" onclick="linkSessionCookie()">Link</button>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <div class="card">
-                            <div class="card-header">System Diagnostics</div>
+                            <div class="card-header">Runtime</div>
                             <div class="card-body">
-                                <div id="hosting-status-card" style="margin-bottom: 20px;"></div>
+                                <div id="hosting-status-card" style="margin-bottom: 24px;"></div>
                                 <div id="deploy-readiness"></div>
                             </div>
                         </div>
@@ -240,25 +219,24 @@
         <!-- ── MISSION OVERLAY ──────────────────────────── -->
         <div id="mission-control-overlay" class="mission-overlay hidden">
             <div class="mission-panel">
-                <div style="text-align: center; margin-bottom: 24px;">
-                    <div style="font-size: 32px; margin-bottom: 12px;">&#x1F680;</div>
-                    <h3 id="mission-status-text">Mission in Progress...</h3>
-                    <p class="item-meta" id="mission-timer-val">00:00 elapsed</p>
-                </div>
-                <div class="list-container" style="background: transparent;">
-                    <div class="list-item" id="stage-init" style="padding: 12px 0;">
-                        <span class="badge badge-warning">INIT</span> Initializing Mission
+                <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Mission Active</h2>
+                <p id="mission-timer-val" style="color: var(--text-muted); font-size: 14px; margin-bottom: 32px;">00:00</p>
+                
+                <div class="list-container" style="text-align: left; background: transparent;">
+                    <div class="list-item" id="stage-init">
+                        <span class="badge badge-warning">RUN</span> Initializing
                     </div>
-                    <div class="list-item" id="stage-cloud" style="padding: 12px 0;">
-                        <span class="badge badge-warning">WAIT</span> Handshake with GitHub
+                    <div class="list-item" id="stage-cloud">
+                        <span class="badge badge-warning">WAIT</span> Cloud Handshake
                     </div>
-                    <div class="list-item" id="stage-upload" style="padding: 12px 0;">
-                        <span class="badge badge-warning">WAIT</span> Uploading to Pinterest
+                    <div class="list-item" id="stage-upload">
+                        <span class="badge badge-warning">WAIT</span> Upload
                     </div>
-                    <div class="list-item" id="stage-verify" style="padding: 12px 0;">
-                        <span class="badge badge-warning">WAIT</span> Final Verification
+                    <div class="list-item" id="stage-verify">
+                        <span class="badge badge-warning">WAIT</span> Verification
                     </div>
                 </div>
+                <div id="mission-status-text" style="margin-top: 32px; font-weight: 500;">Please wait...</div>
             </div>
         </div>
 
