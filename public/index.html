@@ -61,9 +61,9 @@
                     </div>
 
                     <div id="preview-section" class="hidden">
-                        <div style="display: flex; gap: 24px; margin-top: 24px; animation: slideUp 0.3s ease;">
-                            <img id="preview-img" style="width: 180px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                            <div style="flex: 1;">
+                        <div class="mission-preview-wrap">
+                            <img id="preview-img" class="preview-img">
+                            <div class="mission-form-wrap">
                                 <div style="margin-bottom: 12px;">
                                     <label class="stat-label">Pin Title</label>
                                     <input type="text" id="field-title">
@@ -72,9 +72,9 @@
                                     <label class="stat-label">Description</label>
                                     <textarea id="field-desc" rows="5"></textarea>
                                 </div>
-                                <div style="display: flex; gap: 12px;">
-                                    <button class="btn btn-primary" style="flex: 1;" onclick="handlePost()">Post Now</button>
-                                    <button class="btn" style="flex: 1; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="handleQueue()">Queue</button>
+                                <div class="btn-grid">
+                                    <button class="btn btn-primary" onclick="handlePost()">Post Now</button>
+                                    <button class="btn btn-outline-glass" onclick="handleQueue()">Queue</button>
                                 </div>
                             </div>
                         </div>
