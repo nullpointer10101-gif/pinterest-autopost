@@ -63,12 +63,20 @@ router.get('/proxy', async (req, res) => {
       },
       timeout: 15000,
       maxRedirects: 5,
-      validateStatus: false
+      validateStatus: () => true  // Don't throw on any status, we check manually
     });
     
-    const contentType = response.headers['content-type'];
-    if (contentType) res.setHeader('Content-Type', contentType);
+    // Reject non-2xx or non-media responses (expired CDN URLs return HTML)
+    const contentType = response.headers['content-type'] || '';
+    const isMedia = contentType.startsWith('image/') || contentType.startsWith('video/') || contentType.startsWith('audio/');
     
+    if (response.status < 200 || response.status >= 300 || !isMedia) {
+      // Drain the stream to avoid memory leaks
+      response.data.resume();
+      return res.status(502).send('Upstream media unavailable');
+    }
+    
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.setHeader('Access-Control-Allow-Origin', '*');
     
