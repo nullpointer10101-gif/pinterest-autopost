@@ -1054,17 +1054,15 @@ function renderHistory() {
 
     return `
       <div class="list-item">
-        <img class="thumb" src="${escHtml(thumbUrl)}" onerror="this.onerror=null; this.src='${fallback}';" />
+        <img class="thumb-sq" src="${escHtml(thumbUrl)}" onerror="this.onerror=null; this.src='${fallback}';" />
         <div class="item-info">
           <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div class="item-name">${escHtml(title)}</div>
-            <span class="badge ${status === 'error' ? 'badge-error' : 'badge-success'}">${status === 'error' ? 'Failed' : 'Posted'}</span>
+            <div class="item-title">${escHtml(title)}</div>
+            <span class="badge ${status === 'error' ? 'badge-error' : 'badge-success'}">${status === 'error' ? 'FAIL' : 'LIVE'}</span>
           </div>
-          <div class="item-sub">@${escHtml(username)} • ${date}</div>
+          <div class="item-meta">@${escHtml(username)} • ${date}</div>
         </div>
-        <div style="display: flex; gap: 8px; margin-left: 12px;">
-          <a href="${escHtml(pinUrl)}" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 6px 12px; min-height: 32px; font-size: 11px;">View</a>
-        </div>
+        <a href="${escHtml(pinUrl)}" target="_blank" rel="noopener" class="btn btn-primary" style="padding: 8px 16px; font-size: 11px; background: var(--bg-glass); border: 1px solid var(--border);">VIEW</a>
       </div>`;
   }).join('');
 }
@@ -1138,8 +1136,8 @@ function renderEngagements() {
     
     return `
       <div class="list-item">
-        <div class="item-content">
-          <div class="flex-between">
+        <div class="item-info">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
             <div class="item-title">
                 ${actionEmoji} ${escHtml(item.action || 'Engagement')}
             </div>
@@ -1147,12 +1145,12 @@ function renderEngagements() {
           </div>
           <div class="item-meta">${date}</div>
           ${item.comment ? `
-            <div class="item-meta" style="margin-top:8px; padding:8px; background:rgba(255,255,255,0.03); border-radius:4px; font-style: italic;">
+            <div style="margin-top:12px; padding:12px; background:rgba(255,255,255,0.03); border-radius:8px; font-style: italic; font-size: 13px; color: var(--text-secondary);">
               "${escHtml(item.comment)}"
             </div>
           ` : ''}
         </div>
-        <a href="${escHtml(item.url || '#')}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:11px;">View</a>
+        <a href="${escHtml(item.url || '#')}" target="_blank" rel="noopener" class="btn btn-primary" style="font-size:11px; padding: 8px 16px; background: var(--bg-glass); border: 1px solid var(--border);">OPEN</a>
       </div>`;
   }).join('');
 }
@@ -1208,10 +1206,10 @@ function renderQueueMini() {
 
     return `
       <div class="list-item">
-        <img src="${escHtml(thumbUrl)}" class="thumb" style="width:36px; height:36px;" />
+        <img src="${escHtml(thumbUrl)}" class="thumb-sq" style="width:40px; height:40px;" />
         <div class="item-info">
-          <div class="item-name" style="font-size:13px;">${escHtml(item.title)}</div>
-          <div class="item-sub">${isActive ? 'Bot is processing...' : 'In Mission Queue'}</div>
+          <div class="item-title" style="font-size:14px;">${escHtml(item.title)}</div>
+          <div class="item-meta">${isActive ? 'MISSION ACTIVE' : 'PENDING RUN'}</div>
         </div>
         <span class="badge ${isActive ? 'badge-success' : 'badge-warning'}">${isActive ? 'LIVE' : 'WAIT'}</span>
       </div>`;
@@ -1258,18 +1256,18 @@ function renderQueue() {
 
     return `
       <div class="list-item">
-        <img class="thumb" src="${escHtml(thumbUrl)}" />
+        <img class="thumb-sq" src="${escHtml(thumbUrl)}" />
         <div class="item-info">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div class="item-name">${escHtml(item.title || 'Untitled')}</div>
-            <span class="badge ${badgeClass}">${statusLabel}</span>
+            <div class="item-title">${escHtml(item.title || 'Untitled')}</div>
+            <span class="badge ${badgeClass}">${statusLabel.toUpperCase()}</span>
           </div>
-          <div class="item-sub">
+          <div class="item-meta">
             ${item.status === 'pending' 
               ? `🚀 Bot arrival in <span class="countdown-timer">20</span>s` 
-              : `Added on ${date}`}
+              : `Scheduled mission • ${date}`}
           </div>
-          ${item.error ? `<div class="item-sub" style="color:var(--error); margin-top:8px;">${escHtml(String(item.error)).substring(0, 100)}</div>` : ''}
+          ${item.error ? `<div class="item-meta" style="color:var(--accent-pink); margin-top:8px; font-size: 11px;">${escHtml(String(item.error)).substring(0, 80)}</div>` : ''}
         </div>
       </div>`;
   }).join('');
