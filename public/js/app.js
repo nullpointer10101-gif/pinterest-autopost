@@ -1,156 +1,59 @@
 const state = {
-  reelData: null,
-  aiContent: null,
+  stats: {
+    totalPosts: 0,
+    queueSize: 0,
+    successRate: 0,
+    engagements: 0
+  },
+  currentTab: 'mission',
   isProcessing: false,
-  currentTab: 'dashboard',
-  history: [],
-  engagements: [],
-  queue: [],
-  queueStats: null,
-  pinterestStatusData: null,
-  systemStatus: null,
-  sessionStatus: null,
+  terminalLogs: []
 };
 
-document.addEventListener('DOMContentLoaded', async () => {
-  bindInputs();
-  bindTabA11y();
-  await Promise.all([
-    checkPinterestStatus(),
-    loadSystemStatus(),
-    loadSessionStatus(),
-    loadHistory(),
-    loadQueue(),
-  ]);
-  renderOverviewStats();
+document.addEventListener('DOMContentLoaded', () => {
+  initSentientUI();
+  refreshOverview();
+  setInterval(refreshOverview, 30000);
 });
 
-function bindInputs() {
-  const reelUrlInput = document.getElementById('reel-url');
-  const mediaInput = document.getElementById('media-url-input');
-
-  if (reelUrlInput) {
-    reelUrlInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handleFetch();
-    });
-  }
-
-  if (mediaInput) {
-    mediaInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handleFetch();
-    });
-    mediaInput.addEventListener('input', () => {
-      const mediaUrl = mediaInput.value.trim();
-      if (mediaUrl) {
-        if (!state.reelData) state.reelData = { manual: true, username: 'unknown', caption: '' };
-        state.reelData.mediaUrl = mediaUrl;
-        state.reelData.thumbnailUrl = mediaUrl;
-        state.reelData.mediaType = mediaUrl.toLowerCase().includes('.mp4') ? 'video' : 'image';
-        show('preview-section');
-        renderMediaPreview();
-      } else if (!state.aiContent) {
-        hide('preview-section');
-      }
-    });
-  }
-
-  window.onbeforeunload = () => state.isProcessing ? 'Processing in progress. Are you sure you want to leave?' : undefined;
-}
-
-function bindTabA11y() {
-  const tabs = Array.from(document.querySelectorAll('.tabs .tab[role="tab"]'));
-  if (tabs.length === 0) return;
-
-  function nameFromTabEl(tabEl) {
-    const id = tabEl?.id || '';
-    if (id.startsWith('tab-')) return id.slice('tab-'.length);
-    return null;
-  }
-
-  function focusTabByIndex(index) {
-    const next = tabs[(index + tabs.length) % tabs.length];
-    if (next) next.focus();
-  }
-
-  tabs.forEach((tabEl, index) => {
-    tabEl.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        focusTabByIndex(index + 1);
-        return;
-      }
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        focusTabByIndex(index - 1);
-        return;
-      }
-      if (e.key === 'Home') {
-        e.preventDefault();
-        focusTabByIndex(0);
-        return;
-      }
-      if (e.key === 'End') {
-        e.preventDefault();
-        focusTabByIndex(tabs.length - 1);
-        return;
-      }
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        const name = nameFromTabEl(tabEl);
-        if (name) switchTab(name);
-      }
-    });
+function initSentientUI() {
+  updateClock();
+  setInterval(updateClock, 1000);
+  
+  startCountdown();
+  
+  // Initial staggered animations
+  const cards = document.querySelectorAll('.glass-card');
+  cards.forEach((card, i) => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(20px)';
+    setTimeout(() => {
+        card.style.transition = 'all 0.6s cubic-bezier(0.23, 1, 0.32, 1)';
+        card.style.opacity = '1';
+        card.style.transform = 'translateY(0)';
+    }, i * 100);
   });
 }
 
-function switchTab(tab) {
-  state.currentTab = tab;
+function updateClock() {
+  const el = document.getElementById('live-clock');
+  if (!el) return;
+  const now = new Date();
+  el.textContent = now.toLocaleTimeString('en-US', { hour12: false });
+}
 
-  // Desktop Sidebar
-  document.querySelectorAll('.nav-item').forEach(el => {
-    el.classList.remove('active');
-  });
-  
-  // Mobile Bottom Nav
-  document.querySelectorAll('.nav-btn').forEach(el => {
-    el.classList.remove('active');
-  });
-  
-  // Panels
-  document.querySelectorAll('.panel').forEach(el => {
-    el.classList.add('hidden');
-  });
-
-  const navEl = document.getElementById(`nav-${tab}`);
-  const mobileNavEl = document.getElementById(`m-nav-${tab}`);
-  const panelEl = document.getElementById(`panel-${tab}`);
-  const pageTitle = document.getElementById('page-title');
-
-  if (navEl) navEl.classList.add('active');
-  if (mobileNavEl) mobileNavEl.classList.add('active');
-  if (panelEl) panelEl.classList.remove('hidden');
-  if (pageTitle) {
-    const titles = {
-        'dashboard': 'Dashboard',
-        'queue': 'Mission Queue',
-        'lab': 'Algorithm Lab',
-        'history': 'Activity History',
-        'settings': 'Settings'
-    };
-    pageTitle.textContent = titles[tab] || 'Command';
-  }
-
-  // Scroll to top on tab switch
-  const container = document.querySelector('.main-container');
-  if (container) container.scrollTop = 0;
-
-  if (tab === 'dashboard') refreshOverview();
-  if (tab === 'queue') loadQueue();
-  if (tab === 'history') loadHistory();
-  if (tab === 'settings') {
-    loadSystemStatus();
-    loadSessionStatus();
-  }
+function startCountdown() {
+  const el = document.getElementById('countdown');
+  if (!el) return;
+  let seconds = 3600; // Mock countdown
+  setInterval(() => {
+    seconds--;
+    if (seconds < 0) seconds = 3600;
+    const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+    const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+    const s = String(seconds % 60).padStart(2, '0');
+    el.textContent = `${h}:${m}:${s}`;
+  }, 1000);
 }
 
 async function checkPinterestStatus() {
@@ -420,22 +323,6 @@ async function linkSessionCookie() {
     await checkPinterestStatus();
   } catch (err) {
     showToast(`Session link failed: ${err.message}`, 'error');
-  }
-}
-
-async function unlinkSessionCookie() {
-  if (!confirm('Unlink current Pinterest session cookie?')) return;
-  try {
-    const res = await fetch('/api/session/unlink', { method: 'POST' });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Session unlink failed');
-    state.sessionStatus = data.session || { hasSession: false };
-    renderSessionStatusCard();
-    updateSettingsStatus();
-    showToast(data.message || 'Session unlinked.', 'info');
-    await checkPinterestStatus();
-  } catch (err) {
-    showToast(`Session unlink failed: ${err.message}`, 'error');
   }
 }
 
@@ -1002,67 +889,24 @@ async function loadHistory() {
   }
 }
 
-function renderHistory() {
-  const list = document.getElementById('history-list');
-  if (!list) return;
-
-  const query = (getValue('history-search') || '').trim().toLowerCase();
-  const statusFilter = getValue('history-filter-status') || 'all';
-
-  let items = [...state.history];
-  if (statusFilter !== 'all') {
-    items = items.filter(item => (item.status || 'success') === statusFilter);
-  }
-  if (query) {
-    items = items.filter(item => {
-      const title = item.aiContent?.title || item.title || '';
-      const username = item.reelData?.username || item.username || '';
-      const sourceUrl = item.url || '';
-      return `${title} ${username} ${sourceUrl}`.toLowerCase().includes(query);
-    });
-  }
-
-  if (!items.length) {
-    list.innerHTML = '<div class="empty-state"><span class="empty-icon">No Data</span><p>No history found for current filters.</p></div>';
-    return;
-  }
-
-  list.innerHTML = items.map(item => {
-    const date = new Date(item.createdAt || item.postedAt || item.timestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, month: 'short', day: 'numeric', year: 'numeric' });
-    const title = item.aiContent?.title || item.title || 'Untitled';
-    let username = item.reelData?.username || item.username || '';
-    
-    // Smart Fallback for Username
-    if (!username || username === 'unknown' || username === 'creator') {
-        username = extractUsername(item.url || '') || 'Instagram Creator';
-    }
-    const thumb = item.reelData?.thumbnailUrl || item.thumbnailUrl || item.mediaUrl || '';
-    const pinUrl = item.pinterestPin?.url || '#';
-    const status = item.status || 'success';
-    const igUrl = item.url || '';
+function renderHistory(items) {
+  return items.map(item => {
+    const { title, username, date, pinUrl, thumb, status } = item;
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = item.id ? `/api/history/thumb/${encodeURIComponent(item.id)}` : (thumb ? proxyUrl(thumb) : fallback);
-
-    let statusBadge = 'Posted';
-    let tagClass = '';
-    if (status === 'error') {
-      statusBadge = 'Failed';
-      tagClass = 'tag-error';
-    } else if (status === 'preview') {
-      statusBadge = 'Preview';
-    }
+    const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
 
     return `
-      <div class="list-item">
-        <img class="thumb-sq" src="${escHtml(thumbUrl)}" onerror="this.onerror=null; this.src='${fallback}';" />
-        <div class="item-info">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div class="item-title">${escHtml(title)}</div>
-            <span class="badge ${status === 'error' ? 'badge-error' : 'badge-success'}">${status === 'error' ? 'FAIL' : 'LIVE'}</span>
+      <div class="glass-card queue-card" style="border-left-color: ${status === 'error' ? 'var(--error)' : 'var(--success)'}">
+        <div class="queue-info">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <h4 style="color: var(--text-primary)">${escHtml(title)}</h4>
+            <span class="badge-pill" style="background: ${status === 'error' ? 'var(--error)' : 'var(--success)'}">${status === 'error' ? 'FAIL' : 'LIVE'}</span>
           </div>
-          <div class="item-meta">@${escHtml(username)} • ${date}</div>
+          <p>@${escHtml(username)} • ${date}</p>
         </div>
-        <a href="${escHtml(pinUrl)}" target="_blank" rel="noopener" class="btn btn-primary" style="padding: 8px 16px; font-size: 11px; background: var(--bg-glass); border: 1px solid var(--border);">VIEW</a>
+        <div style="margin-top: 12px; display: flex; gap: 8px;">
+          <a href="${escHtml(pinUrl)}" target="_blank" class="sentient-btn" style="padding: 6px 12px; font-size: 11px; width: auto;">VIEW PIN</a>
+        </div>
       </div>`;
   }).join('');
 }
@@ -1216,58 +1060,22 @@ function renderQueueMini() {
   }).join('');
 }
 
-function renderQueue() {
-  const list = document.getElementById('queue-list');
-  if (!list) return;
-
-  const activeItems = state.queue.filter(i => i.status === 'pending' || i.status === 'processing' || i.status === 'failed');
-
-  if (!activeItems.length) {
-    list.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">📂</div>
-        <h3>Queue is empty</h3>
-        <p>Add some Reels to your mission list to start automation.</p>
-      </div>`;
-    return;
-  }
-
-  list.innerHTML = activeItems.slice().reverse().map(item => {
-    const date = new Date(item.addedAt || item.timestamp || Date.now()).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, month: 'short', day: 'numeric', year: 'numeric' });
-    const status = (item.status || 'pending').toUpperCase();
-    const isActive = item.status === 'processing';
-    let username = item.username || item.reelData?.username || '';
-    if (!username || username === 'unknown') {
-        username = extractUsername(item.sourceUrl || item.mediaUrl || '') || 'Instagram Creator';
-    }
-    const thumb = item.thumbnailUrl || item.mediaUrl || '';
-    const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
+function renderQueue(items) {
+  const activeItemId = state.isProcessing ? items[0]?.id : null;
+  return items.map(item => {
+    const thumbUrl = item.thumb ? proxyUrl(item.thumb) : '';
+    const isActive = item.id === activeItemId;
     
-    let statusLabel = status;
-    let badgeClass = 'status-pending';
-    if (item.status === 'failed') {
-        badgeClass = 'status-error';
-        statusLabel = 'Failed';
-    } else if (isActive) {
-        badgeClass = 'status-online';
-        statusLabel = 'Active';
-    }
-
     return `
-      <div class="list-item">
-        <img class="thumb-sq" src="${escHtml(thumbUrl)}" />
-        <div class="item-info">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div class="item-title">${escHtml(item.title || 'Untitled')}</div>
-            <span class="badge ${badgeClass}">${statusLabel.toUpperCase()}</span>
+      <div class="glass-card queue-card ${isActive ? 'active' : ''}" style="border-left-color: ${isActive ? 'var(--warning)' : 'var(--accent)'}">
+        ${thumbUrl ? `<img src="${escHtml(thumbUrl)}" class="queue-thumb" />` : ''}
+        <div class="queue-info">
+          <h4>${escHtml(item.title)}</h4>
+          <p>Scheduled: ⏱ ${new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+             <span class="badge-pill" style="background: ${isActive ? 'var(--warning)' : 'var(--accent)'}">${isActive ? 'PROCESSING' : 'PENDING'}</span>
+             <button onclick="deleteQueueItem('${item.id}')" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer;">✕</button>
           </div>
-          <div class="item-meta">
-            ${item.status === 'pending' 
-              ? `🚀 Bot arrival in <span class="countdown-timer">20</span>s` 
-              : `Scheduled mission • ${date}`}
-          </div>
-          ${item.error ? `<div class="item-meta" style="color:var(--accent-pink); margin-top:8px; font-size: 11px;">${escHtml(String(item.error)).substring(0, 80)}</div>` : ''}
         </div>
       </div>`;
   }).join('');

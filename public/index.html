@@ -3,223 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="description" content="Next-Gen Pinterest Automation Hub.">
-    <title>Pinterest Hub | Ultra</title>
+    <meta name="description" content="Sentient Pinterest Automation Control Room.">
+    <title>Sentient | Command Center</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
 <body>
 
-    <div class="app-wrapper">
+    <div id="kill-overlay"></div>
+
+    <div class="app-layout">
         
-        <!-- ── SIDEBAR ────────────────────────────────── -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-wrap">
-                    <div class="logo-box">P</div>
-                    <div class="logo-text">HUB</div>
-                </div>
+        <!-- ── TOP NAVIGATION BAR ──────────────────────── -->
+        <header class="top-nav">
+            <div class="logo-section">
+                <span>PINTEREST <span class="logo-bolt">⚡</span> COMMAND CENTER</span>
             </div>
-            <nav class="nav-section">
-                <a href="#" class="nav-item active" id="nav-dashboard" onclick="switchTab('dashboard')">
-                    Dashboard
-                </a>
-                <a href="#" class="nav-item" id="nav-queue" onclick="switchTab('queue')">
-                    Queue
-                </a>
-                <a href="#" class="nav-item" id="nav-lab" onclick="switchTab('lab')">
-                    Booster Lab
-                </a>
-                <a href="#" class="nav-item" id="nav-history" onclick="switchTab('history')">
-                    Activity
-                </a>
-                <a href="#" class="nav-item" id="nav-settings" onclick="switchTab('settings')">
-                    Settings
-                </a>
-            </nav>
-            <div style="padding: 16px;">
-                <div id="pinterest-status" class="badge badge-warning" style="width: 100%; text-align: center;">Syncing...</div>
-            </div>
-        </aside>
 
-        <!-- ── MAIN CONTENT ────────────────────────────── -->
-        <main class="main-container">
+            <div class="status-orb-container">
+                <div class="status-orb" id="status-orb"></div>
+                <span id="status-text">SYSTEM ONLINE</span>
+            </div>
+
+            <div class="nav-right">
+                <div class="live-clock" id="live-clock">00:00:00</div>
+                <button class="kill-btn" id="kill-btn" onmouseover="document.body.classList.add('kill-warning')" onmouseout="document.body.classList.remove('kill-warning')">KILL SWITCH</button>
+            </div>
+        </header>
+
+        <!-- ── MAIN STAGE ─────────────────────────────── -->
+        <main class="main-stage">
             
-            <header class="header">
-                <div class="page-title" id="page-title">Dashboard</div>
-                <div id="connection-indicator" class="badge badge-success">BOT ONLINE</div>
-            </header>
+            <!-- LEFT PANEL: STATS -->
+            <aside class="stats-column">
+                <div class="glass-card stat-orb-card">
+                    <div class="stat-header">
+                        <div class="stat-dot"></div>
+                        TOTAL PINS
+                    </div>
+                    <div class="stat-value" id="stat-total-pins">0</div>
+                    <div class="stat-trend" id="stat-trend-pins">↑ +0 today</div>
+                </div>
+                <div class="glass-card stat-orb-card">
+                    <div class="stat-header">
+                        <div class="stat-dot" style="background: var(--accent-tertiary); box-shadow: 0 0 8px var(--accent-tertiary);"></div>
+                        ENGAGEMENTS
+                    </div>
+                    <div class="stat-value" id="stat-total-engagements" style="text-shadow: 0 0 15px rgba(123, 47, 190, 0.3);">0</div>
+                    <div class="stat-trend">ACTIVE BOT</div>
+                </div>
+                <div class="glass-card stat-orb-card">
+                    <div class="stat-header">
+                        <div class="stat-dot" style="background: var(--warning); box-shadow: 0 0 8px var(--warning);"></div>
+                        QUEUE SIZE
+                    </div>
+                    <div class="stat-value" id="stat-queue-size" style="text-shadow: 0 0 15px rgba(255, 184, 0, 0.3);">0</div>
+                    <div class="stat-trend">NEXT: 02:14 AM</div>
+                </div>
+                <div class="glass-card stat-orb-card">
+                    <div class="stat-header">
+                        <div class="stat-dot" style="background: var(--success); box-shadow: 0 0 8px var(--success);"></div>
+                        SUCCESS RATE
+                    </div>
+                    <div class="stat-value" id="stat-success-rate" style="text-shadow: 0 0 15px rgba(0, 255, 136, 0.3);">0%</div>
+                    <div class="stat-trend">PEAK PERFORMANCE</div>
+                </div>
+            </aside>
 
-            <div class="view-content" id="main-view">
-                
-                <!-- DASHBOARD -->
-                <section id="panel-dashboard" class="panel">
-                    <div class="stats-grid">
-                        <div class="card">
-                            <div class="card-title">Total Published</div>
-                            <div class="card-value" id="stat-total-posts">0</div>
-                            <div class="card-accent"></div>
-                        </div>
-                        <div class="card">
-                            <div class="card-title">Active Queue</div>
-                            <div class="card-value" id="stat-queue-pending">0</div>
-                            <div class="card-accent" style="background: var(--gradient-vibrant);"></div>
-                        </div>
-                        <div class="card">
-                            <div class="card-title">Success Rate</div>
-                            <div class="card-value" id="stat-success-rate">0%</div>
-                            <div class="card-accent" style="background: var(--accent-cyan);"></div>
+            <!-- CENTER STAGE: FOCUS -->
+            <section class="center-stage">
+                <nav class="tab-nav">
+                    <button class="tab-btn active" onclick="switchTab('mission')">MISSION CONTROL</button>
+                    <button class="tab-btn" onclick="switchTab('add')">ADD MISSION</button>
+                    <button class="tab-btn" onclick="switchTab('settings')">SYSTEM CONFIG</button>
+                </nav>
+
+                <div class="glass-card content-area">
+                    
+                    <!-- Tab Content: Mission Control (Terminal) -->
+                    <div id="tab-mission" class="terminal">
+                        <div id="terminal-output">
+                            <div class="log-line">
+                                <span class="log-time">[00:00 AM]</span>
+                                <span class="log-msg">◎ SYSTEM INITIALIZED. AWAITING DATA...</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="hub-grid">
-                        <div class="card">
-                            <h3 class="card-title">New Mission</h3>
-                            <div class="input-wrap" style="margin-bottom: 32px;">
-                                <input type="text" id="reel-url" class="input-field" placeholder="Instagram Reel URL...">
-                                <button id="fetch-btn" class="btn btn-primary" onclick="handleFetch()">Extract</button>
-                            </div>
-
-                            <div id="preview-section" class="preview-box hidden">
-                                <div class="media-frame" id="media-preview"></div>
-                                <div>
-                                    <div style="margin-bottom: 20px;">
-                                        <label style="font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; display: block;">TITLE</label>
-                                        <input type="text" id="field-title" class="input-field" style="width: 100%; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px;">
-                                    </div>
-                                    <div style="margin-bottom: 32px;">
-                                        <label style="font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; display: block;">DESCRIPTION</label>
-                                        <textarea id="field-description" class="input-field" rows="4" style="width: 100%; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px;"></textarea>
-                                    </div>
-                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                                        <button id="post-btn" class="btn btn-glow" onclick="handlePost()">Post Now</button>
-                                        <button id="queue-btn" class="btn btn-primary" style="background: transparent; border: 1px solid var(--border);" onclick="handleQueue()">Queue</button>
-                                    </div>
+                    <!-- Tab Content: Add Pin -->
+                    <div id="tab-add" class="form-stage hidden">
+                        <div class="sentient-input-wrap">
+                            <input type="text" id="reel-url" class="sentient-input" placeholder="FEED ME INSTAGRAM URL...">
+                        </div>
+                        <div id="extraction-preview" class="hidden" style="margin-bottom: 24px; animation: fade-up 0.3s ease;">
+                            <div style="display: flex; gap: 20px;">
+                                <img id="preview-thumb" style="width: 120px; border-radius: 8px; border: 1px solid var(--border);">
+                                <div style="flex:1;">
+                                    <input type="text" id="field-title" class="sentient-input" style="padding: 10px; margin-bottom: 10px;" placeholder="MISSION TITLE">
+                                    <textarea id="field-description" class="sentient-input" style="padding: 10px; font-size: 13px;" rows="3" placeholder="AI OPTIMIZED DESCRIPTION"></textarea>
                                 </div>
                             </div>
                         </div>
+                        <button id="main-action-btn" class="sentient-btn" onclick="handleFetch()">ANALYZE & QUEUE</button>
+                    </div>
 
-                        <div class="card">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                                <h3 class="card-title" style="margin: 0;">Live Queue</h3>
-                                <button class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;" onclick="processQueueNow()">Trigger Bot</button>
+                    <!-- Tab Content: Settings -->
+                    <div id="tab-settings" class="form-stage hidden">
+                        <h3 style="font-family: 'Space Grotesk'; margin-bottom: 24px;">SYSTEM ARCHITECTURE</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div class="glass-card" style="padding: 20px; border-color: var(--border-purple);">
+                                <div class="stat-header">PINTEREST OAUTH</div>
+                                <div id="oauth-status" style="margin: 16px 0; font-family: 'JetBrains Mono'; font-size: 12px; color: var(--success);">CONNECTED</div>
+                                <a href="/api/pinterest/auth" class="sentient-btn" style="padding: 10px; font-size: 12px;">RE-AUTHORIZE</a>
                             </div>
-                            <div id="queue-list-mini"></div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- QUEUE -->
-                <section id="panel-queue" class="panel hidden">
-                    <div class="card">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
-                            <h2 class="page-title" style="font-size: 24px;">Mission Queue</h2>
-                            <button class="btn btn-glow" style="padding: 10px 20px;" onclick="clearQueue()">Clear All</button>
-                        </div>
-                        <div id="queue-list"></div>
-                    </div>
-                </section>
-
-                <!-- LAB -->
-                <section id="panel-lab" class="panel hidden">
-                    <div class="card" style="max-width: 500px; margin: 0 auto; text-align: center;">
-                        <h2 class="page-title" style="font-size: 28px; margin-bottom: 12px;">Booster Lab</h2>
-                        <p style="color: var(--text-secondary); margin-bottom: 40px;">Simulate organic engagement to grow your authority.</p>
-                        
-                        <div style="text-align: left; margin-bottom: 32px;">
-                            <label style="font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; display: block;">TARGET NICHE</label>
-                            <select id="engage-niche" class="input-field" style="width: 100%; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px;">
-                                <option value="all">General Growth</option>
-                                <option value="fashion">Fashion & Style</option>
-                                <option value="home">Home Decor</option>
-                            </select>
-                        </div>
-                        <div style="text-align: left; margin-bottom: 40px;">
-                            <label style="font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; display: block;">INTENSITY</label>
-                            <input type="range" id="engage-count" min="1" max="5" value="2" style="width: 100%; accent-color: var(--accent-blue);">
-                        </div>
-                        <button id="engage-btn" class="btn btn-glow" style="width: 100%; padding: 20px;" onclick="startEngager()">Launch Mission</button>
-                    </div>
-                </section>
-
-                <!-- HISTORY -->
-                <section id="panel-history" class="panel hidden">
-                    <div class="card">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
-                            <h2 class="page-title" style="font-size: 24px;">Activity History</h2>
-                            <button class="btn btn-primary" onclick="exportHistoryJson()">Export JSON</button>
-                        </div>
-                        <div id="history-list"></div>
-                    </div>
-                </section>
-
-                <!-- SETTINGS -->
-                <section id="panel-settings" class="panel hidden">
-                    <div class="stats-grid">
-                        <div class="card">
-                            <h3 class="card-title">Pinterest Connection</h3>
-                            <div id="settings-pinterest-status" style="margin-bottom: 24px;"></div>
-                            <div style="display: flex; flex-direction: column; gap: 16px;">
-                                <a href="/api/pinterest/auth" class="btn btn-glow" style="text-decoration: none;">OAuth Link</a>
-                                <div class="input-wrap">
-                                    <input type="password" id="session-cookie-input" class="input-field" placeholder="Session Cookie">
-                                    <button class="btn btn-primary" onclick="linkSessionCookie()">Link</button>
+                            <div class="glass-card" style="padding: 20px;">
+                                <div class="stat-header">SESSION DATA</div>
+                                <div id="session-status" style="margin: 16px 0; font-family: 'JetBrains Mono'; font-size: 12px;">VALIDATING...</div>
+                                <div style="display: flex; gap: 10px;">
+                                    <input type="password" id="session-cookie-input" class="sentient-input" style="padding: 10px; font-size: 11px;" placeholder="COOKIE">
+                                    <button class="sentient-btn" style="width: auto; padding: 10px 20px; font-size: 12px;" onclick="linkSessionCookie()">LINK</button>
                                 </div>
                             </div>
                         </div>
-                        <div class="card">
-                            <h3 class="card-title">Diagnostics</h3>
-                            <div id="hosting-status-card" style="margin-bottom: 24px;"></div>
-                            <div id="deploy-readiness"></div>
-                        </div>
                     </div>
-                </section>
 
-            </div>
+                </div>
+            </section>
+
+            <!-- RIGHT PANEL: QUEUE -->
+            <aside class="queue-column">
+                <div class="column-header">
+                    <span class="column-title">MISSION QUEUE</span>
+                    <span class="badge-pill" id="queue-badge">0</span>
+                </div>
+                <div class="queue-list" id="queue-list">
+                    <!-- Queue items will be injected here -->
+                </div>
+                <div style="padding-top: 10px;">
+                    <button class="sentient-btn" style="font-size: 12px; padding: 12px; background: transparent; border: 1px solid var(--border);" onclick="processQueueNow()">EXECUTE NEXT MISSION</button>
+                </div>
+            </aside>
+
         </main>
 
-        <!-- BOTTOM NAV (Mobile) -->
-        <nav class="bottom-nav">
-            <a href="#" class="nav-btn active" id="m-nav-dashboard" onclick="switchTab('dashboard')">
-                <span style="font-size: 18px;">&#x1F4CA;</span> Dashboard
-            </a>
-            <a href="#" class="nav-btn" id="m-nav-queue" onclick="switchTab('queue')">
-                <span style="font-size: 18px;">&#x1F4D1;</span> Queue
-            </a>
-            <a href="#" class="nav-btn" id="m-nav-lab" onclick="switchTab('lab')">
-                <span style="font-size: 18px;">&#x1F9EA;</span> Booster
-            </a>
-            <a href="#" class="nav-btn" id="m-nav-history" onclick="switchTab('history')">
-                <span style="font-size: 18px;">&#x1F552;</span> History
-            </a>
-        </nav>
-
-        <!-- MISSION OVERLAY -->
-        <div id="mission-control-overlay" class="overlay hidden">
-            <div class="overlay-card">
-                <div class="loader-glow"></div>
-                <h2 class="page-title" style="font-size: 32px; margin-bottom: 8px;">Mission Active</h2>
-                <div id="mission-timer-val" style="color: var(--text-secondary); margin-bottom: 40px;">00:00 elapsed</div>
-                
-                <div style="text-align: left;">
-                    <div class="list-item" id="stage-init">
-                        <span class="badge badge-warning">RUN</span> Initializing System
-                    </div>
-                    <div class="list-item" id="stage-cloud">
-                        <span class="badge badge-warning">WAIT</span> Cloud Handshake
-                    </div>
-                    <div class="list-item" id="stage-upload">
-                        <span class="badge badge-warning">WAIT</span> Transferring Media
-                    </div>
-                    <div class="list-item" id="stage-verify">
-                        <span class="badge badge-warning">WAIT</span> Final Validation
-                    </div>
-                </div>
-                <div id="mission-status-text" style="margin-top: 40px; font-weight: 600; color: var(--accent-blue);">Contacting Cloud Bot...</div>
+        <!-- ── BOTTOM STATUS BAR ───────────────────────── -->
+        <footer class="bottom-status">
+            <div class="scrolling-log" id="scrolling-log">◎ INITIALIZING NEURAL LINKS... SYNCING WITH CLOUD BOT...</div>
+            <div class="mission-countdown">NEXT MISSION IN: <span id="countdown">00:00:00</span></div>
+            <div class="system-health">
+                <div class="health-dot"><div class="dot"></div> API</div>
+                <div class="health-dot"><div class="dot"></div> REDIS</div>
+                <div class="health-dot"><div class="dot"></div> PINTEREST</div>
             </div>
-        </div>
+        </footer>
 
-        <div id="toast-container" class="toast-container"></div>
     </div>
 
     <script src="/js/app.js"></script>
