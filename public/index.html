@@ -33,17 +33,31 @@
         <nav class="tabs">
             <button class="tab active" id="tab-dashboard" onclick="switchTab('dashboard')">Mission Control</button>
             <button class="tab" id="tab-queue" onclick="switchTab('queue')">Queue</button>
+            <button class="tab" id="tab-lab" onclick="switchTab('lab')">Booster Lab</button>
             <button class="tab" id="tab-history" onclick="switchTab('history')">History</button>
             <button class="tab" id="tab-settings" onclick="switchTab('settings')">Settings</button>
         </nav>
 
+        <!-- DASHBOARD -->
         <div id="panel-dashboard" class="panel">
             <div class="grid-main">
                 <div class="glass-card">
                     <h3 style="margin-bottom: 20px;">Deploy New Mission</h3>
-                    <div style="display: flex; gap: 12px; margin-bottom: 20px;">
-                        <input type="text" id="reel-url" placeholder="Instagram Reel URL...">
-                        <button class="btn btn-primary" onclick="handleFetch()">Extract</button>
+                    
+                    <div style="margin-bottom: 24px;">
+                        <label class="stat-label">Extract from Instagram</label>
+                        <div style="display: flex; gap: 12px;">
+                            <input type="text" id="reel-url" placeholder="Paste Reel URL...">
+                            <button class="btn btn-primary" onclick="handleFetch()">Extract</button>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 24px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid var(--border);">
+                        <label class="stat-label">Manual Media Upload (Optional)</label>
+                        <div style="display: flex; gap: 12px; margin-top: 8px;">
+                            <input type="text" id="manual-media-url" placeholder="Direct Image/Video URL...">
+                            <button class="btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="handleManualMedia()">Load</button>
+                        </div>
                     </div>
 
                     <div id="preview-section" class="hidden">
@@ -75,20 +89,65 @@
             </div>
         </div>
 
+        <!-- QUEUE -->
         <section id="panel-queue" class="panel hidden">
             <div class="glass-card">
-                <h3 style="margin-bottom: 20px;">Full Mission Queue</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3>Full Mission Queue</h3>
+                    <button class="btn" style="padding: 6px 12px; font-size: 12px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);" onclick="clearQueue()">Clear Queue</button>
+                </div>
                 <div id="queue-list"></div>
             </div>
         </section>
 
+        <!-- LAB -->
+        <section id="panel-lab" class="panel hidden">
+            <div class="glass-card" style="max-width: 600px; margin: 0 auto;">
+                <h3 style="margin-bottom: 10px;">Booster Lab</h3>
+                <p style="color: var(--text-2); margin-bottom: 30px; font-size: 14px;">Simulate organic interactions to boost algorithm authority.</p>
+                
+                <div style="margin-bottom: 20px;">
+                    <label class="stat-label">Niche Category</label>
+                    <select id="engage-niche">
+                        <option value="all">General Growth</option>
+                        <option value="fashion">Fashion & Style</option>
+                        <option value="home">Home Decor</option>
+                        <option value="tech">Tech & Gadgets</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 30px;">
+                    <label class="stat-label">Intensity (Interactions)</label>
+                    <input type="range" id="engage-count" min="1" max="10" value="3" style="width: 100%; accent-color: var(--accent);">
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 8px;">
+                        <span>1</span><span>5</span><span>10</span>
+                    </div>
+                </div>
+
+                <button id="engage-btn" class="btn btn-primary" style="width: 100%;" onclick="startEngager()">Launch Mission</button>
+                
+                <div style="margin-top: 40px;">
+                    <h4 class="stat-label">Engagement Logs</h4>
+                    <div id="engagement-logs" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- HISTORY -->
         <section id="panel-history" class="panel hidden">
             <div class="glass-card">
-                <h3 style="margin-bottom: 20px;">Activity History</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3>Activity History</h3>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" style="padding: 6px 12px; font-size: 12px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="exportHistoryJson()">Export JSON</button>
+                        <button class="btn" style="padding: 6px 12px; font-size: 12px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);" onclick="clearHistory()">Reset</button>
+                    </div>
+                </div>
                 <div id="history-list"></div>
             </div>
         </section>
 
+        <!-- SETTINGS -->
         <section id="panel-settings" class="panel hidden">
             <div class="grid-main">
                 <div class="glass-card">
@@ -104,10 +163,30 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="glass-card">
+                    <h3 style="margin-bottom: 20px;">System Diagnostics</h3>
+                    <div id="diagnostics-content">
+                        <div class="list-item">
+                            <div style="flex:1;">Hosting Environment</div>
+                            <div id="diag-hosting" class="badge">Checking...</div>
+                        </div>
+                        <div class="list-item">
+                            <div style="flex:1;">GitHub Automation</div>
+                            <div id="diag-github" class="badge">Checking...</div>
+                        </div>
+                        <div class="list-item">
+                            <div style="flex:1;">Pinterest Session</div>
+                            <div id="diag-session" class="badge">Checking...</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
     </div>
+
+    <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;"></div>
 
     <script src="/js/app.js"></script>
 </body>
