@@ -1011,10 +1011,7 @@ function renderHistory() {
     const status = item.status || 'success';
     const igUrl = item.url || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    
-    // ULTIMATE FIX: Using Google's High-Authority Proxy for Activity Thumbnails
-    const googleProxy = `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(thumb)}`;
-    const thumbUrl = thumb ? googleProxy : fallback;
+    const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
 
     let statusBadge = 'Posted';
     let tagClass = '';
@@ -1181,7 +1178,7 @@ function renderQueueMini() {
     }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(thumb)}` : fallback;
+    const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
 
     return `
       <div style="display:flex; align-items:center; gap:12px; padding:12px; background:rgba(255,255,255,0.02); border-radius:8px; border: 1px solid ${isActive ? 'var(--accent)' : 'transparent'}">
@@ -1223,7 +1220,7 @@ function renderQueue() {
     }
     const thumb = item.thumbnailUrl || item.mediaUrl || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? `https://images1-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=${encodeURIComponent(thumb)}` : fallback;
+    const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
     
     let statusClass = '';
     if (item.status === 'failed') statusClass = 'tag-error';
@@ -1386,6 +1383,17 @@ function formatTimeAgo(iso) {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+// Safe proxy URL helper — uses our own /api/proxy (same as video player)
+// Handles special characters in Instagram CDN URLs safely
+function proxyUrl(url) {
+  try {
+    return `/api/proxy?url=${btoa(url)}`;
+  } catch {
+    // btoa fails on non-Latin chars — encode first
+    return `/api/proxy?url=${btoa(encodeURIComponent(url))}`;
+  }
 }
 
 function escHtml(str) {
