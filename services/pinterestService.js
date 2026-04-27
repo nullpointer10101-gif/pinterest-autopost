@@ -27,7 +27,7 @@ async function pinterestClient() {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    timeout: 8000,
+    timeout: 30000, // Pinterest video pins can take up to 30s to process
   });
 }
 
@@ -139,7 +139,7 @@ async function createPin({ title, description, altText = '', hashtags = [], medi
     description: safeDescription,
     alt_text: safeAltText || undefined,
     media_source: {
-      source_type: 'image_url',
+      source_type: 'video_url', // Fixed: reels are videos, not images
       url: mediaUrl,
     },
     link: link || undefined,
