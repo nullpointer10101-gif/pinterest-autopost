@@ -6,21 +6,44 @@ const state = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  initCleanUI();
   refreshOverview();
   setInterval(refreshOverview, 30000);
-  switchTab('dashboard');
 });
+
+function initCleanUI() {
+  updateTime();
+  setInterval(updateTime, 1000);
+  switchTab('dashboard');
+}
+
+function updateTime() {
+  const el = document.getElementById('live-time');
+  if (el) el.textContent = new Date().toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+}
 
 function switchTab(tab) {
   state.currentTab = tab;
-  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(el => el.classList.add('hidden'));
 
-  const tabEl = document.getElementById(`tab-${tab}`);
+  const navEl = document.getElementById(`nav-${tab}`);
   const panelEl = document.getElementById(`panel-${tab}`);
+  const titleEl = document.getElementById('page-title');
 
-  if (tabEl) tabEl.classList.add('active');
+  if (navEl) navEl.classList.add('active');
   if (panelEl) panelEl.classList.remove('hidden');
+  
+  if (titleEl) {
+    const titles = {
+        'dashboard': 'Dashboard Overview',
+        'queue': 'Mission Queue',
+        'lab': 'Algorithm Booster Lab',
+        'history': 'Activity History',
+        'settings': 'System Settings'
+    };
+    titleEl.textContent = titles[tab] || 'Command';
+  }
 
   if (tab === 'dashboard') loadMiniQueue();
   if (tab === 'queue') loadQueue();
@@ -102,15 +125,23 @@ async function loadHistory() {
   try {
     const res = await fetch('/api/history');
     const data = await res.json();
+    state.history = data.history;
     const list = document.getElementById('history-list');
+    if (!list) return;
+    
+    if (!data.history.length) {
+        list.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-sub);">No history found.</div>';
+        return;
+    }
+
     list.innerHTML = data.history.map(item => `
       <div class="list-item">
-        <img class="thumb-img" src="${item.thumb || 'https://via.placeholder.com/50'}">
-        <div style="flex:1;">
-          <div style="font-weight:600; color:#fff;">${item.title}</div>
-          <div style="font-size:12px; color:var(--text-2);">@${item.username} • ${new Date(item.createdAt).toLocaleDateString()}</div>
+        <img class="thumb" src="${item.thumb || 'https://via.placeholder.com/60'}">
+        <div class="item-body">
+          <div class="item-head">${escHtml(item.title)}</div>
+          <div class="item-meta">@${escHtml(item.username)} • ${new Date(item.createdAt).toLocaleDateString()}</div>
         </div>
-        <span class="badge ${item.status === 'error' ? 'badge-error' : 'badge-success'}">${item.status === 'error' ? 'Failed' : 'Posted'}</span>
+        <span class="badge ${item.status === 'error' ? 'badge-error' : 'badge-success'}">${item.status === 'error' ? 'Failed' : 'Success'}</span>
       </div>
     `).join('');
   } catch (err) {}
@@ -121,13 +152,21 @@ async function loadQueue() {
     const res = await fetch('/api/queue');
     const data = await res.json();
     const list = document.getElementById('queue-list');
+    if (!list) return;
+
+    if (!data.queue.length) {
+        list.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-sub);">Queue is empty.</div>';
+        return;
+    }
+
     list.innerHTML = data.queue.map(item => `
       <div class="list-item">
-        <div style="flex:1;">
-          <div style="font-weight:600; color:#fff;">${item.title}</div>
-          <div style="font-size:12px; color:var(--text-2);">Queued Mission</div>
+        <div class="item-body">
+          <div class="item-head">${escHtml(item.title)}</div>
+          <div class="item-meta">Waiting in queue...</div>
         </div>
-        <span class="badge" style="background:rgba(255,255,255,0.05); color:#fff;">Pending</span>
+        <span class="badge" style="background:#f1f5f9; color:#475569;">PENDING</span>
+        <button onclick="deleteQueueItem('${item.id}')" style="margin-left:15px; border:none; background:none; cursor:pointer; color:#ef4444; font-size:16px;">&times;</button>
       </div>
     `).join('');
   } catch (err) {}
@@ -138,12 +177,19 @@ async function loadMiniQueue() {
     const res = await fetch('/api/queue');
     const data = await res.json();
     const list = document.getElementById('queue-list-mini');
+    if (!list) return;
+    
+    if (!data.queue.length) {
+        list.innerHTML = '<div style="font-size:12px; color:var(--text-sub);">No pending missions.</div>';
+        return;
+    }
+
     list.innerHTML = data.queue.slice(0, 3).map(item => `
       <div class="list-item">
-        <div style="flex:1;">
-          <div style="font-size:14px; font-weight:500;">${item.title}</div>
+        <div class="item-body">
+          <div class="item-head" style="font-size:13px;">${escHtml(item.title)}</div>
         </div>
-        <span class="badge" style="background:rgba(255,255,255,0.05); font-size:10px;">WAIT</span>
+        <span class="badge" style="background:#f1f5f9; font-size:10px;">WAIT</span>
       </div>
     `).join('');
   } catch (err) {}
@@ -208,17 +254,17 @@ async function loadEngagements() {
     if (!list) return;
     
     if (!data.logs.length) {
-        list.innerHTML = '<div style="color:var(--text-2); font-size:12px; text-align:center;">No recent lab missions.</div>';
+        list.innerHTML = '<div style="color:var(--text-sub); font-size:12px; text-align:center; padding:20px;">No recent booster missions.</div>';
         return;
     }
 
     list.innerHTML = data.logs.slice(0, 10).map(log => `
-        <div class="list-item" style="font-size:13px; border-bottom:1px solid rgba(255,255,255,0.05);">
-            <div style="flex:1;">
-                <span style="color:var(--accent); font-weight:600;">${log.action.toUpperCase()}</span> 
-                <span style="color:var(--text-2); opacity:0.6;">@${new Date(log.timestamp).toLocaleTimeString()}</span>
+        <div class="list-item">
+            <div class="item-body">
+                <div class="item-head" style="color:var(--primary);">${log.action.toUpperCase()}</div>
+                <div class="item-meta">${new Date(log.timestamp).toLocaleTimeString()}</div>
             </div>
-            <a href="${log.url}" target="_blank" style="color:var(--text-1); text-decoration:none; font-size:11px;">View Pin</a>
+            <a href="${log.url}" target="_blank" class="badge" style="background:#f1f5f9; text-decoration:none; color:var(--text);">View</a>
         </div>
     `).join('');
   } catch (err) {}
