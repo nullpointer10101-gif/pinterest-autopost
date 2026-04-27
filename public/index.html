@@ -3,320 +3,273 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Advanced AI-powered Pinterest automation for Instagram Reels. Command your content with enterprise-grade scheduling and algorithm boosting.">
-    <title>Pinterest Command Center | Enterprise Automation</title>
+    <meta name="description" content="Enterprise Pinterest Automation. AI-powered Instagram Reel repurposing.">
+    <title>Pinterest Command | Enterprise</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
-<body class="command-center">
+<body>
 
-    <div class="background-glow"></div>
-
-    <a class="skip-link" href="#main">Skip to content</a>
-
-    <header class="header">
-        <div class="header-inner">
-            <div class="logo">
-                <span class="logo-icon" aria-hidden="true">&#x1F680;</span>
-                <div class="logo-text">
-                    <span class="logo-title">PINTEREST <span class="accent">COMMAND</span></span>
-                    <span class="logo-sub">AI-POWERED AUTOMATION</span>
-                </div>
-            </div>
-            
-            <div id="pinterest-status" class="status-badge status-checking" aria-live="polite">
-                <span class="status-dot"></span>
-                <span class="status-label">Syncing...</span>
-            </div>
-        </div>
-    </header>
-
-    <nav class="tabs" role="tablist" aria-label="Primary">
-        <button class="tab active" id="tab-dashboard" type="button" role="tab" aria-selected="true" aria-controls="panel-dashboard" tabindex="0" onclick="switchTab('dashboard')">
-            <span class="tab-icon" aria-hidden="true">&#x1F4CA;</span> Command Center
-        </button>
-        <button class="tab" id="tab-queue" type="button" role="tab" aria-selected="false" aria-controls="panel-queue" tabindex="-1" onclick="switchTab('queue')">
-            <span class="tab-icon" aria-hidden="true">&#x1F4D1;</span> Mission Queue
-        </button>
-        <button class="tab" id="tab-lab" type="button" role="tab" aria-selected="false" aria-controls="panel-lab" tabindex="-1" onclick="switchTab('lab')">
-            <span class="tab-icon" aria-hidden="true">&#x1F9EA;</span> Algorithm Lab
-        </button>
-        <button class="tab" id="tab-engagements" type="button" role="tab" aria-selected="false" aria-controls="panel-engagements" tabindex="-1" onclick="switchTab('engagements')">
-            <span class="tab-icon" aria-hidden="true">&#x1F4AC;</span> Engagement Log
-        </button>
-        <button class="tab" id="tab-history" type="button" role="tab" aria-selected="false" aria-controls="panel-history" tabindex="-1" onclick="switchTab('history')">
-            <span class="tab-icon" aria-hidden="true">&#x1F552;</span> Activity
-        </button>
-        <button class="tab" id="tab-settings" type="button" role="tab" aria-selected="false" aria-controls="panel-settings" tabindex="-1" onclick="switchTab('settings')">
-            <span class="tab-icon" aria-hidden="true">&#9881;&#65039;</span> Settings
-        </button>
-    </nav>
-
-    <main class="main" id="main">
+    <div class="app-container">
         
-        <!-- ── DASHBOARD: COMBINED VIEW ──────────────────────── -->
-        <section id="panel-dashboard" class="panel" role="tabpanel" aria-labelledby="tab-dashboard" tabindex="0" aria-hidden="false">
-            
-            <div class="dashboard-grid">
-                <!-- STATS BAR -->
-                <div class="stats-bar card">
-                    <div class="stat-item">
-                        <span class="stat-value" id="stat-total-posts">0</span>
-                        <span class="stat-label">Total Published</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value" id="stat-queue-pending">0</span>
-                        <span class="stat-label">In Queue</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value" id="stat-success-rate">0%</span>
-                        <span class="stat-label">Success Rate</span>
-                    </div>
-                </div>
+        <!-- ── SIDEBAR ──────────────────────────────────── -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">P</div>
+                <div class="sidebar-title">Pinterest Command</div>
+            </div>
 
-                <!-- MAIN POSTING HUB -->
-                <div class="card posting-hub">
-                    <div class="card-header">
-                        <h2 class="card-title">New Content Mission</h2>
-                        <p class="card-sub">Extract and optimize Instagram Reels for Pinterest</p>
-                    </div>
+            <nav class="nav-group">
+                <div class="nav-label">Navigation</div>
+                <a href="#" class="nav-item active" id="nav-dashboard" onclick="switchTab('dashboard')">
+                    <span>&#x1F4CA;</span> Dashboard
+                </a>
+                <a href="#" class="nav-item" id="nav-queue" onclick="switchTab('queue')">
+                    <span>&#x1F4D1;</span> Mission Queue
+                </a>
+                <a href="#" class="nav-item" id="nav-lab" onclick="switchTab('lab')">
+                    <span>&#x1F9EA;</span> Algorithm Lab
+                </a>
+                <a href="#" class="nav-item" id="nav-engagements" onclick="switchTab('engagements')">
+                    <span>&#x1F4AC;</span> Engagement Log
+                </a>
+                <a href="#" class="nav-item" id="nav-history" onclick="switchTab('history')">
+                    <span>&#x1F552;</span> Activity History
+                </a>
+
+                <div class="nav-label">Configuration</div>
+                <a href="#" class="nav-item" id="nav-settings" onclick="switchTab('settings')">
+                    <span>&#9881;&#65039;</span> Settings
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div id="pinterest-status" class="badge badge-warning">
+                    Syncing...
+                </div>
+            </div>
+        </aside>
+
+        <!-- ── MAIN CONTENT ─────────────────────────────── -->
+        <main class="main-content">
+            
+            <header class="top-bar">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <button class="menu-toggle" onclick="toggleSidebar()">&#9776;</button>
+                    <div class="page-title" id="page-title">Dashboard</div>
+                </div>
+                
+                <div id="connection-indicator" class="badge badge-success">
+                    Cloud Bot Online
+                </div>
+            </header>
+
+            <div class="dashboard-view" id="main-view">
+                
+                <!-- ── PANEL: DASHBOARD ──────────────────────── -->
+                <section id="panel-dashboard" class="panel">
                     
-                    <div class="input-area">
-                        <div class="url-input-wrap">
-                            <span class="url-icon" aria-hidden="true">&#x1F517;</span>
-                            <input type="text" id="reel-url" class="url-input" placeholder="Paste Instagram Reel URL here...">
-                            <button id="fetch-btn" type="button" class="btn-primary" onclick="handleFetch()">
-                                <span class="btn-text">Extract Mission</span>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-title">Total Published</span>
+                                <span class="stat-icon">&#x1F680;</span>
+                            </div>
+                            <div class="stat-value" id="stat-total-posts">0</div>
+                            <div class="stat-footer">Synced via API</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-title">Active Queue</span>
+                                <span class="stat-icon">&#x1F4D1;</span>
+                            </div>
+                            <div class="stat-value" id="stat-queue-pending">0</div>
+                            <div class="stat-footer">Next run in <span id="queue-countdown">--</span></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-title">Success Rate</span>
+                                <span class="stat-icon">&#x2705;</span>
+                            </div>
+                            <div class="stat-value" id="stat-success-rate">0%</div>
+                            <div class="stat-footer" style="color:var(--success)">Performance: Peak</div>
+                        </div>
+                    </div>
+
+                    <div class="hub-grid">
+                        <!-- LEFT: INPUT AREA -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="stat-title" style="color:white; font-size:14px;">New Mission</h3>
+                                <p class="item-meta">Paste an Instagram Reel URL to start extraction.</p>
+                            </div>
+                            <div class="card-body">
+                                <div class="url-input-container">
+                                    <input type="text" id="reel-url" class="input-box" placeholder="https://www.instagram.com/reel/...">
+                                    <button id="fetch-btn" class="btn btn-primary" onclick="handleFetch()">Extract</button>
+                                </div>
+
+                                <!-- PREVIEW SECTION (HIDDEN BY DEFAULT) -->
+                                <div id="preview-section" class="preview-container hidden">
+                                    <div class="media-box" id="media-preview"></div>
+                                    <div class="form-area">
+                                        <div class="form-group">
+                                            <label>Pinterest Title</label>
+                                            <input type="text" id="field-title" placeholder="Catchy title...">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Description</label>
+                                            <textarea id="field-description" rows="5" placeholder="Description and tags..."></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Source Link</label>
+                                            <input type="text" id="field-link">
+                                        </div>
+                                        <div style="display: flex; gap: 12px;">
+                                            <button id="post-btn" class="btn btn-red" style="flex:1;" onclick="handlePost()">Post Now</button>
+                                            <button id="queue-btn" class="btn btn-secondary" style="flex:1;" onclick="handleQueue()">Queue</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT: MINI QUEUE -->
+                        <div class="card">
+                            <div class="card-header flex-between">
+                                <h3 class="stat-title" style="color:white; font-size:14px;">Recent Queue</h3>
+                                <button class="btn btn-secondary" style="padding: 4px 8px; font-size:10px;" onclick="processQueueNow()">Trigger Now</button>
+                            </div>
+                            <div class="list-container" id="queue-list-mini">
+                                <!-- Mini queue items here -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ── PANEL: QUEUE ──────────────────────────── -->
+                <section id="panel-queue" class="panel hidden">
+                    <div class="card">
+                        <div class="card-header flex-between">
+                            <h2 class="stat-title" style="color:white; font-size:16px;">Full Mission Queue</h2>
+                            <button class="btn btn-secondary" onclick="clearQueue()">Clear Queue</button>
+                        </div>
+                        <div class="list-container" id="queue-list"></div>
+                    </div>
+                </section>
+
+                <!-- ── PANEL: LAB ────────────────────────────── -->
+                <section id="panel-lab" class="panel hidden">
+                    <div class="card" style="max-width: 600px; margin: 0 auto;">
+                        <div class="card-header">
+                            <h2 class="stat-title" style="color:white; font-size:16px;">Algorithm Booster Lab</h2>
+                            <p class="item-meta">Simulate engagement to boost account authority.</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label>Target Niche</label>
+                                <select id="engage-niche">
+                                    <option value="all">General Growth</option>
+                                    <option value="fashion">Fashion & Style</option>
+                                    <option value="home">Home Decor</option>
+                                    <option value="travel">Travel</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Interaction Count</label>
+                                <input type="range" id="engage-count" min="1" max="5" value="2">
+                            </div>
+                            <button id="engage-btn" class="btn btn-primary" style="width: 100%; padding: 16px;" onclick="startEngager()">
+                                Launch Booster Mission
                             </button>
                         </div>
                     </div>
+                </section>
 
-                    <div id="preview-section" class="preview-layout hidden">
-                        <div class="preview-media" id="media-preview"></div>
-                        
-                        <div class="preview-controls">
-                            <div class="ai-box">
-                                <span class="ai-badge">AI OPTIMIZED</span>
-                                <div class="field-group">
-                                    <label>Pinterest Title</label>
-                                    <input type="text" id="field-title" maxlength="100">
+                <!-- ── PANEL: ENGAGEMENTS ────────────────────── -->
+                <section id="panel-engagements" class="panel hidden">
+                    <div class="card">
+                        <div class="card-header flex-between">
+                            <h2 class="stat-title" style="color:white; font-size:16px;">Engagement History</h2>
+                            <button class="btn btn-secondary" onclick="clearEngagements()">Clear Logs</button>
+                        </div>
+                        <div class="list-container" id="engagement-list"></div>
+                    </div>
+                </section>
+
+                <!-- ── PANEL: HISTORY ────────────────────────── -->
+                <section id="panel-history" class="panel hidden">
+                    <div class="card">
+                        <div class="card-header flex-between">
+                            <h2 class="stat-title" style="color:white; font-size:16px;">Mission History</h2>
+                            <button class="btn btn-secondary" onclick="exportHistoryJson()">Export JSON</button>
+                        </div>
+                        <div class="list-container" id="history-list"></div>
+                    </div>
+                </section>
+
+                <!-- ── PANEL: SETTINGS ───────────────────────── -->
+                <section id="panel-settings" class="panel hidden">
+                    <div class="stats-grid">
+                        <div class="card">
+                            <div class="card-header">Pinterest Connection</div>
+                            <div class="card-body">
+                                <div id="settings-pinterest-status" style="margin-bottom: 20px;"></div>
+                                <div style="display: flex; flex-direction: column; gap: 12px;">
+                                    <a href="/api/pinterest/auth" class="btn btn-primary">Link OAuth</a>
+                                    <div style="display: flex; gap: 8px;">
+                                        <input type="password" id="session-cookie-input" class="input-box" placeholder="Session Cookie...">
+                                        <button class="btn btn-secondary" onclick="linkSessionCookie()">Link</button>
+                                    </div>
                                 </div>
-                                <div class="field-group">
-                                    <label>Description & Smart Tags</label>
-                                    <textarea id="field-description" rows="4" maxlength="800"></textarea>
-                                </div>
-                                <div class="field-group">
-                                    <label>Destination Link</label>
-                                    <input type="text" id="field-link">
-                                </div>
                             </div>
-
-                            <div class="action-buttons">
-                                <button id="post-btn" type="button" class="btn-glow" onclick="handlePost()">
-                                    <span class="btn-text">Post Now</span>
-                                </button>
-                                <button id="queue-btn" type="button" class="btn-outline" onclick="handleQueue()">
-                                    <span class="btn-text">Queue Mission</span>
-                                </button>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">System Diagnostics</div>
+                            <div class="card-body">
+                                <div id="hosting-status-card" style="margin-bottom: 20px;"></div>
+                                <div id="deploy-readiness"></div>
                             </div>
                         </div>
                     </div>
+                </section>
 
-                    <!-- MISSION PROGRESS CARD -->
-                    <div id="mission-control-card" class="mission-control-card hidden">
-                        <div class="mission-header">
-                            <div class="pulse-icon"></div>
-                            <div>
-                                <h3 class="mission-title">Live Mission Control</h3>
-                                <p class="mission-sub" id="mission-status-text">Waking up the cloud bot...</p>
-                            </div>
-                        </div>
-                        
-                        <div class="mission-stages">
-                            <div class="stage" id="stage-init">
-                                <div class="stage-dot"></div>
-                                <div class="stage-label">Initializing Cloud Mission</div>
-                            </div>
-                            <div class="stage" id="stage-extract">
-                                <div class="stage-dot"></div>
-                                <div class="stage-label">Optimizing Media & Metadata</div>
-                            </div>
-                            <div class="stage" id="stage-cloud">
-                                <div class="stage-dot"></div>
-                                <div class="stage-label">Handshake with GitHub Actions</div>
-                            </div>
-                            <div class="stage" id="stage-browser">
-                                <div class="stage-dot"></div>
-                                <div class="stage-label">Puppeteer Browser Login</div>
-                            </div>
-                            <div class="stage" id="stage-upload">
-                                <div class="stage-dot"></div>
-                                <div class="stage-label">Uploading to Pinterest</div>
-                            </div>
-                            <div class="stage" id="stage-verify">
-                                <div class="stage-dot"></div>
-                                <div class="stage-label">Verifying Live Pin</div>
-                            </div>
-                        </div>
+            </div>
+        </main>
 
-                        <div class="mission-timer">
-                            Mission Duration: <span id="mission-timer-val">00:00</span>
-                        </div>
-                    </div>
+        <!-- ── MISSION OVERLAY ──────────────────────────── -->
+        <div id="mission-control-overlay" class="mission-overlay hidden">
+            <div class="mission-panel">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <div style="font-size: 32px; margin-bottom: 12px;">&#x1F680;</div>
+                    <h3 id="mission-status-text">Mission in Progress...</h3>
+                    <p class="item-meta" id="mission-timer-val">00:00 elapsed</p>
                 </div>
-
-                <!-- QUICK QUEUE VIEW -->
-                <div class="card queue-card">
-                    <div class="card-header flex-between">
-                        <div>
-                            <h2 class="card-title">Active Queue</h2>
-                            <p class="card-sub">Next missions scheduled for Cloud Bot</p>
-                        </div>
-                        <button type="button" class="btn-ghost" onclick="processQueueNow()">Trigger Bot Now</button>
+                <div class="list-container" style="background: transparent;">
+                    <div class="list-item" id="stage-init" style="padding: 12px 0;">
+                        <span class="badge badge-warning">INIT</span> Initializing Mission
                     </div>
-                    <div id="queue-list-mini" class="queue-list-mini">
-                        <!-- Queue items will appear here -->
+                    <div class="list-item" id="stage-cloud" style="padding: 12px 0;">
+                        <span class="badge badge-warning">WAIT</span> Handshake with GitHub
+                    </div>
+                    <div class="list-item" id="stage-upload" style="padding: 12px 0;">
+                        <span class="badge badge-warning">WAIT</span> Uploading to Pinterest
+                    </div>
+                    <div class="list-item" id="stage-verify" style="padding: 12px 0;">
+                        <span class="badge badge-warning">WAIT</span> Final Verification
                     </div>
                 </div>
             </div>
-        </section>
+        </div>
 
-        <!-- ── MISSION QUEUE (FULL VIEW) ────────────────────── -->
-        <section id="panel-queue" class="panel hidden" role="tabpanel" aria-labelledby="tab-queue" tabindex="0" aria-hidden="true">
-            <div class="card">
-                <div class="card-header flex-between">
-                    <div>
-                        <h2 class="card-title">Mission Queue</h2>
-                        <p class="card-sub">Active and pending automation tasks</p>
-                    </div>
-                    <div class="history-actions">
-                        <button type="button" class="btn-ghost danger" onclick="clearQueue()">Clear Queue</button>
-                    </div>
-                </div>
-                <div id="queue-list" class="history-list"></div>
-            </div>
-        </section>
-
-
-        <!-- ── ALGORITHM LAB (NEW FEATURE) ────────────────────── -->
-        <section id="panel-lab" class="panel hidden" role="tabpanel" aria-labelledby="tab-lab" tabindex="0" aria-hidden="true">
-            <div class="card lab-card">
-                <div class="lab-header">
-                    <div class="lab-title">
-                        <span class="lab-icon" aria-hidden="true">&#x1F9EA;</span>
-                        <div>
-                            <h2>Algorithm Booster Lab</h2>
-                            <p>Train the Pinterest algorithm to favor your account</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="lab-controls">
-                    <div class="niche-selector">
-                        <label>Target Niche</label>
-                        <select id="engage-niche" class="select-field">
-                            <option value="all">Mixed (General Growth)</option>
-                            <option value="fashion">Fashion & Beauty</option>
-                            <option value="home">Home Decor & Interior</option>
-                            <option value="travel">Travel & Adventure</option>
-                            <option value="tech">Tech & Gadgets</option>
-                            <option value="food">Food & Recipes</option>
-                        </select>
-                    </div>
-
-                    <div class="intensity-selector">
-                        <label>Booster Intensity</label>
-                        <input type="range" id="engage-count" min="1" max="5" value="2">
-                        <div class="range-labels">
-                            <span>Safe</span>
-                            <span>Standard</span>
-                            <span>Aggressive</span>
-                        </div>
-                    </div>
-
-                    <button id="engage-btn" type="button" class="btn-lab" onclick="startEngager()">
-                        Launch Algorithm Booster
-                    </button>
-                </div>
-
-            </div>
-        </section>
-
-        <!-- ── ENGAGEMENT LOG (NEW TAB) ───────────────────── -->
-        <section id="panel-engagements" class="panel hidden" role="tabpanel" aria-labelledby="tab-engagements" tabindex="0" aria-hidden="true">
-            <div class="card">
-                <div class="card-header flex-between">
-                    <div>
-                        <h2 class="card-title">Automated Engagement Log</h2>
-                        <p class="card-sub">History of Likes and Comments from Cloud Bot</p>
-                    </div>
-                    <div class="history-actions">
-                        <button type="button" class="btn-ghost danger" onclick="clearEngagements()">Clear Log</button>
-                    </div>
-                </div>
-                <div id="engagement-list" class="history-list"></div>
-            </div>
-        </section>
-
-        <!-- ── ACTIVITY HISTORY ──────────────────────────────── -->
-        <section id="panel-history" class="panel hidden" role="tabpanel" aria-labelledby="tab-history" tabindex="0" aria-hidden="true">
-            <div class="card">
-                <div class="card-header flex-between">
-                    <div>
-                        <h2 class="card-title">Mission History</h2>
-                        <p class="card-sub">Log of all published and failed content</p>
-                    </div>
-                    <div class="history-actions">
-                        <button type="button" class="btn-ghost" onclick="exportHistoryJson()">Export Log</button>
-                    </div>
-                </div>
-                <div id="history-list" class="history-list"></div>
-            </div>
-        </section>
-
-        <!-- ── SETTINGS ──────────────────────────────────────── -->
-        <section id="panel-settings" class="panel hidden" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" aria-hidden="true">
-            <div class="settings-grid">
-                <!-- PINTEREST CONNECTION -->
-                <div class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">Pinterest Connection</h2>
-                        <p class="card-sub">Manage API and Session tokens</p>
-                    </div>
-                    <div class="settings-content">
-                        <div id="settings-pinterest-status" class="connection-status-card"></div>
-                        <div class="button-group-vertical">
-                            <a href="/api/pinterest/auth" class="btn-primary">Connect Pinterest API (OAuth)</a>
-                            <button id="unlink-api-btn" type="button" class="btn-outline hidden" onclick="unlinkPinterestAPI()">Unlink API Connection</button>
-                        </div>
-
-                        <div class="divider">OR USE SESSION COOKIE</div>
-                        
-                        <div id="session-status-card" class="connection-status-card"></div>
-                        <div class="input-with-btn" id="session-link-input-group">
-                            <input type="password" id="session-cookie-input" placeholder="Paste _pinterest_sess cookie here...">
-                            <button type="button" class="btn-primary" onclick="linkSessionCookie()">Link Session</button>
-                        </div>
-                        <button id="unlink-session-btn" type="button" class="btn-outline mt-10 hidden" onclick="unlinkSessionCookie()">Unlink Session Account</button>
-                    </div>
-                </div>
-
-                <!-- SYSTEM DIAGNOSTICS (HIDDEN CLUTTER MOVED HERE) -->
-                <div class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">System Diagnostics</h2>
-                        <p class="card-sub">Hosting and runtime information</p>
-                    </div>
-                    <div id="hosting-status-card" class="diagnostics-card"></div>
-                    <div id="deploy-readiness" class="deploy-checklist"></div>
-                </div>
-            </div>
-        </section>
-
-    </main>
-
-    <div id="toast-container" class="toast-container" aria-live="polite" aria-relevant="additions"></div>
+        <div id="toast-container" class="toast-container"></div>
+    </div>
 
     <script src="/js/app.js"></script>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+    </script>
 </body>
 </html>

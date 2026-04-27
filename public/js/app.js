@@ -106,41 +106,46 @@ function bindTabA11y() {
 function switchTab(tab) {
   state.currentTab = tab;
 
-  document.querySelectorAll('.tab[role="tab"]').forEach(el => {
+  // Sidebar Nav Items
+  document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.remove('active');
-    el.setAttribute('aria-selected', 'false');
-    el.setAttribute('tabindex', '-1');
   });
+  
+  // Panels
   document.querySelectorAll('.panel').forEach(el => {
     el.classList.add('hidden');
-    el.classList.remove('active');
-    el.setAttribute('aria-hidden', 'true');
   });
 
-  const tabEl = document.getElementById(`tab-${tab}`);
+  const navEl = document.getElementById(`nav-${tab}`);
   const panelEl = document.getElementById(`panel-${tab}`);
-  if (tabEl) {
-    tabEl.classList.add('active');
-    tabEl.setAttribute('aria-selected', 'true');
-    tabEl.setAttribute('tabindex', '0');
+  const pageTitle = document.getElementById('page-title');
+
+  if (navEl) navEl.classList.add('active');
+  if (panelEl) panelEl.classList.remove('hidden');
+  if (pageTitle) {
+    const titles = {
+        'dashboard': 'Dashboard',
+        'queue': 'Mission Queue',
+        'lab': 'Algorithm Booster',
+        'engagements': 'Engagement Logs',
+        'history': 'Activity History',
+        'settings': 'System Settings'
+    };
+    pageTitle.textContent = titles[tab] || 'Command Center';
   }
-  if (panelEl) {
-    panelEl.classList.remove('hidden');
-    panelEl.classList.add('active');
-    panelEl.setAttribute('aria-hidden', 'false');
+
+  // Close sidebar on mobile after clicking
+  if (window.innerWidth <= 1024) {
+    document.getElementById('sidebar').classList.remove('open');
   }
 
   if (tab === 'dashboard') refreshOverview();
   if (tab === 'queue') loadQueue();
-  if (tab === 'lab') {
-    // Just refresh status if needed
-  }
   if (tab === 'engagements') loadEngagements();
   if (tab === 'history') loadHistory();
   if (tab === 'settings') {
     loadSystemStatus();
     loadSessionStatus();
-    updateSettingsStatus();
   }
 }
 
@@ -719,7 +724,7 @@ async function handlePost() {
 
   // 1. Setup UI for Mission Control
   hide('preview-section');
-  show('mission-control-card');
+  show('mission-control-overlay');
   resetMissionStages();
   startMissionTimer();
   
@@ -810,7 +815,20 @@ function updateMissionStage(id, status, text) {
   const el = document.getElementById(`stage-${id}`);
   if (!el) return;
   
-  el.className = `stage ${status}`;
+  const badge = el.querySelector('.badge');
+  if (badge) {
+    if (status === 'active') {
+        badge.className = 'badge badge-warning';
+        badge.textContent = 'RUN';
+    } else if (status === 'done') {
+        badge.className = 'badge badge-success';
+        badge.textContent = 'DONE';
+    } else if (status === 'error') {
+        badge.className = 'badge badge-error';
+        badge.textContent = 'FAIL';
+    }
+  }
+
   if (text) {
     const statusText = document.getElementById('mission-status-text');
     if (statusText) statusText.textContent = text;
@@ -821,9 +839,17 @@ function failMission(error) {
   const statusText = document.getElementById('mission-status-text');
   if (statusText) statusText.textContent = `Error: ${error}`;
   
-  // Find the active stage and mark it as error
-  const active = document.querySelector('.stage.active');
-  if (active) active.className = 'stage error';
+  const stages = ['init', 'cloud', 'upload', 'verify'];
+  stages.forEach(s => {
+    const el = document.getElementById(`stage-${s}`);
+    if (el && !el.querySelector('.badge-success')) {
+        updateMissionStage(s, 'error');
+    }
+  });
+
+  setTimeout(() => {
+    hide('mission-control-overlay');
+  }, 5000);
 }
 
 let missionTimerInterval = null;
@@ -1023,20 +1049,18 @@ function renderHistory() {
     }
 
     return `
-      <div class="history-item ${status === 'error' ? 'history-error' : ''}" id="hist-${item.id}">
-        <img class="history-thumb" src="${escHtml(thumbUrl)}" alt="thumb" onerror="this.onerror=null; this.src='${fallback}';" />
-        <div class="history-info">
+      <div class="list-item">
+        <img class="item-thumb" src="${escHtml(thumbUrl)}" onerror="this.onerror=null; this.src='${fallback}';" />
+        <div class="item-content">
           <div class="flex-between">
-            <div class="history-title">${escHtml(title)}</div>
-            <span class="status-badge ${status === 'error' ? 'status-offline' : 'status-online'}">${status === 'error' ? 'Failed' : 'Posted'}</span>
+            <div class="item-title">${escHtml(title)}</div>
+            <span class="badge ${status === 'error' ? 'badge-error' : 'badge-success'}">${status === 'error' ? 'Failed' : 'Posted'}</span>
           </div>
-          <div class="history-meta">@${escHtml(username)} | ${date}</div>
-          ${item.error ? `<div class="history-error-msg">${escHtml(String(item.error)).substring(0, 120)}</div>` : ''}
+          <div class="item-meta">@${escHtml(username)} • ${date}</div>
         </div>
-        <div class="history-actions">
-          ${igUrl ? `<a href="${escHtml(igUrl)}" target="_blank" rel="noopener" class="history-link-btn" title="Open Instagram">IG</a>` : ''}
-          <a href="${escHtml(pinUrl)}" target="_blank" rel="noopener" class="history-link-btn" title="Open Pin">PIN</a>
-          <button class="history-del-btn" onclick="deleteHistoryItem('${item.id}')" title="Remove">X</button>
+        <div style="display: flex; gap: 8px;">
+          <a href="${escHtml(pinUrl)}" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 6px 10px; font-size:11px;">Pin</a>
+          <button class="btn btn-secondary" onclick="deleteHistoryItem('${item.id}')" style="padding: 6px 10px; font-size:11px;">&times;</button>
         </div>
       </div>`;
   }).join('');
@@ -1110,25 +1134,22 @@ function renderEngagements() {
     const actionColor = item.action.includes('Liked') ? 'var(--accent)' : 'var(--accent-2)';
     
     return `
-      <div class="history-item">
-        <div class="history-info">
+      <div class="list-item">
+        <div class="item-content">
           <div class="flex-between">
-            <div class="history-title">
-              <span class="tab-icon">${actionEmoji}</span>
-              ${escHtml(item.action || 'Engagement')}
+            <div class="item-title">
+                ${actionEmoji} ${escHtml(item.action || 'Engagement')}
             </div>
-            <a href="${escHtml(item.url || '#')}" target="_blank" rel="noopener" class="btn-ghost">View Pin ↗</a>
+            <span class="badge badge-success">SYNCED</span>
           </div>
-          <div class="history-meta">${date}</div>
+          <div class="item-meta">${date}</div>
           ${item.comment ? `
-            <div class="ai-box mt-10" style="font-style: italic; border-left: 3px solid ${actionColor}">
+            <div class="item-meta" style="margin-top:8px; padding:8px; background:rgba(255,255,255,0.03); border-radius:4px; font-style: italic;">
               "${escHtml(item.comment)}"
             </div>
           ` : ''}
-          <div class="history-meta mt-10" style="opacity:0.5">
-            Source: Cloud Bot (GitHub Actions)
-          </div>
         </div>
+        <a href="${escHtml(item.url || '#')}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:11px;">View</a>
       </div>`;
   }).join('');
 }
@@ -1183,14 +1204,13 @@ function renderQueueMini() {
     const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
 
     return `
-      <div class="mini-queue-item ${isActive ? 'active' : ''}">
-        <img src="${escHtml(thumbUrl)}" class="mini-thumb" onerror="this.onerror=null; this.src='${fallback}';" />
-        <div class="mini-info">
-          <div class="flex-between">
-            <span class="mini-title">${escHtml(item.title)}</span>
-            <span class="status-badge ${isActive ? 'status-online' : 'status-pending'}">${isActive ? 'Active' : 'Queued'}</span>
-          </div>
+      <div class="list-item" style="border: none;">
+        <img src="${escHtml(thumbUrl)}" class="item-thumb" style="width:32px; height:32px; border-radius:4px;" />
+        <div class="item-content">
+          <div class="item-title" style="font-size:12px;">${escHtml(item.title)}</div>
+          <div class="item-meta" style="font-size:10px;">${isActive ? 'Active Mission' : 'Scheduled'}</div>
         </div>
+        <span class="badge ${isActive ? 'badge-success' : 'badge-warning'}" style="font-size:8px;">${isActive ? 'LIVE' : 'WAIT'}</span>
       </div>`;
   }).join('');
 }
@@ -1234,19 +1254,19 @@ function renderQueue() {
     }
 
     return `
-      <div class="history-item ${isActive ? 'mission-active' : ''}">
-        <img class="history-thumb" src="${escHtml(thumbUrl)}" alt="thumb" onerror="this.onerror=null; this.src='${fallback}';" />
-        <div class="history-info">
+      <div class="list-item">
+        <img class="item-thumb" src="${escHtml(thumbUrl)}" />
+        <div class="item-content">
           <div class="flex-between">
-            <div class="history-title">${escHtml(item.title || 'Untitled')}</div>
-            <span class="status-badge ${badgeClass}">${statusLabel}</span>
+            <div class="item-title">${escHtml(item.title || 'Untitled')}</div>
+            <span class="badge ${badgeClass}">${statusLabel}</span>
           </div>
-          <div class="history-meta">
+          <div class="item-meta">
             ${item.status === 'pending' 
-              ? `<span style="color:var(--accent)">🚀 Signal sent to GitHub... Bot arriving in <span class="countdown-timer">20</span>s</span>` 
-              : `Added: ${date}`}
+              ? `🚀 Pre-heating bot... Starts in <span class="countdown-timer">20</span>s` 
+              : `Added to mission list on ${date}`}
           </div>
-          ${item.error ? `<div class="ai-box mt-10" style="color:var(--error); border-color:var(--error)">${escHtml(String(item.error)).substring(0, 120)}</div>` : ''}
+          ${item.error ? `<div class="item-meta" style="color:var(--error); margin-top:8px;">${escHtml(String(item.error)).substring(0, 100)}</div>` : ''}
         </div>
       </div>`;
   }).join('');
