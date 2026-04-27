@@ -152,14 +152,14 @@ router.post('/post', async (req, res) => {
           isInstant: true // Flag for the automation to prioritize this
         }], true); // true = prepend to queue
         
-        // 2. Wake up the GitHub Action immediately
-        githubService.triggerAutomation().catch(() => {});
+        // 2. Wake up the GitHub Action immediately using the new INSTANT pipeline
+        githubService.triggerInstantMission().catch(() => {});
 
         return res.json({
           success: true,
           queued: true,
           missionId,
-          message: 'Instant Cloud Mission launched! Waking up the browser bot...',
+          message: 'Instant Cloud Mission launched! Bot will finish in seconds...',
         });
       }
     }
