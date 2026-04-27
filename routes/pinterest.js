@@ -94,10 +94,34 @@ router.post('/post', async (req, res) => {
     const posting = resolvePostingMode();
     let result;
     
-    // DECISION: In serverless (Vercel), we now ALWAYS prefer the Cloud Bot (GitHub) for 'Post Now'
-    // This ensures we use the human-mimicking Browser Bot which is safer.
-    if (IS_SERVERLESS || posting.useBrowserBot) {
-      console.log('[Post Mission] Routing to Cloud Bot...');
+    // DECISION: API timeout & video_url bugs are fixed! We now prefer Native API for 'Post Now'
+    // This allows manual direct posts to process instantly (10-15s) instead of waiting for GitHub Actions.
+    const hasApiToken = !!(await pinterestService.getStatus()).connected;
+    
+    if (hasApiToken && !posting.useBrowserBot) {
+      console.log('[Post Mission] Attempting Ultra-Fast NATIVE API...');
+      try {
+        const apiResult = await pinterestService.createPin({
+          title: pinData.title,
+          description: pinData.description,
+          altText: pinData.alt_text || '',
+          mediaUrl,
+          link: cleanLink,
+        });
+        
+        result = { success: true, pin: apiResult };
+        console.log('[Post Mission] NATIVE API success!');
+        
+        // We will jump straight to the history logging below
+      } catch (apiErr) {
+        console.warn('[Post Mission] API failed, falling back to Cloud Bot:', apiErr.message);
+        // Fall through to Cloud Bot logic if API fails
+      }
+    }
+    
+    // Cloud Bot Fallback (If API is disabled or failed)
+    if (!result) {
+      console.log('[Post Mission] Routing to Cloud Bot (GitHub Actions)...');
       const missionId = `mission_${Date.now()}`;
       
       // 1. Add to the FRONT of the queue for immediate processing
@@ -120,25 +144,6 @@ router.post('/post', async (req, res) => {
         queued: true,
         missionId,
         message: 'Instant Cloud Mission launched! Waking up the browser bot...',
-      });
-    } 
-    
-    // If running locally, we can still use the local browser bot or API
-    const hasApiToken = !!(await pinterestService.getStatus()).connected;
-    if (hasApiToken) {
-      const apiResult = await pinterestService.createPin({
-        title: pinData.title,
-        description: pinData.description,
-        altText: pinData.alt_text || '',
-        mediaUrl,
-        link: cleanLink,
-      });
-      result = { success: true, pin: apiResult };
-    } else {
-      // Emergency fallback if everything fails
-      return res.status(400).json({ 
-        success: false, 
-        error: 'No posting method available. Link a session or connect API.' 
       });
     }
 
