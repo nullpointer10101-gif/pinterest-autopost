@@ -1006,7 +1006,7 @@ function renderHistory() {
     if (!username || username === 'unknown' || username === 'creator') {
         username = extractUsername(item.url || '') || 'Instagram Creator';
     }
-    const thumb = item.reelData?.thumbnailUrl || item.thumbnailUrl || '';
+    const thumb = item.reelData?.thumbnailUrl || item.thumbnailUrl || item.mediaUrl || '';
     const pinUrl = item.pinterestPin?.url || '#';
     const status = item.status || 'success';
     const igUrl = item.url || '';
@@ -1024,7 +1024,7 @@ function renderHistory() {
 
     return `
       <div class="history-item ${status === 'error' ? 'history-error' : ''}" id="hist-${item.id}">
-        <img class="history-thumb" src="${escHtml(thumbUrl)}" alt="thumb" onerror="this.src='${fallback}'" />
+        <img class="history-thumb" src="${escHtml(thumbUrl)}" alt="thumb" onerror="this.onerror=null; this.src='${fallback}';" />
         <div class="history-info">
           <div class="history-title">${escHtml(title)}</div>
           <div class="history-meta">@${escHtml(username)} | ${date}</div>
@@ -1182,7 +1182,7 @@ function renderQueueMini() {
 
     return `
       <div style="display:flex; align-items:center; gap:12px; padding:12px; background:rgba(255,255,255,0.02); border-radius:8px; border: 1px solid ${isActive ? 'var(--accent)' : 'transparent'}">
-        <img src="${escHtml(thumbUrl)}" onerror="this.src='${fallback}'" style="width:40px; height:40px; border-radius:4px; object-fit:cover; flex-shrink:0;" />
+        <img src="${escHtml(thumbUrl)}" onerror="this.onerror=null; this.src='${fallback}';" style="width:40px; height:40px; border-radius:4px; object-fit:cover; flex-shrink:0;" />
         <div style="flex:1; min-width:0;">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
             <span style="font-size:13px; font-weight:500; color: ${isActive ? 'var(--text-1)' : 'var(--text-2)'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(item.title)}</span>
@@ -1228,7 +1228,7 @@ function renderQueue() {
 
     return `
       <div class="history-item ${isActive ? 'mission-active' : ''}">
-        <img class="history-thumb" src="${escHtml(thumbUrl)}" alt="thumb" onerror="this.src='${fallback}'" />
+        <img class="history-thumb" src="${escHtml(thumbUrl)}" alt="thumb" onerror="this.onerror=null; this.src='${fallback}';" />
         <div class="history-info">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div class="history-title" style="color:var(--text-1)">${escHtml(item.title || 'Untitled')}</div>
