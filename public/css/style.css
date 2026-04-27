@@ -39,9 +39,9 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 24px !important;
+    padding: 14px 28px !important;
     margin-bottom: 40px;
-    border-radius: 100px !important;
+    border-radius: 16px !important;
     position: fixed;
     top: 20px;
     left: 50%;
@@ -49,6 +49,9 @@ body {
     width: calc(100% - 40px);
     max-width: 1200px;
     z-index: 1000;
+    background: rgba(15, 15, 18, 0.9); /* High contrast backdrop */
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .nav-left { display: flex; align-items: center; gap: 16px; }
@@ -86,12 +89,15 @@ body {
 }
 
 .logo-text {
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 800;
     background: var(--grad);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .stats-bar {
