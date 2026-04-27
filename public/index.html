@@ -3,186 +3,184 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pinterest Command | Clean</title>
+    <title>Pinterest Hub | Premium</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
 <body>
 
-    <!-- ── SIDEBAR ── -->
-    <aside class="sidebar">
-        <div class="logo">P.COMMAND</div>
-        <nav class="nav-group">
-            <a href="#" class="nav-item active" id="nav-dashboard" onclick="switchTab('dashboard')">Dashboard</a>
-            <a href="#" class="nav-item" id="nav-queue" onclick="switchTab('queue')">Mission Queue</a>
-            <a href="#" class="nav-item" id="nav-lab" onclick="switchTab('lab')">Booster Lab</a>
-            <a href="#" class="nav-item" id="nav-history" onclick="switchTab('history')">Activity History</a>
-            <a href="#" class="nav-item" id="nav-settings" onclick="switchTab('settings')">Settings</a>
-        </nav>
-        <div style="padding: 20px 30px;">
-            <div id="connection-badge" class="badge badge-success" style="width: 100%; text-align: center;">Bot Online</div>
-        </div>
-    </aside>
-
-    <!-- ── MAIN ── -->
-    <main class="main">
-        <header class="header">
-            <div class="page-title" id="page-title">Dashboard Overview</div>
-            <div style="font-size: 13px; color: var(--text-sub);" id="live-time"></div>
+    <div class="container">
+        <header>
+            <div class="logo-text">Pinterest Command</div>
+            <div id="connection-status" class="badge badge-success">Cloud Bot Online</div>
         </header>
 
-        <div class="content">
-            
-            <!-- DASHBOARD -->
-            <section id="panel-dashboard" class="panel">
-                <div class="grid-2" style="margin-bottom: 30px;">
-                    <div class="card" style="padding: 20px; text-align: center; margin-bottom: 0;">
-                        <div class="section-title" style="margin-bottom: 10px;">Published</div>
-                        <div style="font-size: 28px; font-weight: 700;" id="stat-total-posts">0</div>
-                    </div>
-                    <div class="card" style="padding: 20px; text-align: center; margin-bottom: 0;">
-                        <div class="section-title" style="margin-bottom: 10px;">Queue</div>
-                        <div style="font-size: 28px; font-weight: 700;" id="stat-queue-pending">0</div>
-                    </div>
-                </div>
+        <section class="stats-bar">
+            <div class="glass-card">
+                <div class="stat-label">Total Published</div>
+                <div class="stat-value" id="stat-total-posts">0</div>
+            </div>
+            <div class="glass-card">
+                <div class="stat-label">Active Queue</div>
+                <div class="stat-value" id="stat-queue-pending">0</div>
+            </div>
+            <div class="glass-card">
+                <div class="stat-label">Success Rate</div>
+                <div class="stat-value" id="stat-success-rate">0%</div>
+            </div>
+        </section>
 
-                <div class="card">
-                    <h2 class="section-title">New Mission</h2>
+        <nav class="tabs">
+            <button class="tab active" id="tab-dashboard" onclick="switchTab('dashboard')">Mission Control</button>
+            <button class="tab" id="tab-queue" onclick="switchTab('queue')">Queue</button>
+            <button class="tab" id="tab-lab" onclick="switchTab('lab')">Booster Lab</button>
+            <button class="tab" id="tab-history" onclick="switchTab('history')">History</button>
+            <button class="tab" id="tab-settings" onclick="switchTab('settings')">Settings</button>
+        </nav>
+
+        <!-- DASHBOARD -->
+        <div id="panel-dashboard" class="panel">
+            <div class="grid-main">
+                <div class="glass-card">
+                    <h3 style="margin-bottom: 24px;">Deploy New Mission</h3>
                     
-                    <div style="margin-bottom: 24px;">
-                        <p style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Extract from Instagram Reel</p>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="text" id="reel-url" class="input-box" placeholder="URL here...">
+                    <div style="margin-bottom: 20px;">
+                        <label class="stat-label">Instagram Link</label>
+                        <div style="display: flex; gap: 12px;">
+                            <input type="text" id="reel-url" placeholder="Paste Reel URL...">
                             <button class="btn btn-primary" onclick="handleFetch()">Extract</button>
                         </div>
                     </div>
 
-                    <div style="margin-bottom: 30px; padding: 16px; background: #f8fafc; border-radius: 8px;">
-                        <p style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Manual Media URL (Alternative)</p>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="text" id="manual-media-url" class="input-box" placeholder="Direct file URL...">
-                            <button class="btn btn-outline" onclick="handleManualMedia()">Load</button>
+                    <div style="margin-bottom: 24px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid var(--border);">
+                        <label class="stat-label">Manual Media Link</label>
+                        <div style="display: flex; gap: 12px; margin-top: 8px;">
+                            <input type="text" id="manual-media-url" placeholder="Direct Image/Video URL...">
+                            <button class="btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="handleManualMedia()">Load</button>
                         </div>
                     </div>
 
                     <div id="preview-section" class="hidden">
-                        <div style="display: grid; grid-template-columns: 200px 1fr; gap: 30px; padding-top: 20px; border-top: 1px solid var(--border);">
-                            <img id="preview-img" style="width: 100%; border-radius: 12px; box-shadow: var(--shadow);">
-                            <div>
-                                <div style="margin-bottom: 15px;">
-                                    <label style="font-size: 12px; font-weight: 700; color: var(--text-sub);">MISSION TITLE</label>
-                                    <input type="text" id="field-title" class="input-box">
+                        <div style="display: flex; gap: 24px; margin-top: 24px; animation: slideUp 0.3s ease;">
+                            <img id="preview-img" style="width: 180px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                            <div style="flex: 1;">
+                                <div style="margin-bottom: 12px;">
+                                    <label class="stat-label">Pin Title</label>
+                                    <input type="text" id="field-title">
                                 </div>
                                 <div style="margin-bottom: 20px;">
-                                    <label style="font-size: 12px; font-weight: 700; color: var(--text-sub);">DESCRIPTION</label>
-                                    <textarea id="field-desc" class="input-box" rows="4"></textarea>
+                                    <label class="stat-label">Description</label>
+                                    <textarea id="field-desc" rows="5"></textarea>
                                 </div>
                                 <div style="display: flex; gap: 12px;">
-                                    <button class="btn btn-primary" style="flex: 1;" onclick="handlePost()">Deploy Now</button>
-                                    <button class="btn btn-outline" style="flex: 1;" onclick="handleQueue()">Queue</button>
+                                    <button class="btn btn-primary" style="flex: 1;" onclick="handlePost()">Post Now</button>
+                                    <button class="btn" style="flex: 1; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="handleQueue()">Queue</button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- QUEUE -->
-            <section id="panel-queue" class="panel hidden">
-                <div class="card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                        <h2 class="section-title" style="margin:0;">Mission Queue</h2>
-                        <button class="btn btn-outline" style="padding: 8px 16px; font-size: 12px;" onclick="clearQueue()">Clear All</button>
-                    </div>
-                    <div id="queue-list"></div>
-                    <div style="margin-top: 30px;">
-                        <button class="btn btn-primary" style="width: 100%;" onclick="processQueueNow()">Trigger Cloud Bot</button>
-                    </div>
+                <div class="glass-card">
+                    <h3 style="margin-bottom: 20px;">Recent Activity</h3>
+                    <div id="queue-list-mini"></div>
+                    <button class="btn" style="width: 100%; margin-top: 20px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="processQueueNow()">Trigger Bot</button>
                 </div>
-            </section>
-
-            <!-- LAB -->
-            <section id="panel-lab" class="panel hidden">
-                <div class="card" style="max-width: 600px;">
-                    <h2 class="section-title">Booster Lab</h2>
-                    <p style="font-size: 14px; color: var(--text-sub); margin-bottom: 30px;">Grow your Pinterest authority with simulated engagement.</p>
-                    
-                    <div style="margin-bottom: 20px;">
-                        <label style="font-size: 12px; font-weight: 700; color: var(--text-sub);">TARGET NICHE</label>
-                        <select id="engage-niche" class="input-box">
-                            <option value="all">General Growth</option>
-                            <option value="fashion">Fashion & Style</option>
-                            <option value="home">Home Decor</option>
-                        </select>
-                    </div>
-                    
-                    <div style="margin-bottom: 30px;">
-                        <label style="font-size: 12px; font-weight: 700; color: var(--text-sub);">INTENSITY</label>
-                        <input type="range" id="engage-count" min="1" max="10" value="3" style="width: 100%; accent-color: var(--primary);">
-                    </div>
-
-                    <button id="engage-btn" class="btn btn-primary" style="width: 100%;" onclick="startEngager()">Launch Mission</button>
-
-                    <div style="margin-top: 40px; border-top: 1px solid var(--border); padding-top: 30px;">
-                        <h3 class="section-title">Live Lab Feed</h3>
-                        <div id="engagement-logs"></div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- HISTORY -->
-            <section id="panel-history" class="panel hidden">
-                <div class="card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                        <h2 class="section-title" style="margin:0;">Activity History</h2>
-                        <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-outline" style="padding: 8px 16px; font-size: 12px;" onclick="exportHistoryJson()">Export</button>
-                            <button class="btn btn-outline" style="padding: 8px 16px; font-size: 12px; color: var(--primary);" onclick="clearHistory()">Reset</button>
-                        </div>
-                    </div>
-                    <div id="history-list"></div>
-                </div>
-            </section>
-
-            <!-- SETTINGS -->
-            <section id="panel-settings" class="panel hidden">
-                <div class="grid-2">
-                    <div class="card">
-                        <h2 class="section-title">Pinterest Access</h2>
-                        <div style="display: flex; flex-direction: column; gap: 20px;">
-                            <a href="/api/pinterest/auth" class="btn btn-primary" style="text-align: center; text-decoration: none;">OAuth Connection</a>
-                            <div>
-                                <label style="font-size: 12px; font-weight: 700; color: var(--text-sub);">SESSION COOKIE</label>
-                                <div style="display: flex; gap: 10px; margin-top: 5px;">
-                                    <input type="password" id="session-cookie" class="input-box">
-                                    <button class="btn btn-outline" onclick="linkSessionCookie()">Update</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <h2 class="section-title">Diagnostics</h2>
-                        <div id="diagnostics-content">
-                            <div class="list-item">
-                                <div class="item-body"><div class="item-head">Environment</div></div>
-                                <div id="diag-hosting" class="badge">---</div>
-                            </div>
-                            <div class="list-item">
-                                <div class="item-body"><div class="item-head">Automation Keys</div></div>
-                                <div id="diag-github" class="badge">---</div>
-                            </div>
-                            <div class="list-item">
-                                <div class="item-body"><div class="item-head">Pinterest Sync</div></div>
-                                <div id="diag-session" class="badge">---</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
+            </div>
         </div>
-    </main>
+
+        <!-- QUEUE -->
+        <section id="panel-queue" class="panel hidden">
+            <div class="glass-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h3>Mission Queue</h3>
+                    <button class="btn" style="padding: 6px 12px; font-size: 11px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);" onclick="clearQueue()">Clear All</button>
+                </div>
+                <div id="queue-list"></div>
+            </div>
+        </section>
+
+        <!-- LAB -->
+        <section id="panel-lab" class="panel hidden">
+            <div class="glass-card" style="max-width: 600px; margin: 0 auto;">
+                <h3>Booster Lab</h3>
+                <p style="color: var(--text-2); margin-bottom: 30px; font-size: 14px;">Boost your Pinterest authority with smart engagement.</p>
+                
+                <div style="margin-bottom: 20px;">
+                    <label class="stat-label">Target Niche</label>
+                    <select id="engage-niche">
+                        <option value="all">General Growth</option>
+                        <option value="fashion">Fashion & Style</option>
+                        <option value="home">Home Decor</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 30px;">
+                    <label class="stat-label">Intensity</label>
+                    <input type="range" id="engage-count" min="1" max="10" value="3" style="width: 100%; accent-color: var(--accent);">
+                </div>
+
+                <button id="engage-btn" class="btn btn-primary" style="width: 100%;" onclick="startEngager()">Launch Booster</button>
+
+                <div style="margin-top: 40px;">
+                    <h4 class="stat-label">Live Mission Logs</h4>
+                    <div id="engagement-logs"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- HISTORY -->
+        <section id="panel-history" class="panel hidden">
+            <div class="glass-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h3>Activity History</h3>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" style="padding: 8px 16px; font-size: 11px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="exportHistoryJson()">Export JSON</button>
+                        <button class="btn" style="padding: 8px 16px; font-size: 11px; color: var(--accent);" onclick="clearHistory()">Reset</button>
+                    </div>
+                </div>
+                <div id="history-list"></div>
+            </div>
+        </section>
+
+        <!-- SETTINGS -->
+        <section id="panel-settings" class="panel hidden">
+            <div class="grid-main">
+                <div class="glass-card">
+                    <h3 style="margin-bottom: 24px;">Pinterest Connection</h3>
+                    <div style="display: flex; flex-direction: column; gap: 20px;">
+                        <a href="/api/pinterest/auth" class="btn btn-primary" style="text-align: center; text-decoration: none;">Link Account (OAuth)</a>
+                        <div>
+                            <label class="stat-label">Manual Session Cookie</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="password" id="session-cookie">
+                                <button class="btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="linkSessionCookie()">Link</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card">
+                    <h3 style="margin-bottom: 20px;">Diagnostics</h3>
+                    <div id="diagnostics-content">
+                        <div class="list-item">
+                            <div style="flex:1; font-size: 14px;">Hosting</div>
+                            <div id="diag-hosting" class="badge">Checking...</div>
+                        </div>
+                        <div class="list-item">
+                            <div style="flex:1; font-size: 14px;">Automation</div>
+                            <div id="diag-github" class="badge">Checking...</div>
+                        </div>
+                        <div class="list-item">
+                            <div style="flex:1; font-size: 14px;">Session</div>
+                            <div id="diag-session" class="badge">Checking...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
 
     <div id="toast-container"></div>
 
