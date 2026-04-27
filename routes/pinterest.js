@@ -119,32 +119,49 @@ router.post('/post', async (req, res) => {
       }
     }
     
-    // Cloud Bot Fallback (If API is disabled or failed)
+    // Fallback: If API fails/missing, use Browser Bot
     if (!result) {
-      console.log('[Post Mission] Routing to Cloud Bot (GitHub Actions)...');
-      const missionId = `mission_${Date.now()}`;
-      
-      // 1. Add to the FRONT of the queue for immediate processing
-      await queueService.addToQueue([{
-        id: missionId,
-        title: pinData.title,
-        description: pinData.description,
-        altText: pinData.alt_text || '',
-        mediaUrl,
-        sourceUrl: cleanLink,
-        reelMeta,
-        isInstant: true // Flag for the automation to prioritize this
-      }], true); // true = prepend to queue
-      
-      // 2. Wake up the GitHub Action immediately
-      githubService.triggerAutomation().catch(() => {});
+      if (!IS_SERVERLESS) {
+        console.log('[Post Mission] Running LOCAL Browser Bot for INSTANT post...');
+        const puppeteerService = require('../services/puppeteerService');
+        try {
+          const pinResult = await puppeteerService.createPinWithBot({
+            title: pinData.title,
+            description: pinData.description,
+            alt_text: pinData.alt_text || '',
+            media_source: { url: mediaUrl },
+            link: cleanLink,
+          });
+          result = { success: true, pin: pinResult.pin };
+        } catch (botErr) {
+          throw new Error('Local Browser Bot failed: ' + botErr.message);
+        }
+      } else {
+        console.log('[Post Mission] Routing to Cloud Bot (GitHub Actions)...');
+        const missionId = `mission_${Date.now()}`;
+        
+        // 1. Add to the FRONT of the queue for immediate processing
+        await queueService.addToQueue([{
+          id: missionId,
+          title: pinData.title,
+          description: pinData.description,
+          altText: pinData.alt_text || '',
+          mediaUrl,
+          sourceUrl: cleanLink,
+          reelMeta,
+          isInstant: true // Flag for the automation to prioritize this
+        }], true); // true = prepend to queue
+        
+        // 2. Wake up the GitHub Action immediately
+        githubService.triggerAutomation().catch(() => {});
 
-      return res.json({
-        success: true,
-        queued: true,
-        missionId,
-        message: 'Instant Cloud Mission launched! Waking up the browser bot...',
-      });
+        return res.json({
+          success: true,
+          queued: true,
+          missionId,
+          message: 'Instant Cloud Mission launched! Waking up the browser bot...',
+        });
+      }
     }
 
     await historyService.add({
