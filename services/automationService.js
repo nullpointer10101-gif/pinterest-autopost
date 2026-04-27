@@ -48,15 +48,15 @@ async function runHourlyAutomation(options = {}) {
   const engagementHardCap = Math.max(1, toInt(process.env.AUTOMATION_ENGAGEMENTS_HARD_CAP, 2));
   const engagementCount = Math.min(requestedEngagementCount, engagementHardCap);
   const timeZone = options.timeZone || process.env.AUTOMATION_TIMEZONE || 'Asia/Calcutta';
-  const engagementStartJitterMinMs = Math.max(0, toInt(process.env.AUTOMATION_ENGAGEMENT_START_JITTER_MIN_MS, 60000));
+  const engagementStartJitterMinMs = Math.max(0, toInt(process.env.AUTOMATION_ENGAGEMENT_START_JITTER_MIN_MS, 30000));
   const engagementStartJitterMaxMs = Math.max(
     engagementStartJitterMinMs,
-    toInt(process.env.AUTOMATION_ENGAGEMENT_START_JITTER_MAX_MS, 8 * 60 * 1000)
+    toInt(process.env.AUTOMATION_ENGAGEMENT_START_JITTER_MAX_MS, 2 * 60 * 1000)
   );
-  const engagementMinGapMs = Math.max(10000, toInt(process.env.AUTOMATION_ENGAGEMENT_MIN_GAP_MS, 8 * 60 * 1000));
+  const engagementMinGapMs = Math.max(10000, toInt(process.env.AUTOMATION_ENGAGEMENT_MIN_GAP_MS, 3 * 60 * 1000));
   const engagementMaxGapMs = Math.max(
     engagementMinGapMs,
-    toInt(process.env.AUTOMATION_ENGAGEMENT_MAX_GAP_MS, 22 * 60 * 1000)
+    toInt(process.env.AUTOMATION_ENGAGEMENT_MAX_GAP_MS, 8 * 60 * 1000)
   );
   const commentChance = Math.min(1, Math.max(0.25, toFloat(process.env.AUTOMATION_COMMENT_PROBABILITY, 0.85)));
 
@@ -125,41 +125,30 @@ async function runHourlyAutomation(options = {}) {
   if (engagementCount > 0) {
     if (puppeteerService && typeof puppeteerService.runAutoEngagerSafe === 'function') {
       try {
-        let executedTotal = 0;
         const startDelayMs = randomInt(engagementStartJitterMinMs, engagementStartJitterMaxMs);
         if (startDelayMs > 0) {
-          console.log(`[Automation] Initial jitter: Waiting ${Math.round(startDelayMs / 1000)}s before first engagement...`);
+          console.log(`[Automation] Initial jitter: Waiting ${Math.round(startDelayMs / 1000)}s before starting engagement...`);
           await sleep(startDelayMs);
         }
 
-        for (let i = 0; i < engagementCount; i++) {
-          const current = i + 1;
-          console.log(`[Automation] Launching browser for engagement ${current}/${engagementCount}...`);
-          
-          const result = await puppeteerService.runAutoEngagerSafe({
-            count: 1, // Always engage 1 per browser session as requested
-            minGapMs: 1000, // No internal gap needed as we handle it here
-            maxGapMs: 2000,
-            commentChance,
-          });
+        console.log(`[Automation] Launching browser for ${engagementCount} engagement(s)...`);
+        
+        const result = await puppeteerService.runAutoEngagerSafe({
+          count: engagementCount,
+          minGapMs: engagementMinGapMs,
+          maxGapMs: engagementMaxGapMs,
+          commentChance,
+        });
 
-          executedTotal += Math.max(0, toInt(result?.executed, 0));
-          console.log(`[Automation] Engagement ${current} complete. Browser shut down.`);
-
-          // If more engagements are left, wait a random time before the next session
-          if (i < engagementCount - 1) {
-            const gapMs = randomInt(engagementMinGapMs, engagementMaxGapMs);
-            console.log(`[Automation] Waiting ${Math.round(gapMs / 1000)}s before re-opening for next engagement...`);
-            await sleep(gapMs);
-          }
-        }
+        const executedTotal = Math.max(0, toInt(result?.executed, 0));
+        console.log(`[Automation] All engagements complete. Browser shut down.`);
 
         engagement = {
           requested: requestedEngagementCount,
           attempted: engagementCount,
           executed: executedTotal,
           success: true,
-          message: `Completed ${executedTotal} separate engagement sessions.`,
+          message: `Completed ${executedTotal} engagements in a single session.`,
           startDelayMs,
         };
       } catch (err) {

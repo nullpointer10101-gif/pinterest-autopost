@@ -1,14 +1,12 @@
-name: Unlimited Pinterest Automation (Public Mode)
+name: Instant Pinterest Engagement (Algorithm Booster)
 
 on:
-  schedule:
-    - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
-  automation-mission:
+  engagement-mission:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -27,36 +25,29 @@ jobs:
           path: ~/.cache/puppeteer
           key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies (Production only)
+        run: npm ci --omit=dev
 
       - name: Install Puppeteer Browser
         if: steps.cache-puppeteer.outputs.cache-hit != 'true'
         run: npx puppeteer browsers install chrome
 
-      - name: Run automation mission
+      - name: Run Instant Engagement
         run: node scripts/run-hourly-automation.js
         env:
           NODE_ENV: production
           AUTOMATION_TIMEZONE: ${{ secrets.AUTOMATION_TIMEZONE || 'Asia/Calcutta' }}
-          AUTOMATION_MAX_POSTS_PER_DAY: 100
-          AUTOMATION_MAX_POSTS_PER_RUN: 5
-          AUTOMATION_ENGAGEMENTS_PER_HOUR: 5
-          AUTOMATION_ENGAGEMENTS_HARD_CAP: 10
-          # Public repo = unlimited minutes: safe human-like delays, no cost concern
-          AUTOMATION_ENGAGEMENT_START_JITTER_MIN_MS: 60000
-          AUTOMATION_ENGAGEMENT_START_JITTER_MAX_MS: 180000
-          AUTOMATION_ENGAGEMENT_MIN_GAP_MS: 180000
-          AUTOMATION_ENGAGEMENT_MAX_GAP_MS: 480000
+          AUTOMATION_MAX_POSTS_PER_DAY: 0 # Skip posts
+          AUTOMATION_MAX_POSTS_PER_RUN: 0 # Skip posts
+          AUTOMATION_ENGAGEMENTS_PER_HOUR: 2 # Target for instant booster
+          AUTOMATION_ENGAGEMENT_START_JITTER_MIN_MS: 0 # No wait for manual trigger
+          AUTOMATION_ENGAGEMENT_START_JITTER_MAX_MS: 5000 # Max 5s wait
+          AUTOMATION_ENGAGEMENT_MIN_GAP_MS: 15000 # Fast gaps for manual booster
+          AUTOMATION_ENGAGEMENT_MAX_GAP_MS: 45000
           AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
           PINTEREST_POSTING_MODE: bot
           PINTEREST_SESSION_COOKIE: ${{ secrets.PINTEREST_SESSION_COOKIE }}
-          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
-          PINTEREST_REFRESH_TOKEN: ${{ secrets.PINTEREST_REFRESH_TOKEN }}
-          PINTEREST_APP_ID: ${{ secrets.PINTEREST_APP_ID }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_MODEL: ${{ secrets.AI_MODEL }}
-          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           APP_STATE_KEY: ${{ secrets.APP_STATE_KEY || 'pinterest_autopost_state_v1' }}

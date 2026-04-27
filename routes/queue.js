@@ -47,8 +47,20 @@ router.post('/retry-failed', async (req, res) => {
   }
 });
 
+const { IS_SERVERLESS } = require('./utils');
+
 router.post('/process', async (req, res) => {
   try {
+    if (IS_SERVERLESS) {
+      console.log('[Queue] Routing to Cloud Bot (GitHub Actions)...');
+      githubService.triggerAutomation().catch(() => {});
+      return res.json({ 
+        success: true, 
+        queued: true, 
+        message: 'Cloud Bot wake-up signal sent to GitHub. Processing will begin shortly.' 
+      });
+    }
+
     const processed = await queueService.processNextInQueue();
     if (!processed) {
       return res.json({ success: true, processed: null, message: 'No pending queue items.' });

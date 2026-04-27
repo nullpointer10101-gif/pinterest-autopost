@@ -76,6 +76,26 @@ async function remove(id) {
   await writeState(state);
 }
 
+async function updateById(id, patch) {
+  const state = await readState();
+  const idx = state.posts.findIndex(post => post.id === id);
+  if (idx === -1) return null;
+
+  const current = state.posts[idx];
+  const next = {
+    ...current,
+    ...patch,
+    reelData: {
+      ...(current.reelData || {}),
+      ...(patch?.reelData || {}),
+    },
+  };
+
+  state.posts[idx] = next;
+  await writeState(state);
+  return next;
+}
+
 async function updateLatest(data) {
   const state = await readState();
   if (!state.posts.length) return;
@@ -259,6 +279,7 @@ module.exports = {
   add,
   getAll,
   getById,
+  updateById,
   remove,
   updateLatest,
   clear,

@@ -251,7 +251,13 @@ async function createPinWithBot(pinData) {
     });
 
     console.log('[Bot] Logged in. Navigating to Pin Builder...');
-    await page.goto('https://www.pinterest.com/pin-creation-tool/', { waitUntil: 'networkidle2' });
+    await page.goto('https://www.pinterest.com/pin-creation-tool/', { waitUntil: 'networkidle2', timeout: 45000 });
+
+    // Check if we were redirected to login
+    const currentUrl = await page.url();
+    if (currentUrl.includes('/login/') || currentUrl.includes('/register/')) {
+      throw new Error('Pinterest session expired or invalid. Please update PINTEREST_SESSION_COOKIE.');
+    }
 
     // 3. Upload Video
     console.log('[Bot] Uploading video file...');
@@ -306,17 +312,17 @@ async function createPinWithBot(pinData) {
 
       // 5b. Select the first board in the list
       await page.evaluate(() => {
-        const boardItems = document.querySelectorAll('[role="listitem"], [data-test-id="board-row"], .board-row');
+        // Try various board selectors
+        const boardItems = document.querySelectorAll('[role="listitem"], [data-test-id="board-row"], .board-row, [data-test-id="board-section"] div[role="button"]');
         if (boardItems && boardItems.length > 0) {
-          boardItems[0].scrollIntoView();
-          boardItems[0].click();
-          return true;
-        }
-        // Fallback: Click the first div that looks like a board
-        const firstBoard = document.querySelector('[data-test-id="board-section"] div[role="button"]');
-        if (firstBoard) {
-            firstBoard.click();
-            return true;
+          // Find the first visible/clickable one
+          for (const item of boardItems) {
+            if (item.offsetParent !== null) {
+              item.scrollIntoView();
+              item.click();
+              return true;
+            }
+          }
         }
         return false;
       });
@@ -338,8 +344,15 @@ async function createPinWithBot(pinData) {
     const publishResult = await page.evaluate(() => {
       window.scrollTo(0, 0);
       
-      // Find all buttons
-      const buttons = Array.from(document.querySelectorAll('button'));
+      // 1. Try specific data-test-id first
+      const saveBtn = document.querySelector('[data-test-id="board-dropdown-save-button"]');
+      if (saveBtn && saveBtn.offsetParent !== null) {
+        saveBtn.click();
+        return 'clicked_data_test_id_save';
+      }
+
+      // 2. Try general button search
+      const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
       for (const btn of buttons) {
         const text = (btn.innerText || '').toLowerCase().trim();
         const isVisible = btn.offsetParent !== null;
@@ -566,7 +579,10 @@ async function runAutoEngagerSafe(options = {}) {
           'button[data-test-id="pin-rep-reaction-button"]',
           '.heart-icon-container',
           '[aria-label="Love"]',
-          '[aria-label="Like"]'
+          '[aria-label="Like"]',
+          '[aria-label="Heart"]',
+          '[aria-label="Add reaction"]',
+          '.reaction-button'
         ];
         
         let reactionBtn = null;
@@ -578,11 +594,13 @@ async function runAutoEngagerSafe(options = {}) {
         if (reactionBtn) {
           await reactionBtn.click();
           actionTaken = 'Liked';
-          console.log('[Bot] Liked pin');
+          console.log('[Bot] ✅ Liked pin successfully');
           await sleep(randomInt(1200, 2500));
+        } else {
+          console.log('[Bot] ⚠️ Reaction button not found, viewing only');
         }
       } catch (e) {
-        console.log('[Bot] Reaction failed:', e.message);
+        console.log('[Bot] ❌ Reaction failed:', e.message);
       }
 
       await page.evaluate(() => window.scrollBy(0, Math.floor(450 + Math.random() * 700)));

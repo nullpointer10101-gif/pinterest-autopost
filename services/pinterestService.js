@@ -139,7 +139,7 @@ async function createPin({ title, description, altText = '', hashtags = [], medi
     description: safeDescription,
     alt_text: safeAltText || undefined,
     media_source: {
-      source_type: 'video_url', // Fixed: reels are videos, not images
+      source_type: (mediaUrl || '').toLowerCase().includes('.mp4') ? 'video_url' : 'image_url',
       url: mediaUrl,
     },
     link: link || undefined,

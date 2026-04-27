@@ -644,13 +644,13 @@ function renderMediaPreview() {
   img.src = googleProxy;
   img.alt = 'Media preview';
   img.style.cssText = 'width:100%;border-radius:8px;';
-  img.onerror = () => { img.src = `/api/proxy?url=${btoa(mediaUrl)}`; };
+  img.onerror = () => { img.src = proxyUrl(mediaUrl); };
   container.appendChild(img);
   hide('mute-toggle');
 }
 
 function renderVideoPlayer(container, videoUrl) {
-  const proxied = `/api/proxy?url=${btoa(videoUrl)}`;
+  const proxied = proxyUrl(videoUrl);
   const video = document.createElement('video');
   video.id = 'preview-video';
   video.controls = true;
@@ -1011,7 +1011,7 @@ function renderHistory() {
     const status = item.status || 'success';
     const igUrl = item.url || '';
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
-    const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
+    const thumbUrl = item.id ? `/api/history/thumb/${encodeURIComponent(item.id)}` : (thumb ? proxyUrl(thumb) : fallback);
 
     let statusBadge = 'Posted';
     let tagClass = '';
@@ -1026,9 +1026,11 @@ function renderHistory() {
       <div class="history-item ${status === 'error' ? 'history-error' : ''}" id="hist-${item.id}">
         <img class="history-thumb" src="${escHtml(thumbUrl)}" alt="thumb" onerror="this.onerror=null; this.src='${fallback}';" />
         <div class="history-info">
-          <div class="history-title">${escHtml(title)}</div>
+          <div class="flex-between">
+            <div class="history-title">${escHtml(title)}</div>
+            <span class="status-badge ${status === 'error' ? 'status-offline' : 'status-online'}">${status === 'error' ? 'Failed' : 'Posted'}</span>
+          </div>
           <div class="history-meta">@${escHtml(username)} | ${date}</div>
-          <span class="history-tag ${tagClass}">${statusBadge}</span>
           ${item.error ? `<div class="history-error-msg">${escHtml(String(item.error)).substring(0, 120)}</div>` : ''}
         </div>
         <div class="history-actions">
@@ -1109,21 +1111,21 @@ function renderEngagements() {
     
     return `
       <div class="history-item">
-        <div class="history-info" style="margin-left:0; flex:1;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
-            <div class="history-title" style="color:var(--text-1); display:flex; align-items:center; gap:8px;">
-              <span style="font-size:18px;">${actionEmoji}</span>
-              <span style="font-weight:700;">${escHtml(item.action || 'Engagement')}</span>
+        <div class="history-info">
+          <div class="flex-between">
+            <div class="history-title">
+              <span class="tab-icon">${actionEmoji}</span>
+              ${escHtml(item.action || 'Engagement')}
             </div>
-            <a href="${escHtml(item.url || '#')}" target="_blank" rel="noopener" class="btn-ghost small" style="padding: 4px 10px; font-size:11px; flex-shrink:0;">View Pin ↗</a>
+            <a href="${escHtml(item.url || '#')}" target="_blank" rel="noopener" class="btn-ghost">View Pin ↗</a>
           </div>
-          <div class="history-meta" style="margin-top:6px; font-size:12px; color:var(--text-3);">${date}</div>
+          <div class="history-meta">${date}</div>
           ${item.comment ? `
-            <div style="margin-top:10px; padding:10px 14px; background:rgba(255,255,255,0.03); border-radius:8px; font-size:13px; color:var(--text-2); border-left: 3px solid ${actionColor}; font-style: italic;">
+            <div class="ai-box mt-10" style="font-style: italic; border-left: 3px solid ${actionColor}">
               "${escHtml(item.comment)}"
             </div>
           ` : ''}
-          <div style="margin-top:8px; font-size:11px; color:var(--text-3); opacity:0.7;">
+          <div class="history-meta mt-10" style="opacity:0.5">
             Source: Cloud Bot (GitHub Actions)
           </div>
         </div>
@@ -1181,14 +1183,13 @@ function renderQueueMini() {
     const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
 
     return `
-      <div style="display:flex; align-items:center; gap:12px; padding:12px; background:rgba(255,255,255,0.02); border-radius:8px; border: 1px solid ${isActive ? 'var(--accent)' : 'transparent'}">
-        <img src="${escHtml(thumbUrl)}" onerror="this.onerror=null; this.src='${fallback}';" style="width:40px; height:40px; border-radius:4px; object-fit:cover; flex-shrink:0;" />
-        <div style="flex:1; min-width:0;">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-            <span style="font-size:13px; font-weight:500; color: ${isActive ? 'var(--text-1)' : 'var(--text-2)'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(item.title)}</span>
-            <span class="tag ${isActive ? 'tag-processing' : 'tag-warning'}" style="font-size:9px; padding:1px 5px; flex-shrink:0;">${isActive ? 'Active' : 'Queued'}</span>
+      <div class="mini-queue-item ${isActive ? 'active' : ''}">
+        <img src="${escHtml(thumbUrl)}" class="mini-thumb" onerror="this.onerror=null; this.src='${fallback}';" />
+        <div class="mini-info">
+          <div class="flex-between">
+            <span class="mini-title">${escHtml(item.title)}</span>
+            <span class="status-badge ${isActive ? 'status-online' : 'status-pending'}">${isActive ? 'Active' : 'Queued'}</span>
           </div>
-          ${isActive ? '<div class="progress-loader" style="display:block; height:2px; margin-top:6px;"><div class="progress-bar-inner"></div></div>' : ''}
         </div>
       </div>`;
   }).join('');
@@ -1222,27 +1223,30 @@ function renderQueue() {
     const fallback = 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
     const thumbUrl = thumb ? proxyUrl(thumb) : fallback;
     
-    let statusClass = '';
-    if (item.status === 'failed') statusClass = 'tag-error';
-    if (isActive) statusClass = 'tag-processing';
+    let statusLabel = status;
+    let badgeClass = 'status-pending';
+    if (item.status === 'failed') {
+        badgeClass = 'status-error';
+        statusLabel = 'Failed';
+    } else if (isActive) {
+        badgeClass = 'status-online';
+        statusLabel = 'Active';
+    }
 
     return `
       <div class="history-item ${isActive ? 'mission-active' : ''}">
         <img class="history-thumb" src="${escHtml(thumbUrl)}" alt="thumb" onerror="this.onerror=null; this.src='${fallback}';" />
         <div class="history-info">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div class="history-title" style="color:var(--text-1)">${escHtml(item.title || 'Untitled')}</div>
-            <span class="tag ${statusClass}" style="font-size:10px; padding:2px 8px; border-radius:12px;">
-              ${item.status === 'pending' ? '<span class="pulse-dot"></span> Starting...' : status}
-            </span>
+          <div class="flex-between">
+            <div class="history-title">${escHtml(item.title || 'Untitled')}</div>
+            <span class="status-badge ${badgeClass}">${statusLabel}</span>
           </div>
-          <div class="history-meta" style="margin-top:4px;">
+          <div class="history-meta">
             ${item.status === 'pending' 
-              ? '<span style="color:var(--accent)">🚀 Signal sent to GitHub... Bot arriving in <span class="countdown-timer">20</span>s</span>' 
+              ? `<span style="color:var(--accent)">🚀 Signal sent to GitHub... Bot arriving in <span class="countdown-timer">20</span>s</span>` 
               : `Added: ${date}`}
           </div>
-          ${isActive ? '<div class="progress-loader"><div class="progress-bar-inner"></div></div>' : ''}
-          ${item.error ? `<div class="history-error-msg" style="margin-top:8px;">${escHtml(String(item.error)).substring(0, 120)}</div>` : ''}
+          ${item.error ? `<div class="ai-box mt-10" style="color:var(--error); border-color:var(--error)">${escHtml(String(item.error)).substring(0, 120)}</div>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -1284,7 +1288,7 @@ async function startEngager() {
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Failed to start engager');
     show('engage-status');
-    showToast(`Algorithm booster started for ${count} pins.`, 'success');
+    showToast(data.message || `Algorithm booster started for ${count} pins.`, 'success');
   } catch (err) {
     showToast(`Booster failed: ${err.message}`, 'error');
   } finally {
@@ -1388,11 +1392,16 @@ function formatTimeAgo(iso) {
 // Safe proxy URL helper — uses our own /api/proxy (same as video player)
 // Handles special characters in Instagram CDN URLs safely
 function proxyUrl(url) {
+  if (!url) return '';
   try {
-    return `/api/proxy?url=${btoa(url)}`;
+    const encoded = btoa(url);
+    return `/api/proxy?url=${encodeURIComponent(encoded)}`;
   } catch {
-    // btoa fails on non-Latin chars — encode first
-    return `/api/proxy?url=${btoa(encodeURIComponent(url))}`;
+    const asciiSafe = encodeURIComponent(url).replace(/%([0-9A-F]{2})/g, (_, hex) =>
+      String.fromCharCode(parseInt(hex, 16))
+    );
+    const encoded = btoa(asciiSafe);
+    return `/api/proxy?url=${encodeURIComponent(encoded)}`;
   }
 }
 

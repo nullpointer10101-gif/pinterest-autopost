@@ -40,8 +40,20 @@ router.get('/proxy', async (req, res) => {
   if (!encodedUrl) return res.status(400).send('URL required');
   
   try {
-    // Decode Base64 URL to prevent corruption from special characters
-    const url = Buffer.from(encodedUrl, 'base64').toString('utf8');
+    // Decode Base64 safely (supports url-encoded Base64 and legacy payloads)
+    const normalized = decodeURIComponent(String(encodedUrl)).replace(/ /g, '+');
+    const raw = Buffer.from(normalized, 'base64').toString('utf8');
+    let url = raw;
+    if (!/^https?:\/\//i.test(url)) {
+      try {
+        url = decodeURIComponent(raw);
+      } catch {
+        return res.status(400).send('Invalid media URL');
+      }
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).send('Invalid media URL');
+    }
     
     const axios = require('axios');
     const response = await axios.get(url, {
