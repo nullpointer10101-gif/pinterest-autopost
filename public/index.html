@@ -10,9 +10,24 @@
 <body>
 
     <div class="container">
-        <header>
-            <div class="logo-text">Pinterest Command</div>
-            <div id="connection-status" class="badge badge-success">Cloud Bot Online</div>
+        <!-- ── NEW INTEGRATED NAVBAR ── -->
+        <header class="navbar glass-card">
+            <div class="nav-left">
+                <div class="logo-text">P.COMMAND</div>
+                <div id="connection-status" class="badge badge-success" style="font-size: 10px;">BOT ONLINE</div>
+            </div>
+
+            <nav class="nav-center">
+                <button class="nav-link active" id="tab-dashboard" onclick="switchTab('dashboard')">MISSION</button>
+                <button class="nav-link" id="tab-queue" onclick="switchTab('queue')">QUEUE</button>
+                <button class="nav-link" id="tab-lab" onclick="switchTab('lab')">LAB</button>
+                <button class="nav-link" id="tab-history" onclick="switchTab('history')">HISTORY</button>
+                <button class="nav-link" id="tab-settings" onclick="switchTab('settings')">SYSTEM</button>
+            </nav>
+
+            <div class="nav-right mobile-hidden">
+                <div id="live-time" style="font-size: 13px; font-weight: 600; opacity: 0.6;">00:00</div>
+            </div>
         </header>
 
         <section class="stats-bar">
@@ -29,14 +44,6 @@
                 <div class="stat-value" id="stat-success-rate">0%</div>
             </div>
         </section>
-
-        <nav class="tabs">
-            <button class="tab active" id="tab-dashboard" onclick="switchTab('dashboard')">Mission Control</button>
-            <button class="tab" id="tab-queue" onclick="switchTab('queue')">Queue</button>
-            <button class="tab" id="tab-lab" onclick="switchTab('lab')">Booster Lab</button>
-            <button class="tab" id="tab-history" onclick="switchTab('history')">History</button>
-            <button class="tab" id="tab-settings" onclick="switchTab('settings')">Settings</button>
-        </nav>
 
         <!-- DASHBOARD -->
         <div id="panel-dashboard" class="panel">
