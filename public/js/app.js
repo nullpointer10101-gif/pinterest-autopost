@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshAll();
   setAutoRefresh(true);
   updateComposerMeta();
+  hydrateIcons();
   window.addEventListener('beforeunload', () => {
     setPreviewScrollLock(false);
   });
@@ -135,10 +136,7 @@ function updateClock() {
   const clock = byId('live-time');
   if (!clock) return;
   const now = new Date();
-  clock.textContent = now.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  clock.textContent = formatTime12h(now);
 }
 
 function setAutoRefresh(enabled) {
@@ -600,7 +598,7 @@ function renderQueueList() {
       const status = String(item.status || 'pending');
       const statusText = escHtml(status.toUpperCase());
       const errorText = item.error ? `<div class="item-meta">${escHtml(item.error)}</div>` : '';
-      const addedAt = item.addedAt ? new Date(item.addedAt).toLocaleString() : '';
+      const addedAt = item.addedAt ? formatDateTime12h(item.addedAt) : '';
       const dateText = addedAt ? `<div class="item-meta">${escHtml(addedAt)}</div>` : '';
 
       return `
@@ -653,7 +651,7 @@ function renderHistoryList() {
       const title = escHtml(item.aiContent?.title || 'Untitled post');
       const username = escHtml(item.reelData?.username || 'unknown');
       const postedAt = item.postedAt || item.createdAt;
-      const when = postedAt ? new Date(postedAt).toLocaleString() : 'Unknown date';
+      const when = postedAt ? formatDateTime12h(postedAt) : 'Unknown date';
       const badgeClass = status === 'success' ? 'badge-success' : status === 'error' ? 'badge-error' : 'badge-warn';
       const badgeLabel = status === 'success' ? 'POSTED' : status === 'error' ? 'FAILED' : 'PREVIEW';
       const pinUrl = item.pinterestPin?.url;
@@ -707,7 +705,7 @@ function renderEngagements() {
     .map((entry) => {
       const normalized = normalizeEngagementEntry(entry);
       const action = escHtml(String(normalized.action || 'action').toUpperCase());
-      const when = normalized.when ? new Date(normalized.when).toLocaleTimeString() : '';
+      const when = normalized.when ? formatTime12h(normalized.when) : '';
       const url = entry.url ? `<a class="pill-btn" href="${escAttr(entry.url)}" target="_blank" rel="noopener noreferrer">Open</a>` : '';
 
       return `
@@ -745,7 +743,7 @@ function renderEngagementAuditList() {
   const githubCount = normalized.filter((entry) => entry.source === 'github_actions').length;
   const localCount = normalized.filter((entry) => entry.source !== 'github_actions').length;
   const shownCount = rows.length;
-  const latestTime = rows[0]?.when ? new Date(rows[0].when).toLocaleString() : 'No logs';
+  const latestTime = rows[0]?.when ? formatDateTime12h(rows[0].when) : 'No logs';
 
   summary.innerHTML = `
     <div class="pulse-item"><strong>Visible Logs:</strong> ${shownCount}</div>
@@ -761,8 +759,10 @@ function renderEngagementAuditList() {
   list.innerHTML = rows
     .slice(0, 80)
     .map((entry) => {
-      const when = entry.when ? new Date(entry.when).toLocaleString() : 'Unknown time';
+      const when = entry.when ? formatDateTime12h(entry.when) : 'Unknown time';
       const whenAgo = formatTimeAgo(entry.when);
+      const actionText = String(entry.action || 'Viewed');
+      const actionIcon = getEngagementActionIcon(actionText);
       const sourceBadge = entry.source === 'github_actions'
         ? '<span class="badge badge-success">GITHUB</span>'
         : `<span class="badge">${escHtml(String(entry.source || 'local').toUpperCase())}</span>`;
@@ -774,7 +774,7 @@ function renderEngagementAuditList() {
         <div class="list-item engagement-item">
           <div class="list-item-main">
             <div class="engagement-main">
-              <div class="engagement-title">${escHtml(entry.action || 'Viewed')}</div>
+              <div class="engagement-title"><i data-lucide="${escAttr(actionIcon)}" class="engagement-row-icon"></i>${escHtml(actionText)}</div>
               <div class="engagement-subtitle">${escHtml(whenAgo)} • ${escHtml(when)}</div>
               <div class="engagement-tags">
                 ${sourceBadge}
@@ -790,6 +790,8 @@ function renderEngagementAuditList() {
       `;
     })
     .join('');
+
+  hydrateIcons();
 }
 
 async function startEngager() {
@@ -1222,6 +1224,21 @@ function normalizeEngagementEntry(entry = {}) {
   };
 }
 
+function getEngagementActionIcon(action) {
+  const value = String(action || '').toLowerCase();
+  if (value.includes('comment')) return 'message-circle-more';
+  if (value.includes('like')) return 'heart';
+  if (value.includes('dispatch')) return 'send';
+  if (value.includes('view')) return 'eye';
+  return 'activity';
+}
+
+function hydrateIcons() {
+  if (typeof window === 'undefined') return;
+  if (!window.lucide || typeof window.lucide.createIcons !== 'function') return;
+  window.lucide.createIcons();
+}
+
 function extractPinLabel(url) {
   const clean = String(url || '').trim();
   if (!clean) return '';
@@ -1237,6 +1254,29 @@ function extractPinLabel(url) {
   } catch {
     return '';
   }
+}
+
+function formatTime12h(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+function formatDateTime12h(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleString([], {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 function formatTimeAgo(isoText) {

@@ -28,12 +28,12 @@
         </header>
 
         <nav class="tab-nav" aria-label="Main tabs">
-            <button class="tab-btn active" data-tab="dashboard" type="button">Dashboard</button>
-            <button class="tab-btn" data-tab="queue" type="button">Queue</button>
-            <button class="tab-btn" data-tab="lab" type="button">Booster</button>
-            <button class="tab-btn" data-tab="engagements" type="button">Engagements</button>
-            <button class="tab-btn" data-tab="history" type="button">History</button>
-            <button class="tab-btn" data-tab="settings" type="button">Settings</button>
+            <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-grid" class="tab-icon"></i><span>Dashboard</span></button>
+            <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="list-ordered" class="tab-icon"></i><span>Queue</span></button>
+            <button class="tab-btn" data-tab="lab" type="button"><i data-lucide="rocket" class="tab-icon"></i><span>Booster</span></button>
+            <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Engage Log</span></button>
+            <button class="tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
+            <button class="tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
         </nav>
 
         <section class="stats-grid">
@@ -236,8 +236,8 @@
 
             <section id="panel-engagements" class="panel hidden">
                 <article class="card">
-                    <div class="card-title-wrap">
-                        <h2>Engagement Logs</h2>
+                    <div class="card-title-wrap engagement-heading">
+                        <h2><i data-lucide="activity" class="heading-icon"></i>Engagement Logbook</h2>
                         <p class="muted-text">Read-only timeline of engagement activity from your automation runs.</p>
                     </div>
                     <div class="control-row">
@@ -306,6 +306,7 @@
 
     <div id="toast-container"></div>
 
+    <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

@@ -143,6 +143,15 @@ body {
     padding: 10px 6px;
     cursor: pointer;
     transition: 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.tab-icon {
+    width: 14px;
+    height: 14px;
 }
 
 .tab-btn.active {
@@ -617,6 +626,18 @@ textarea {
     background: linear-gradient(135deg, rgba(226, 75, 47, 0.08), rgba(255, 255, 255, 0.03));
 }
 
+.engagement-heading h2 {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.heading-icon {
+    width: 18px;
+    height: 18px;
+    color: #ffb39f;
+}
+
 .engagement-main {
     width: 100%;
 }
@@ -627,6 +648,16 @@ textarea {
     font-weight: 600;
     color: #fff;
     letter-spacing: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.engagement-row-icon {
+    width: 15px;
+    height: 15px;
+    color: #ffc2b3;
+    flex-shrink: 0;
 }
 
 .engagement-subtitle {
