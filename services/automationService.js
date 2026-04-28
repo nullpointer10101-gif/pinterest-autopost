@@ -138,6 +138,10 @@ async function runHourlyAutomation(options = {}) {
           minGapMs: engagementMinGapMs,
           maxGapMs: engagementMaxGapMs,
           commentChance,
+          context: {
+            source: process.env.GITHUB_ACTIONS === 'true' ? 'github_actions' : 'local',
+            command: 'node scripts/run-hourly-automation.js',
+          },
         });
 
         const executedTotal = Math.max(0, toInt(result?.executed, 0));

@@ -176,6 +176,16 @@ router.post('/engage', async (req, res) => {
 
     if (IS_SERVERLESS) {
       console.log('[Engager] Routing to Cloud Bot (GitHub Actions)...');
+      await historyService.addEngagement({
+        url: '',
+        action: 'Dispatch Engagement Mission',
+        comment: `Requested ${targetCount} engagement action(s) from dashboard.`,
+        source: 'github_actions',
+        command: 'workflow_dispatch instant-engagement.yml',
+        workflow: 'instant-engagement.yml',
+        actor: 'dashboard_user',
+        engagedAt: new Date().toISOString(),
+      });
       githubService.triggerInstantEngagement().catch(() => {});
       return res.json({
         success: true,
@@ -184,7 +194,13 @@ router.post('/engage', async (req, res) => {
       });
     }
 
-    puppeteerService.runAutoEngager({ count: targetCount }).catch(err => {
+    puppeteerService.runAutoEngager({
+      count: targetCount,
+      context: {
+        source: 'api_manual',
+        command: 'POST /api/engage',
+      },
+    }).catch(err => {
       console.error('[Engager] Background error:', err.message);
     });
 

@@ -78,6 +78,8 @@ function bindEvents() {
   on('queue-status-filter', 'change', renderQueueList);
   on('history-search', 'input', renderHistoryList);
   on('history-status-filter', 'change', renderHistoryList);
+  on('engagement-search', 'input', renderEngagementAuditList);
+  on('engagement-source-filter', 'change', renderEngagementAuditList);
   on('field-title', 'input', updateComposerMeta);
   on('field-desc', 'input', updateComposerMeta);
   on('field-alt', 'input', updateComposerMeta);
@@ -119,6 +121,7 @@ function switchTab(tab) {
   if (tab === 'queue') renderQueueList();
   if (tab === 'history') renderHistoryList();
   if (tab === 'lab') loadEngagements();
+  if (tab === 'engagements') loadEngagements();
   if (tab === 'settings') loadDiagnostics();
 }
 
@@ -155,7 +158,7 @@ async function refreshAll() {
 
   if (state.currentTab === 'queue') renderQueueList();
   if (state.currentTab === 'history') renderHistoryList();
-  if (state.currentTab === 'lab') await loadEngagements();
+  if (state.currentTab === 'lab' || state.currentTab === 'engagements') await loadEngagements();
   if (state.currentTab === 'settings') await loadDiagnostics();
 }
 
@@ -684,6 +687,7 @@ async function loadEngagements() {
     const response = await apiRequest('/api/engagements');
     state.engagements = Array.isArray(response.engagements) ? response.engagements : [];
     renderEngagements();
+    renderEngagementAuditList();
   } catch (error) {
     showToast(error.message || 'Failed to load engagement logs.', 'error');
   }
@@ -701,8 +705,9 @@ function renderEngagements() {
   panel.innerHTML = state.engagements
     .slice(0, 20)
     .map((entry) => {
-      const action = escHtml(String(entry.action || 'action').toUpperCase());
-      const when = entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString() : '';
+      const normalized = normalizeEngagementEntry(entry);
+      const action = escHtml(String(normalized.action || 'action').toUpperCase());
+      const when = normalized.when ? new Date(normalized.when).toLocaleTimeString() : '';
       const url = entry.url ? `<a class="pill-btn" href="${escAttr(entry.url)}" target="_blank" rel="noopener noreferrer">Open</a>` : '';
 
       return `
@@ -714,6 +719,78 @@ function renderEngagements() {
             </div>
           </div>
           <div class="item-actions">${url}</div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderEngagementAuditList() {
+  const list = byId('engagement-readonly-list');
+  const summary = byId('engagement-summary');
+  if (!list || !summary) return;
+
+  const search = String(byId('engagement-search')?.value || '').trim().toLowerCase();
+  const sourceFilter = byId('engagement-source-filter')?.value || 'github_actions';
+  const normalized = state.engagements.map(normalizeEngagementEntry);
+
+  const rows = normalized.filter((entry) => {
+    const sourceOk = sourceFilter === 'all' ? true : entry.source === sourceFilter;
+    if (!sourceOk) return false;
+    if (!search) return true;
+    const haystack = `${entry.action} ${entry.url} ${entry.command} ${entry.actor} ${entry.workflow} ${entry.comment}`.toLowerCase();
+    return haystack.includes(search);
+  });
+
+  const githubCount = normalized.filter((entry) => entry.source === 'github_actions').length;
+  const localCount = normalized.filter((entry) => entry.source !== 'github_actions').length;
+  const shownCount = rows.length;
+  const latestTime = rows[0]?.when ? new Date(rows[0].when).toLocaleString() : 'No logs';
+
+  summary.innerHTML = `
+    <div class="pulse-item"><strong>Visible Logs:</strong> ${shownCount}</div>
+    <div class="pulse-item"><strong>GitHub Entries:</strong> ${githubCount} • <strong>Other:</strong> ${localCount}</div>
+    <div class="pulse-item"><strong>Latest Engagement:</strong> ${escHtml(latestTime)}</div>
+  `;
+
+  if (!rows.length) {
+    list.innerHTML = '<div class="pulse-item">No engagement logs match this filter.</div>';
+    return;
+  }
+
+  list.innerHTML = rows
+    .slice(0, 80)
+    .map((entry) => {
+      const when = entry.when ? new Date(entry.when).toLocaleString() : 'Unknown time';
+      const command = entry.command || 'n/a';
+      const actor = entry.actor || 'n/a';
+      const sourceBadge = entry.source === 'github_actions'
+        ? '<span class="badge badge-success">GITHUB</span>'
+        : `<span class="badge">${escHtml(String(entry.source || 'local').toUpperCase())}</span>`;
+      const workflow = entry.workflow || '';
+      const runInfo = entry.runId ? `Run ${entry.runId}${entry.runNumber ? ` (#${entry.runNumber})` : ''}` : 'Run n/a';
+      const commentMeta = entry.comment ? `<div class="item-meta">${escHtml(entry.comment)}</div>` : '';
+      const jobMeta = entry.job ? `Job: ${escHtml(entry.job)}` : 'Job: n/a';
+      const openLink = entry.url ? `<a class="pill-btn" href="${escAttr(entry.url)}" target="_blank" rel="noopener noreferrer">Open Pin</a>` : '';
+      const runLink = entry.workflowUrl ? `<a class="pill-btn" href="${escAttr(entry.workflowUrl)}" target="_blank" rel="noopener noreferrer">Open Run</a>` : '';
+
+      return `
+        <div class="list-item">
+          <div class="list-item-main">
+            <div>
+              <div class="item-title">${escHtml(entry.action || 'Viewed')} • ${escHtml(when)}</div>
+              <div class="item-meta">${escHtml(entry.url || 'No pin URL')}</div>
+              <div class="item-meta mono">Command: ${escHtml(command)}</div>
+              <div class="item-meta mono">Workflow: ${escHtml(workflow || 'n/a')} • ${escHtml(runInfo)} • ${jobMeta}</div>
+              <div class="item-meta mono">Actor: ${escHtml(actor)}</div>
+              ${commentMeta}
+            </div>
+          </div>
+          <div class="item-actions">
+            ${sourceBadge}
+            ${openLink}
+            ${runLink}
+          </div>
         </div>
       `;
     })
@@ -1113,6 +1190,41 @@ function resetPreviewMedia() {
     scrollBtn.classList.add('hidden');
     scrollBtn.textContent = 'No Scroll: Off';
   }
+}
+
+function normalizeEngagementEntry(entry = {}) {
+  const commandRaw = String(entry.command || '').trim();
+  const workflowRaw = String(entry.workflow || '').trim();
+  const sourceRaw = String(entry.source || '').trim().toLowerCase();
+
+  let source = sourceRaw;
+  if (!source) {
+    if (workflowRaw || commandRaw.includes('run-hourly-automation.js')) {
+      source = 'github_actions';
+    } else if (commandRaw.includes('/api/engage')) {
+      source = 'api_manual';
+    } else {
+      // Legacy entries were stored without source metadata; default them to GitHub
+      // so historical cloud engagements still appear in the read-only audit view.
+      source = 'github_actions';
+    }
+  }
+
+  return {
+    id: entry.id || '',
+    action: String(entry.action || 'Viewed'),
+    url: String(entry.url || ''),
+    comment: String(entry.comment || ''),
+    command: commandRaw || (source === 'github_actions' ? 'node scripts/run-hourly-automation.js' : 'manual engager'),
+    workflow: workflowRaw || (source === 'github_actions' ? 'instant-engagement.yml' : ''),
+    source,
+    actor: String(entry.actor || ''),
+    runId: String(entry.runId || ''),
+    runNumber: String(entry.runNumber || ''),
+    job: String(entry.job || ''),
+    workflowUrl: String(entry.workflowUrl || ''),
+    when: entry.engagedAt || entry.createdAt || '',
+  };
 }
 
 function updateComposerMeta() {

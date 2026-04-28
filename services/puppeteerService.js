@@ -191,6 +191,34 @@ function pickRandomComment(pool, usedComments) {
   return selected;
 }
 
+function resolveEngagementContext(input = {}) {
+  const isGithub = process.env.GITHUB_ACTIONS === 'true';
+  const repo = process.env.GITHUB_REPOSITORY || '';
+  const runId = process.env.GITHUB_RUN_ID || '';
+  const runNumber = process.env.GITHUB_RUN_NUMBER || '';
+  const workflow = process.env.GITHUB_WORKFLOW || '';
+  const job = process.env.GITHUB_JOB || '';
+  const actor = process.env.GITHUB_ACTOR || '';
+
+  let workflowUrl = '';
+  if (repo && runId) {
+    workflowUrl = `https://github.com/${repo}/actions/runs/${runId}`;
+  }
+
+  return {
+    source: input.source || (isGithub ? 'github_actions' : 'local'),
+    command:
+      input.command ||
+      (isGithub ? 'node scripts/run-hourly-automation.js' : 'POST /api/engage'),
+    workflow: input.workflow || workflow,
+    job: input.job || job,
+    actor: input.actor || actor,
+    runId: input.runId || runId,
+    runNumber: input.runNumber || runNumber,
+    workflowUrl: input.workflowUrl || workflowUrl,
+  };
+}
+
 // ─── Helper: Download Video ────────────────────────────────────────────────────
 async function downloadVideo(url, filepath) {
   const writer = fs.createWriteStream(filepath);
@@ -470,6 +498,7 @@ async function createPinWithBot(pinData) {
 async function runAutoEngagerSafe(options = {}) {
   const sessionCookie = await getActiveSessionCookie();
   if (!sessionCookie) throw new Error('PINTEREST_SESSION_COOKIE is missing. Link a session in Settings.');
+  const context = resolveEngagementContext(options.context || {});
 
   const targetCount = Math.max(1, toInt(options.count, 2));
   // Default to much faster gaps for manual UI triggers (15-45 seconds)
@@ -661,6 +690,15 @@ async function runAutoEngagerSafe(options = {}) {
         url: randomPin,
         action: actionTaken,
         comment: commentLeft ? theComment : (actionTaken !== 'Viewed' ? '' : 'Failed to Engage'),
+        source: context.source,
+        command: context.command,
+        workflow: context.workflow,
+        job: context.job,
+        actor: context.actor,
+        runId: context.runId,
+        runNumber: context.runNumber,
+        workflowUrl: context.workflowUrl,
+        engagedAt: new Date().toISOString(),
       });
 
       completed += 1;

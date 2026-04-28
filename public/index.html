@@ -31,6 +31,7 @@
             <button class="tab-btn active" data-tab="dashboard" type="button">Dashboard</button>
             <button class="tab-btn" data-tab="queue" type="button">Queue</button>
             <button class="tab-btn" data-tab="lab" type="button">Booster</button>
+            <button class="tab-btn" data-tab="engagements" type="button">Engagements</button>
             <button class="tab-btn" data-tab="history" type="button">History</button>
             <button class="tab-btn" data-tab="settings" type="button">Settings</button>
         </nav>
@@ -230,6 +231,26 @@
                         </select>
                     </div>
                     <div id="history-list" class="list"></div>
+                </article>
+            </section>
+
+            <section id="panel-engagements" class="panel hidden">
+                <article class="card">
+                    <div class="card-title-wrap">
+                        <h2>Engagement Logs</h2>
+                        <p class="muted-text">Read-only log for pin engagements, including GitHub workflow runs and command details.</p>
+                    </div>
+                    <div class="control-row">
+                        <input type="text" id="engagement-search" placeholder="Search by action, URL, command, or actor...">
+                        <select id="engagement-source-filter">
+                            <option value="github_actions">GitHub Actions</option>
+                            <option value="all">All sources</option>
+                            <option value="local">Local</option>
+                            <option value="api_manual">Manual API</option>
+                        </select>
+                    </div>
+                    <div id="engagement-summary" class="pulse-list"></div>
+                    <div id="engagement-readonly-list" class="list"></div>
                 </article>
             </section>
 
