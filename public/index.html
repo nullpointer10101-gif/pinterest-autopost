@@ -3,190 +3,266 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pinterest Hub | Premium</title>
+    <title>Pinterest Mission Control</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
 <body>
-
-    <div class="container">
-        <!-- ── REFINED NAVBAR ── -->
-        <header class="navbar glass-card">
-            <div class="nav-left">
-                <div class="logo-text">Pinterest 🚀</div>
-                <div id="connection-status" class="badge badge-success" style="font-size: 10px; margin-left: 5px;">BOT ONLINE</div>
+    <div class="app-shell">
+        <header class="topbar">
+            <div class="brand-wrap">
+                <div class="brand-title">Pinterest Mission Control</div>
+                <div class="status-wrap">
+                    <span id="connection-status" class="badge badge-success">ONLINE</span>
+                    <span id="active-mode" class="badge">Mode: Auto</span>
+                </div>
             </div>
-
-            <nav class="nav-center">
-                <button class="nav-link active" id="tab-dashboard" onclick="switchTab('dashboard')">MISSION</button>
-                <button class="nav-link" id="tab-queue" onclick="switchTab('queue')">QUEUE</button>
-                <button class="nav-link" id="tab-lab" onclick="switchTab('lab')">LAB</button>
-                <button class="nav-link" id="tab-history" onclick="switchTab('history')">HISTORY</button>
-                <button class="nav-link" id="tab-settings" onclick="switchTab('settings')">SYSTEM</button>
-            </nav>
-
-            <div class="nav-right mobile-hidden">
-                <div id="live-time" style="font-size: 13px; font-weight: 600; opacity: 0.6;">00:00</div>
+            <div class="header-tools">
+                <label class="switch-wrap" for="auto-refresh-toggle">
+                    <input id="auto-refresh-toggle" type="checkbox" checked>
+                    <span>Live Refresh</span>
+                </label>
+                <button id="manual-refresh-btn" class="btn btn-secondary compact-btn" type="button">Refresh</button>
+                <div id="live-time" class="clock">00:00</div>
             </div>
         </header>
 
-        <section class="stats-bar">
-            <div class="glass-card">
+        <nav class="tab-nav" aria-label="Main tabs">
+            <button class="tab-btn active" data-tab="dashboard" type="button">Dashboard</button>
+            <button class="tab-btn" data-tab="queue" type="button">Queue</button>
+            <button class="tab-btn" data-tab="lab" type="button">Booster</button>
+            <button class="tab-btn" data-tab="history" type="button">History</button>
+            <button class="tab-btn" data-tab="settings" type="button">Settings</button>
+        </nav>
+
+        <section class="stats-grid">
+            <article class="stat-card">
                 <div class="stat-label">Total Published</div>
                 <div class="stat-value" id="stat-total-posts">0</div>
-            </div>
-            <div class="glass-card">
-                <div class="stat-label">Active Queue</div>
+            </article>
+            <article class="stat-card">
+                <div class="stat-label">Queue Pending</div>
                 <div class="stat-value" id="stat-queue-pending">0</div>
-            </div>
-            <div class="glass-card">
+            </article>
+            <article class="stat-card">
                 <div class="stat-label">Success Rate</div>
                 <div class="stat-value" id="stat-success-rate">0%</div>
-            </div>
+            </article>
+            <article class="stat-card">
+                <div class="stat-label">Queue Failed</div>
+                <div class="stat-value" id="stat-queue-failed">0</div>
+            </article>
         </section>
 
-        <!-- DASHBOARD -->
-        <div id="panel-dashboard" class="panel">
-            <div class="grid-main">
-                <div class="glass-card">
-                    <h3 style="margin-bottom: 24px;">Deploy New Mission</h3>
-                    
-                    <div style="margin-bottom: 20px;">
-                        <label class="stat-label">Instagram Link</label>
-                        <div class="input-group-mobile" style="display: flex; gap: 12px;">
-                            <input type="text" id="reel-url" placeholder="Paste Reel URL...">
-                            <button class="btn btn-primary" onclick="handleFetch()">Extract</button>
+        <main>
+            <section id="panel-dashboard" class="panel">
+                <div class="panel-grid panel-grid-main">
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2>Create Mission</h2>
+                            <p class="muted-text">Mobile-first mission builder for quick publish and queue runs.</p>
                         </div>
-                    </div>
 
-                    <div style="margin-bottom: 24px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid var(--border);">
-                        <label class="stat-label">Manual Media Link</label>
-                        <div class="input-group-mobile" style="display: flex; gap: 12px; margin-top: 8px;">
-                            <input type="text" id="manual-media-url" placeholder="Direct Image/Video URL...">
-                            <button class="btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="handleManualMedia()">Load</button>
-                        </div>
-                    </div>
-
-                    <div id="preview-section" class="hidden">
-                        <div class="mission-preview-wrap">
-                            <img id="preview-img" class="preview-img">
-                            <div class="mission-form-wrap">
-                                <div style="margin-bottom: 12px;">
-                                    <label class="stat-label">Pin Title</label>
-                                    <input type="text" id="field-title">
-                                </div>
-                                <div style="margin-bottom: 20px;">
-                                    <label class="stat-label">Description</label>
-                                    <textarea id="field-desc" rows="5"></textarea>
-                                </div>
-                                <div class="btn-grid">
-                                    <button class="btn btn-primary" onclick="handlePost()">Post Now</button>
-                                    <button class="btn btn-outline-glass" onclick="handleQueue()">Queue</button>
-                                </div>
+                        <div class="field-wrap">
+                            <label for="reel-url">Instagram Reel URL</label>
+                            <div class="inline-field">
+                                <input type="text" id="reel-url" placeholder="https://www.instagram.com/reel/...">
+                                <button id="extract-btn" class="btn btn-primary" type="button">Extract</button>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <div class="glass-card">
-                    <h3 style="margin-bottom: 20px;">Recent Activity</h3>
-                    <div id="queue-list-mini"></div>
-                    <button class="btn" style="width: 100%; margin-top: 20px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="processQueueNow()">Trigger Bot</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- QUEUE -->
-        <section id="panel-queue" class="panel hidden">
-            <div class="glass-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h3>Mission Queue</h3>
-                    <button class="btn" style="padding: 6px 12px; font-size: 11px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);" onclick="clearQueue()">Clear All</button>
-                </div>
-                <div id="queue-list"></div>
-            </div>
-        </section>
-
-        <!-- LAB -->
-        <section id="panel-lab" class="panel hidden">
-            <div class="glass-card" style="max-width: 600px; margin: 0 auto;">
-                <h3>Booster Lab</h3>
-                <p style="color: var(--text-2); margin-bottom: 30px; font-size: 14px;">Boost your Pinterest authority with smart engagement.</p>
-                
-                <div style="margin-bottom: 20px;">
-                    <label class="stat-label">Target Niche</label>
-                    <select id="engage-niche">
-                        <option value="all">General Growth</option>
-                        <option value="fashion">Fashion & Style</option>
-                        <option value="home">Home Decor</option>
-                    </select>
-                </div>
-                
-                <div style="margin-bottom: 30px;">
-                    <label class="stat-label">Intensity</label>
-                    <input type="range" id="engage-count" min="1" max="10" value="3" style="width: 100%; accent-color: var(--accent);">
-                </div>
-
-                <button id="engage-btn" class="btn btn-primary" style="width: 100%;" onclick="startEngager()">Launch Booster</button>
-
-                <div style="margin-top: 40px;">
-                    <h4 class="stat-label">Live Mission Logs</h4>
-                    <div id="engagement-logs"></div>
-                </div>
-            </div>
-        </section>
-
-        <!-- HISTORY -->
-        <section id="panel-history" class="panel hidden">
-            <div class="glass-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h3>Activity History</h3>
-                    <div style="display: flex; gap: 10px;">
-                        <button class="btn" style="padding: 8px 16px; font-size: 11px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="exportHistoryJson()">Export JSON</button>
-                        <button class="btn" style="padding: 8px 16px; font-size: 11px; color: var(--accent);" onclick="clearHistory()">Reset</button>
-                    </div>
-                </div>
-                <div id="history-list"></div>
-            </div>
-        </section>
-
-        <!-- SETTINGS -->
-        <section id="panel-settings" class="panel hidden">
-            <div class="grid-main">
-                <div class="glass-card">
-                    <h3 style="margin-bottom: 24px;">Pinterest Connection</h3>
-                    <div style="display: flex; flex-direction: column; gap: 20px;">
-                        <a href="/api/pinterest/auth" class="btn btn-primary" style="text-align: center; text-decoration: none;">Link Account (OAuth)</a>
-                        <div>
-                            <label class="stat-label">Manual Session Cookie</label>
-                            <div style="display: flex; gap: 10px;">
-                                <input type="password" id="session-cookie">
-                                <button class="btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--border);" onclick="linkSessionCookie()">Link</button>
+                        <div class="field-wrap">
+                            <label for="manual-media-url">Manual Media URL</label>
+                            <div class="inline-field">
+                                <input type="text" id="manual-media-url" placeholder="Direct image/video URL">
+                                <button id="manual-load-btn" class="btn btn-secondary" type="button">Load</button>
                             </div>
                         </div>
-                    </div>
+
+                        <section id="preview-section" class="preview-shell hidden">
+                            <img id="preview-img" class="preview-img" alt="Mission preview">
+                            <div class="preview-fields">
+                                <div class="field-wrap">
+                                    <label for="field-title">Pin Title</label>
+                                    <input type="text" id="field-title" maxlength="100">
+                                </div>
+                                <div class="field-wrap">
+                                    <label for="field-desc">Description</label>
+                                    <textarea id="field-desc" rows="5" maxlength="800"></textarea>
+                                </div>
+                                <div class="field-wrap">
+                                    <label for="field-alt">Alt Text</label>
+                                    <input type="text" id="field-alt" maxlength="500" placeholder="Optional alt text">
+                                </div>
+                                <div class="button-row">
+                                    <button id="post-now-btn" class="btn btn-primary" type="button">Post Now</button>
+                                    <button id="queue-btn" class="btn btn-secondary" type="button">Queue</button>
+                                    <button id="save-draft-from-preview-btn" class="btn btn-ghost" type="button">Save Draft</button>
+                                </div>
+                            </div>
+                        </section>
+                    </article>
+
+                    <aside class="card">
+                        <div class="card-title-wrap">
+                            <h2>Quick Actions</h2>
+                            <p class="muted-text">Shortcuts designed for thumb-first mobile usage.</p>
+                        </div>
+                        <div class="quick-actions">
+                            <button id="run-bot-btn" class="btn btn-primary" type="button">Run Queue Bot</button>
+                            <button id="quick-open-queue-btn" class="btn btn-secondary" type="button">Open Queue</button>
+                            <button id="quick-open-history-btn" class="btn btn-secondary" type="button">Open History</button>
+                        </div>
+                        <div class="sub-title">Next Missions</div>
+                        <div id="queue-list-mini" class="list"></div>
+                    </aside>
                 </div>
 
-                <div class="glass-card">
-                    <h3 style="margin-bottom: 20px;">Diagnostics</h3>
-                    <div id="diagnostics-content">
-                        <div class="list-item">
-                            <div style="flex:1; font-size: 14px;">Hosting</div>
-                            <div id="diag-hosting" class="badge">Checking...</div>
+                <div class="panel-grid panel-grid-secondary">
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2>Reusable Drafts</h2>
+                            <p class="muted-text">Save your best title + description combos and reapply instantly.</p>
                         </div>
-                        <div class="list-item">
-                            <div style="flex:1; font-size: 14px;">Automation</div>
-                            <div id="diag-github" class="badge">Checking...</div>
+                        <div class="inline-field">
+                            <input type="text" id="draft-name" maxlength="40" placeholder="Draft name">
+                            <button id="save-draft-btn" class="btn btn-secondary" type="button">Save</button>
                         </div>
-                        <div class="list-item">
-                            <div style="flex:1; font-size: 14px;">Session</div>
-                            <div id="diag-session" class="badge">Checking...</div>
+                        <div id="draft-list" class="list"></div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2>Mission Pulse</h2>
+                            <p class="muted-text">Live operational hints based on queue, posts, and success rate.</p>
+                        </div>
+                        <div id="mission-pulse" class="pulse-list"></div>
+                    </article>
+                </div>
+            </section>
+
+            <section id="panel-queue" class="panel hidden">
+                <article class="card">
+                    <div class="card-header-row">
+                        <h2>Mission Queue</h2>
+                        <div class="button-row">
+                            <button id="retry-failed-btn" class="btn btn-secondary compact-btn" type="button">Retry Failed</button>
+                            <button id="clear-queue-btn" class="btn btn-danger compact-btn" type="button">Clear Queue</button>
                         </div>
                     </div>
-                </div>
-            </div>
-        </section>
+                    <div class="control-row">
+                        <input type="text" id="queue-search" placeholder="Search queue by title or source...">
+                        <select id="queue-status-filter">
+                            <option value="all">All statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="processing">Processing</option>
+                            <option value="completed">Completed</option>
+                            <option value="failed">Failed</option>
+                        </select>
+                    </div>
+                    <div id="queue-list" class="list"></div>
+                </article>
+            </section>
 
+            <section id="panel-lab" class="panel hidden">
+                <article class="card">
+                    <div class="card-title-wrap">
+                        <h2>Booster Lab</h2>
+                        <p class="muted-text">Run safe engagement bursts and monitor the action log.</p>
+                    </div>
+                    <div class="field-wrap">
+                        <label for="engage-niche">Target Niche</label>
+                        <select id="engage-niche">
+                            <option value="all">General Growth</option>
+                            <option value="fashion">Fashion and Style</option>
+                            <option value="home">Home Decor</option>
+                        </select>
+                    </div>
+                    <div class="field-wrap">
+                        <label for="engage-count">Intensity</label>
+                        <div class="range-wrap">
+                            <input type="range" id="engage-count" min="1" max="10" value="3">
+                            <span id="engage-count-value">3</span>
+                        </div>
+                    </div>
+                    <div class="button-row">
+                        <button id="engage-btn" class="btn btn-primary" type="button">Launch Booster</button>
+                        <button id="clear-engagements-btn" class="btn btn-secondary" type="button">Clear Logs</button>
+                    </div>
+                    <div id="engagement-logs" class="list"></div>
+                </article>
+            </section>
+
+            <section id="panel-history" class="panel hidden">
+                <article class="card">
+                    <div class="card-header-row">
+                        <h2>History</h2>
+                        <div class="button-row">
+                            <button id="export-history-btn" class="btn btn-secondary compact-btn" type="button">Export JSON</button>
+                            <button id="clear-history-btn" class="btn btn-danger compact-btn" type="button">Clear History</button>
+                        </div>
+                    </div>
+                    <div class="control-row">
+                        <input type="text" id="history-search" placeholder="Search history by title or username...">
+                        <select id="history-status-filter">
+                            <option value="all">All statuses</option>
+                            <option value="success">Posted</option>
+                            <option value="error">Failed</option>
+                            <option value="preview">Preview</option>
+                        </select>
+                    </div>
+                    <div id="history-list" class="list"></div>
+                </article>
+            </section>
+
+            <section id="panel-settings" class="panel hidden">
+                <div class="panel-grid panel-grid-secondary">
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2>Connection Center</h2>
+                            <p class="muted-text">Manage API OAuth and fallback session cookie from one place.</p>
+                        </div>
+                        <a href="/api/pinterest" class="btn btn-primary settings-link">Connect Pinterest OAuth</a>
+                        <div class="field-wrap">
+                            <label for="session-cookie">Session Cookie</label>
+                            <div class="inline-field">
+                                <input type="password" id="session-cookie" placeholder="_pinterest_sess value">
+                                <button id="link-session-btn" class="btn btn-secondary" type="button">Link Session</button>
+                            </div>
+                        </div>
+                        <div class="button-row">
+                            <button id="unlink-session-btn" class="btn btn-secondary" type="button">Unlink Session</button>
+                            <button id="unlink-api-btn" class="btn btn-danger" type="button">Unlink API</button>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2>Diagnostics</h2>
+                            <p class="muted-text">Runtime, posting mode, and session health for troubleshooting.</p>
+                        </div>
+                        <div class="diag-list">
+                            <div class="diag-item">
+                                <span>Runtime</span>
+                                <span id="diag-runtime" class="badge">Checking...</span>
+                            </div>
+                            <div class="diag-item">
+                                <span>Posting Mode</span>
+                                <span id="diag-posting" class="badge">Checking...</span>
+                            </div>
+                            <div class="diag-item">
+                                <span>Session</span>
+                                <span id="diag-session" class="badge">Checking...</span>
+                            </div>
+                            <div class="diag-item">
+                                <span>Queue Storage</span>
+                                <span id="diag-storage" class="badge">Checking...</span>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </section>
+        </main>
     </div>
 
     <div id="toast-container"></div>
