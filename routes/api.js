@@ -14,7 +14,7 @@ const autopostRoutes = require('./autopost');
 // We mount most at root '/' to maintain exact backwards compatibility with existing frontend paths
 router.use('/', authRoutes);
 router.use('/', contentRoutes);
-router.use('/', pinterestRoutes);
+router.use('/pinterest', pinterestRoutes);
 router.use('/', systemRoutes);
 router.use('/', historyRoutes);
 router.use('/autopost', autopostRoutes);
