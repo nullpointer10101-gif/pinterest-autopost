@@ -253,6 +253,25 @@ h2 {
     margin-bottom: 8px;
 }
 
+.input-meta {
+    margin-top: 6px;
+    color: var(--text-soft);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.input-meta.warn {
+    color: #ffd999;
+}
+
+.input-meta.error {
+    color: #ffb4b4;
+}
+
+.input-meta.success {
+    color: #95e4c0;
+}
+
 .inline-field {
     display: grid;
     grid-template-columns: 1fr;

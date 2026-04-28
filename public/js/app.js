@@ -16,6 +16,13 @@ const state = {
 
 const REFRESH_INTERVAL_MS = 30000;
 const DRAFTS_STORAGE_KEY = 'pmc_drafts_v1';
+const PINTEREST_LIMITS = {
+  titleChars: 100,
+  descriptionChars: 800,
+  altChars: 500,
+  titleWordsSoft: 20,
+  descriptionWordsSoft: 120,
+};
 
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
@@ -24,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   startClock();
   refreshAll();
   setAutoRefresh(true);
+  updateComposerMeta();
   window.addEventListener('beforeunload', () => {
     setPreviewScrollLock(false);
   });
@@ -70,6 +78,10 @@ function bindEvents() {
   on('queue-status-filter', 'change', renderQueueList);
   on('history-search', 'input', renderHistoryList);
   on('history-status-filter', 'change', renderHistoryList);
+  on('field-title', 'input', updateComposerMeta);
+  on('field-desc', 'input', updateComposerMeta);
+  on('field-alt', 'input', updateComposerMeta);
+  on('field-link', 'input', updateComposerMeta);
 
   on('reel-url', 'keydown', (event) => {
     if (event.key === 'Enter') handleExtract();
@@ -352,9 +364,10 @@ function showPreview(payload) {
   const scrollBtn = byId('preview-scroll-btn');
   const title = byId('field-title');
   const desc = byId('field-desc');
+  const link = byId('field-link');
   const alt = byId('field-alt');
 
-  if (!section || !image || !video || !audioBtn || !scrollBtn || !title || !desc || !alt) return;
+  if (!section || !image || !video || !audioBtn || !scrollBtn || !title || !desc || !link || !alt) return;
 
   const reelData = payload.reelData || {};
   const aiContent = payload.aiContent || {};
@@ -414,7 +427,9 @@ function showPreview(payload) {
 
   title.value = (aiContent.title || 'New pin mission').slice(0, 100);
   desc.value = (aiContent.description || '').slice(0, 800);
+  link.value = payload.destinationLink || payload.sourceUrl || '';
   alt.value = '';
+  updateComposerMeta();
 
   section.classList.remove('hidden');
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -459,6 +474,8 @@ async function handleQueue() {
       altText: postPayload.altText,
       mediaUrl: postPayload.mediaUrl,
       sourceUrl: postPayload.sourceUrl,
+      destinationLink: postPayload.destinationLink || '',
+      originalSourceUrl: state.lastExtracted?.sourceUrl || '',
       username: postPayload.reelMeta.username,
       caption: postPayload.reelMeta.caption,
       thumbnailUrl: postPayload.reelMeta.thumbnailUrl || postPayload.mediaUrl,
@@ -495,26 +512,36 @@ function buildPostPayload() {
 
   const title = String(byId('field-title')?.value || '').trim();
   const description = String(byId('field-desc')?.value || '').trim();
+  const destinationLinkRaw = String(byId('field-link')?.value || '').trim();
   const altText = String(byId('field-alt')?.value || '').trim();
   const reelData = state.lastExtracted.reelData || {};
   const aiContent = state.lastExtracted.aiContent || {};
   const mediaUrl = reelData.mediaUrl || reelData.thumbnailUrl || '';
-  const sourceUrl = state.lastExtracted.sourceUrl || String(byId('reel-url')?.value || '').trim();
+  const normalizedDestination = normalizeDestinationLink(destinationLinkRaw);
+  if (normalizedDestination.error) {
+    showToast(normalizedDestination.error, 'error');
+    return null;
+  }
+
+  const sourceUrl =
+    normalizedDestination.value ||
+    state.lastExtracted.sourceUrl ||
+    String(byId('reel-url')?.value || '').trim();
 
   if (!title) {
     showToast('Title is required.', 'error');
     return null;
   }
-  if (title.length > 100) {
-    showToast('Title must be 100 characters or less.', 'error');
+  if (title.length > PINTEREST_LIMITS.titleChars) {
+    showToast(`Title must be ${PINTEREST_LIMITS.titleChars} characters or less.`, 'error');
     return null;
   }
-  if (description.length > 800) {
-    showToast('Description must be 800 characters or less.', 'error');
+  if (description.length > PINTEREST_LIMITS.descriptionChars) {
+    showToast(`Description must be ${PINTEREST_LIMITS.descriptionChars} characters or less.`, 'error');
     return null;
   }
-  if (altText.length > 500) {
-    showToast('Alt text must be 500 characters or less.', 'error');
+  if (altText.length > PINTEREST_LIMITS.altChars) {
+    showToast(`Alt text must be ${PINTEREST_LIMITS.altChars} characters or less.`, 'error');
     return null;
   }
   if (!mediaUrl) {
@@ -529,6 +556,7 @@ function buildPostPayload() {
     hashtags: Array.isArray(aiContent.hashtags) ? aiContent.hashtags : [],
     mediaUrl,
     sourceUrl,
+    destinationLink: normalizedDestination.value || '',
     reelMeta: {
       username: reelData.username || 'unknown',
       caption: reelData.caption || '',
@@ -890,10 +918,11 @@ function saveDraftFromPreview() {
 function saveDraft(name) {
   const title = String(byId('field-title')?.value || '').trim();
   const description = String(byId('field-desc')?.value || '').trim();
+  const destinationLink = String(byId('field-link')?.value || '').trim();
   const altText = String(byId('field-alt')?.value || '').trim();
 
-  if (!title && !description) {
-    showToast('Draft needs a title or description.', 'error');
+  if (!title && !description && !destinationLink) {
+    showToast('Draft needs title, description, or destination link.', 'error');
     return;
   }
 
@@ -902,6 +931,7 @@ function saveDraft(name) {
     name,
     title,
     description,
+    destinationLink,
     altText,
     createdAt: new Date().toISOString(),
   };
@@ -971,7 +1001,9 @@ function applyDraft(id) {
 
   byId('field-title').value = draft.title || '';
   byId('field-desc').value = draft.description || '';
+  byId('field-link').value = draft.destinationLink || '';
   byId('field-alt').value = draft.altText || '';
+  updateComposerMeta();
   showToast('Draft applied to preview fields.', 'success');
 }
 
@@ -1077,6 +1109,90 @@ function resetPreviewMedia() {
   if (scrollBtn) {
     scrollBtn.classList.add('hidden');
     scrollBtn.textContent = 'No Scroll: Off';
+  }
+}
+
+function updateComposerMeta() {
+  const title = String(byId('field-title')?.value || '');
+  const description = String(byId('field-desc')?.value || '');
+  const altText = String(byId('field-alt')?.value || '');
+  const destinationLink = String(byId('field-link')?.value || '');
+
+  const titleWords = countWords(title);
+  const descWords = countWords(description);
+
+  setInputMetaState(
+    'field-title-meta',
+    `${title.length}/${PINTEREST_LIMITS.titleChars} chars • ${titleWords} words`,
+    title.length > PINTEREST_LIMITS.titleChars
+      ? 'error'
+      : titleWords > PINTEREST_LIMITS.titleWordsSoft || title.length > Math.floor(PINTEREST_LIMITS.titleChars * 0.9)
+        ? 'warn'
+        : ''
+  );
+
+  setInputMetaState(
+    'field-desc-meta',
+    `${description.length}/${PINTEREST_LIMITS.descriptionChars} chars • ${descWords} words`,
+    description.length > PINTEREST_LIMITS.descriptionChars
+      ? 'error'
+      : descWords > PINTEREST_LIMITS.descriptionWordsSoft || description.length > Math.floor(PINTEREST_LIMITS.descriptionChars * 0.9)
+        ? 'warn'
+        : ''
+  );
+
+  setInputMetaState(
+    'field-alt-meta',
+    `${altText.length}/${PINTEREST_LIMITS.altChars} chars`,
+    altText.length > PINTEREST_LIMITS.altChars
+      ? 'error'
+      : altText.length > Math.floor(PINTEREST_LIMITS.altChars * 0.9)
+        ? 'warn'
+        : ''
+  );
+
+  const normalizedLink = normalizeDestinationLink(destinationLink);
+  if (!destinationLink.trim()) {
+    setInputMetaState('field-link-meta', 'Optional destination URL for click-through.', '');
+  } else if (normalizedLink.error) {
+    setInputMetaState('field-link-meta', normalizedLink.error, 'error');
+  } else {
+    setInputMetaState('field-link-meta', 'Valid destination URL.', 'success');
+  }
+}
+
+function countWords(text) {
+  const clean = String(text || '').trim();
+  if (!clean) return 0;
+  return clean.split(/\s+/).filter(Boolean).length;
+}
+
+function setInputMetaState(id, text, tone) {
+  const el = byId(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'input-meta';
+  if (tone === 'warn') el.classList.add('warn');
+  if (tone === 'error') el.classList.add('error');
+  if (tone === 'success') el.classList.add('success');
+}
+
+function normalizeDestinationLink(value) {
+  let clean = String(value || '').trim();
+  if (!clean) return { value: '', error: '' };
+
+  if (!/^https?:\/\//i.test(clean) && /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}([/:?#].*)?$/.test(clean)) {
+    clean = `https://${clean}`;
+  }
+
+  try {
+    const parsed = new URL(clean);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return { value: '', error: 'Destination link must start with http:// or https://.' };
+    }
+    return { value: parsed.toString(), error: '' };
+  } catch {
+    return { value: '', error: 'Destination link is not a valid URL.' };
   }
 }
 

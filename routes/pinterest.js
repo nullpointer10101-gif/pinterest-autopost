@@ -31,6 +31,23 @@ function normalizeSessionCookie(input) {
   return raw;
 }
 
+function normalizeDestinationLink(input) {
+  let raw = String(input || '').trim();
+  if (!raw) return '';
+
+  if (!/^https?:\/\//i.test(raw) && /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}([/:?#].*)?$/.test(raw)) {
+    raw = `https://${raw}`;
+  }
+
+  try {
+    const parsed = new URL(raw);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+    return parsed.toString();
+  } catch {
+    return '';
+  }
+}
+
 router.get('/boards', async (req, res) => {
   try {
     const boards = await pinterestService.getBoards();
@@ -74,8 +91,7 @@ router.post('/post', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Description exceeds 800-character limit' });
     }
 
-    let cleanLink = sourceUrl;
-    if (cleanLink && cleanLink.includes('?')) cleanLink = cleanLink.split('?')[0];
+    const cleanLink = normalizeDestinationLink(sourceUrl);
 
     const hashtagText = Array.isArray(hashtags) ? hashtags.join(' ') : '';
     const descWithTags = `${(description || '').trim()}${hashtagText ? `\n\n${hashtagText}` : ''}`.trim();
@@ -165,7 +181,7 @@ router.post('/post', async (req, res) => {
     }
 
     await historyService.add({
-      url: sourceUrl,
+      url: cleanLink || sourceUrl,
       reelData: {
         username: reelMeta?.username || 'unknown',
         caption: reelMeta?.caption || '',

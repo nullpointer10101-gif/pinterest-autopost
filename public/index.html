@@ -95,14 +95,22 @@
                                 <div class="field-wrap">
                                     <label for="field-title">Pin Title</label>
                                     <input type="text" id="field-title" maxlength="100">
+                                    <div id="field-title-meta" class="input-meta">0/100 chars • 0 words</div>
                                 </div>
                                 <div class="field-wrap">
                                     <label for="field-desc">Description</label>
                                     <textarea id="field-desc" rows="5" maxlength="800"></textarea>
+                                    <div id="field-desc-meta" class="input-meta">0/800 chars • 0 words</div>
+                                </div>
+                                <div class="field-wrap">
+                                    <label for="field-link">Destination Link</label>
+                                    <input type="text" id="field-link" maxlength="2048" placeholder="https://your-site.com/product-page">
+                                    <div id="field-link-meta" class="input-meta">Optional: Attach the link users open from your pin.</div>
                                 </div>
                                 <div class="field-wrap">
                                     <label for="field-alt">Alt Text</label>
                                     <input type="text" id="field-alt" maxlength="500" placeholder="Optional alt text">
+                                    <div id="field-alt-meta" class="input-meta">0/500 chars</div>
                                 </div>
                                 <div class="button-row">
                                     <button id="post-now-btn" class="btn btn-primary" type="button">Post Now</button>
