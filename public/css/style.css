@@ -612,6 +612,36 @@ textarea {
     margin-top: 6px;
 }
 
+.engagement-item {
+    border-color: rgba(226, 75, 47, 0.28);
+    background: linear-gradient(135deg, rgba(226, 75, 47, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+.engagement-main {
+    width: 100%;
+}
+
+.engagement-title {
+    font-family: 'Sora', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0;
+}
+
+.engagement-subtitle {
+    margin-top: 4px;
+    color: var(--text-mid);
+    font-size: 12px;
+}
+
+.engagement-note {
+    margin-top: 6px;
+    color: var(--text-soft);
+    font-size: 12px;
+    word-break: break-word;
+}
+
 .range-wrap {
     display: grid;
     grid-template-columns: 1fr auto;

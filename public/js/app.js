@@ -738,7 +738,7 @@ function renderEngagementAuditList() {
     const sourceOk = sourceFilter === 'all' ? true : entry.source === sourceFilter;
     if (!sourceOk) return false;
     if (!search) return true;
-    const haystack = `${entry.action} ${entry.url} ${entry.command} ${entry.actor} ${entry.workflow} ${entry.comment}`.toLowerCase();
+    const haystack = `${entry.action} ${entry.url} ${entry.comment}`.toLowerCase();
     return haystack.includes(search);
   });
 
@@ -762,34 +762,29 @@ function renderEngagementAuditList() {
     .slice(0, 80)
     .map((entry) => {
       const when = entry.when ? new Date(entry.when).toLocaleString() : 'Unknown time';
-      const command = entry.command || 'n/a';
-      const actor = entry.actor || 'n/a';
+      const whenAgo = formatTimeAgo(entry.when);
       const sourceBadge = entry.source === 'github_actions'
         ? '<span class="badge badge-success">GITHUB</span>'
         : `<span class="badge">${escHtml(String(entry.source || 'local').toUpperCase())}</span>`;
-      const workflow = entry.workflow || '';
-      const runInfo = entry.runId ? `Run ${entry.runId}${entry.runNumber ? ` (#${entry.runNumber})` : ''}` : 'Run n/a';
-      const commentMeta = entry.comment ? `<div class="item-meta">${escHtml(entry.comment)}</div>` : '';
-      const jobMeta = entry.job ? `Job: ${escHtml(entry.job)}` : 'Job: n/a';
+      const commentMeta = entry.comment ? `<div class="engagement-note">${escHtml(entry.comment)}</div>` : '';
       const openLink = entry.url ? `<a class="pill-btn" href="${escAttr(entry.url)}" target="_blank" rel="noopener noreferrer">Open Pin</a>` : '';
-      const runLink = entry.workflowUrl ? `<a class="pill-btn" href="${escAttr(entry.workflowUrl)}" target="_blank" rel="noopener noreferrer">Open Run</a>` : '';
+      const pinLabel = extractPinLabel(entry.url);
 
       return `
-        <div class="list-item">
+        <div class="list-item engagement-item">
           <div class="list-item-main">
-            <div>
-              <div class="item-title">${escHtml(entry.action || 'Viewed')} • ${escHtml(when)}</div>
-              <div class="item-meta">${escHtml(entry.url || 'No pin URL')}</div>
-              <div class="item-meta mono">Command: ${escHtml(command)}</div>
-              <div class="item-meta mono">Workflow: ${escHtml(workflow || 'n/a')} • ${escHtml(runInfo)} • ${jobMeta}</div>
-              <div class="item-meta mono">Actor: ${escHtml(actor)}</div>
+            <div class="engagement-main">
+              <div class="engagement-title">${escHtml(entry.action || 'Viewed')}</div>
+              <div class="engagement-subtitle">${escHtml(whenAgo)} • ${escHtml(when)}</div>
+              <div class="engagement-tags">
+                ${sourceBadge}
+                ${pinLabel ? `<span class="badge">${escHtml(pinLabel)}</span>` : ''}
+              </div>
               ${commentMeta}
             </div>
           </div>
           <div class="item-actions">
-            ${sourceBadge}
             ${openLink}
-            ${runLink}
           </div>
         </div>
       `;
@@ -1225,6 +1220,40 @@ function normalizeEngagementEntry(entry = {}) {
     workflowUrl: String(entry.workflowUrl || ''),
     when: entry.engagedAt || entry.createdAt || '',
   };
+}
+
+function extractPinLabel(url) {
+  const clean = String(url || '').trim();
+  if (!clean) return '';
+  try {
+    const parsed = new URL(clean);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const pinIndex = segments.findIndex((segment) => segment === 'pin');
+    const pinId = pinIndex >= 0 ? segments[pinIndex + 1] : '';
+    if (pinId) {
+      return `Pin ${pinId.slice(0, 8)}${pinId.length > 8 ? '…' : ''}`;
+    }
+    return parsed.hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function formatTimeAgo(isoText) {
+  if (!isoText) return 'Unknown time';
+  const timestamp = new Date(isoText).getTime();
+  if (!Number.isFinite(timestamp)) return 'Unknown time';
+
+  const diffMs = Date.now() - timestamp;
+  const absMs = Math.abs(diffMs);
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (absMs < minute) return 'Just now';
+  if (absMs < hour) return `${Math.round(absMs / minute)} min ago`;
+  if (absMs < day) return `${Math.round(absMs / hour)} hr ago`;
+  return `${Math.round(absMs / day)} day ago`;
 }
 
 function updateComposerMeta() {
