@@ -1,12 +1,11 @@
 const aiService = require('./aiService');
-const pinterestService = require('./pinterestService');
 const historyService = require('./historyService');
 
 let createPinWithBot = null;
 try {
   ({ createPinWithBot } = require('./puppeteerService'));
 } catch (err) {
-  console.warn('[Queue] Puppeteer service unavailable. Queue will use API mode.');
+  console.warn('[Queue] Puppeteer service unavailable. Queue will rely on GitHub Actions bot.');
 }
 
 const IS_SERVERLESS = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
@@ -23,14 +22,12 @@ async function saveQueue(queue) {
 }
 
 function getPostingMode() {
-  return (process.env.PINTEREST_POSTING_MODE || 'auto').toLowerCase();
+  // Always bot mode now — no API posting
+  return 'bot';
 }
 
 function shouldUseBrowserBot() {
-  const mode = getPostingMode();
-  if (mode === 'api') return false;
-  if (mode === 'bot') return !!createPinWithBot;
-  if (IS_SERVERLESS) return false;
+  // Always true if puppeteer is available
   return !!createPinWithBot;
 }
 
@@ -123,27 +120,20 @@ async function processNextInQueue() {
     const mediaUrl = item.mediaUrl;
 
     let result;
-    let method = 'api';
+    const method = 'browser_bot';
 
-    if (shouldUseBrowserBot()) {
-      method = 'browser_bot';
-      result = await createPinWithBot({
-        title,
-        description,
-        alt_text: altText,
-        link,
-        media_source: { url: mediaUrl },
-      });
-    } else {
-      const pin = await pinterestService.createPin({
-        title,
-        description,
-        altText,
-        mediaUrl,
-        link,
-      });
-      result = { success: true, pin };
+    // Always use browser bot — no API path
+    if (!createPinWithBot) {
+      throw new Error('Puppeteer browser bot is not available in this runtime. Ensure this runs in GitHub Actions.');
     }
+
+    result = await createPinWithBot({
+      title,
+      description,
+      alt_text: altText,
+      link,
+      media_source: { url: mediaUrl },
+    });
 
     item.status = 'completed';
     item.method = method;

@@ -1,10 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const pinterestService = require('../services/pinterestService');
 const historyService = require('../services/historyService');
 const queueService = require('../services/queueService');
 const githubService = require('../services/githubService');
-const { resolvePostingMode, IS_SERVERLESS, puppeteerService } = require('./utils');
 
 function normalizeSessionCookie(input) {
   let raw = String(input || '').trim();
@@ -48,36 +46,35 @@ function normalizeDestinationLink(input) {
   }
 }
 
+// ─── Status — GitHub Bot mode info ────────────────────────────────────────────
 router.get('/boards', async (req, res) => {
-  try {
-    const boards = await pinterestService.getBoards();
-    res.json({ success: true, boards });
-  } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
-  }
+  // No API boards — the bot uses the default board on Pinterest
+  res.json({ success: true, boards: [] });
 });
 
 router.get('/status', async (req, res) => {
   try {
-    const status = await pinterestService.getStatus();
     const session = await historyService.getSessionCookie();
-    const posting = resolvePostingMode();
     res.json({
       success: true,
-      ...status,
+      connected: !!session.hasSession,
+      username: null,
+      profileImage: null,
+      isDemoMode: false,
       sessionLinked: !!session.hasSession,
       sessionSource: session.source,
       sessionUpdatedAt: session.updatedAt,
-      puppeteerAvailable: !!puppeteerService,
-      postingMode: posting.configuredMode,
-      resolvedPostingMode: posting.resolvedMode,
-      isServerless: IS_SERVERLESS,
+      postingMode: 'bot',
+      resolvedPostingMode: 'bot',
+      isServerless: false,
+      message: 'GitHub Bot mode — all posts go through GitHub Actions.',
     });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }
 });
 
+// ─── Post Now — GitHub Bot Only (No API, No Queue Wait) ───────────────────────
 router.post('/post', async (req, res) => {
   try {
     const { title, description, altText, hashtags, mediaUrl, sourceUrl, reelMeta } = req.body;
@@ -92,143 +89,41 @@ router.post('/post', async (req, res) => {
     }
 
     const cleanLink = normalizeDestinationLink(sourceUrl);
-
     const hashtagText = Array.isArray(hashtags) ? hashtags.join(' ') : '';
     const descWithTags = `${(description || '').trim()}${hashtagText ? `\n\n${hashtagText}` : ''}`.trim();
 
-    const pinData = {
+    const missionId = `mission_${Date.now()}`;
+
+    // 🚀 INSTANT GitHub Bot — prepend to queue front + fire immediately
+    console.log(`[Post Mission] 🚀 Instant GitHub Bot — queueing + firing NOW...`);
+
+    await queueService.addToQueue([{
+      id: missionId,
       title: title.trim(),
       description: descWithTags,
-      link: cleanLink,
-      alt_text: altText ? altText.trim() : undefined,
-      media_source: {
-        source_type: 'video_url',
-        url: mediaUrl,
-      },
-    };
+      altText: altText ? altText.trim() : '',
+      mediaUrl,
+      sourceUrl: cleanLink,
+      originalSourceUrl: sourceUrl || '',
+      username: reelMeta?.username || 'unknown',
+      caption: reelMeta?.caption || '',
+      thumbnailUrl: reelMeta?.thumbnailUrl || mediaUrl,
+      reelMeta,
+      isInstant: true,
+    }], true); // true = prepend to front of queue
 
-    const posting = resolvePostingMode();
-    let result;
-    
-    // DECISION: API timeout & video_url bugs are fixed! We now prefer Native API for 'Post Now'
-    // This allows manual direct posts to process instantly (10-15s) instead of waiting for GitHub Actions.
-    const hasApiToken = !!(await pinterestService.getStatus()).connected;
-    
-    if (hasApiToken && !posting.useBrowserBot) {
-      console.log('[Post Mission] Attempting Ultra-Fast NATIVE API...');
-      try {
-        const apiResult = await pinterestService.createPin({
-          title: pinData.title,
-          description: pinData.description,
-          altText: pinData.alt_text || '',
-          mediaUrl,
-          link: cleanLink,
-        });
-        
-        result = { success: true, pin: apiResult };
-        console.log('[Post Mission] NATIVE API success!');
-        
-        // We will jump straight to the history logging below
-      } catch (apiErr) {
-        console.warn('[Post Mission] API failed, falling back to Cloud Bot:', apiErr.message);
-        // Fall through to Cloud Bot logic if API fails
-      }
-    }
-    
-    // Fallback: If API fails/missing, use Browser Bot
-    if (!result) {
-      if (!IS_SERVERLESS) {
-        console.log('[Post Mission] Running LOCAL Browser Bot for INSTANT post...');
-        const puppeteerService = require('../services/puppeteerService');
-        try {
-          const pinResult = await puppeteerService.createPinWithBot({
-            title: pinData.title,
-            description: pinData.description,
-            alt_text: pinData.alt_text || '',
-            media_source: { url: mediaUrl },
-            link: cleanLink,
-          });
-          result = { success: true, pin: pinResult.pin };
-        } catch (botErr) {
-          throw new Error('Local Browser Bot failed: ' + botErr.message);
-        }
-      } else {
-        console.log('[Post Mission] Routing to Cloud Bot (GitHub Actions)...');
-        const missionId = `mission_${Date.now()}`;
-        
-        // 1. Add to the FRONT of the queue for immediate processing
-        await queueService.addToQueue([{
-          id: missionId,
-          title: pinData.title,
-          description: pinData.description,
-          altText: pinData.alt_text || '',
-          mediaUrl,
-          sourceUrl: cleanLink,
-          reelMeta,
-          isInstant: true // Flag for the automation to prioritize this
-        }], true); // true = prepend to queue
-        
-        // 2. Wake up the GitHub Action immediately using the new INSTANT pipeline
-        githubService.triggerInstantMission().catch(() => {});
-
-        return res.json({
-          success: true,
-          queued: true,
-          missionId,
-          message: 'Instant Cloud Mission launched! Bot will finish in seconds...',
-        });
-      }
-    }
-
-    await historyService.add({
-      url: cleanLink || sourceUrl,
-      reelData: {
-        username: reelMeta?.username || 'unknown',
-        caption: reelMeta?.caption || '',
-        thumbnailUrl: reelMeta?.thumbnailUrl || '',
-        mediaType: reelMeta?.mediaType || 'video',
-      },
-      aiContent: {
-        title: title.trim(),
-        description: (description || '').trim(),
-        hashtags: hashtags || [],
-      },
-      pinterestPin: {
-        id: result.pin?.id || `pin_${Date.now()}`,
-        url: result.pin?.url || '#',
-        method: posting.useBrowserBot ? 'browser_bot' : 'api',
-      },
-      status: 'success',
-      postedAt: new Date().toISOString(),
+    // Fire GitHub Actions instant mission — fire-and-forget, no blocking
+    githubService.triggerInstantMission().catch((err) => {
+      console.error('[Post Mission] GitHub trigger background error:', err.message);
     });
 
-    res.json({
+    return res.json({
       success: true,
-      message: posting.useBrowserBot
-        ? 'Posted successfully with browser bot.'
-        : 'Posted successfully with Pinterest API.',
-      pin: result.pin,
+      queued: true,
+      missionId,
+      message: '🚀 Instant Mission fired! GitHub Bot will post in ~60 seconds.',
     });
   } catch (error) {
-    await historyService.add({
-      url: req.body?.sourceUrl || '',
-      reelData: {
-        username: req.body?.reelMeta?.username || 'unknown',
-        caption: '',
-        thumbnailUrl: req.body?.reelMeta?.thumbnailUrl || '',
-        mediaType: 'video',
-      },
-      aiContent: {
-        title: req.body?.title || 'Failed post',
-        description: '',
-        hashtags: [],
-      },
-      pinterestPin: null,
-      status: 'error',
-      error: error.message,
-      postedAt: new Date().toISOString(),
-    });
-
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -259,41 +154,6 @@ router.post('/session/link', async (req, res) => {
       success: true,
       session,
       message: 'Session linked successfully. No restart required.',
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post('/session/auto-link', async (req, res) => {
-  try {
-    if (IS_SERVERLESS) {
-      return res.status(400).json({
-        success: false,
-        error: 'Auto-link works only on local desktop runtime, not on serverless hosting.',
-      });
-    }
-
-    if (!puppeteerService || typeof puppeteerService.autoLinkSessionFromLocalBrowser !== 'function') {
-      return res.status(500).json({
-        success: false,
-        error: 'Puppeteer auto-link is unavailable in this environment.',
-      });
-    }
-
-    const timeoutRaw = Number.parseInt(req.body?.timeoutMs || '120000', 10);
-    const timeoutMs = Number.isFinite(timeoutRaw) ? Math.max(20000, timeoutRaw) : 120000;
-    const profileDir = String(req.body?.profileDir || '').trim();
-
-    const result = await puppeteerService.autoLinkSessionFromLocalBrowser({
-      timeoutMs,
-      profileDir,
-    });
-
-    return res.json({
-      success: true,
-      ...result,
-      message: 'Session auto-linked from local browser.',
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

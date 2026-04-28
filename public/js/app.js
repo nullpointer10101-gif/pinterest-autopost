@@ -441,7 +441,7 @@ async function handlePostNow() {
   if (!payload) return;
 
   btn.disabled = true;
-  btn.textContent = 'Posting...';
+  btn.textContent = '🚀 Firing...';
 
   try {
     const response = await apiRequest('/api/pinterest/post', {
@@ -449,7 +449,10 @@ async function handlePostNow() {
       body: payload,
     });
 
-    showToast(response.message || 'Mission posted successfully.', 'success');
+    showToast(response.message || '🚀 Mission fired! GitHub Bot will post shortly.', 'success');
+    const preview = byId('preview-section');
+    if (preview) preview.classList.add('hidden');
+    resetPreviewMedia();
     await refreshAll();
   } catch (error) {
     showToast(error.message || 'Post failed.', 'error');
@@ -588,7 +591,7 @@ function renderQueueList() {
 
   list.innerHTML = rows
     .map((item) => {
-      const thumb = item.thumbnailUrl || item.mediaUrl || '';
+      const thumb = `/api/queue/thumb/${encodeURIComponent(item.id)}`;
       const title = escHtml(item.title || 'Untitled mission');
       const meta = escHtml(item.sourceUrl || item.username || 'manual');
       const status = String(item.status || 'pending');
@@ -600,7 +603,7 @@ function renderQueueList() {
       return `
         <div class="list-item">
           <div class="list-item-main">
-            <img class="thumb-img" src="${escAttr(proxyMediaUrl(thumb))}" alt="Queue item">
+            <img class="thumb-img" src="${escAttr(thumb)}" alt="Queue item">
             <div>
               <div class="item-title">${title}</div>
               <div class="item-meta">${meta}</div>
@@ -793,10 +796,10 @@ function setBadge(el, text, tone) {
 async function processQueueNow() {
   const button = byId('run-bot-btn');
   button.disabled = true;
-  button.textContent = 'Running...';
+  button.textContent = '🚀 Firing...';
   try {
     const response = await apiRequest('/api/queue/process', { method: 'POST' });
-    showToast(response.message || 'Queue run started.', 'success');
+    showToast(response.message || '🚀 GitHub Bot fired!', 'success');
     await refreshAll();
   } catch (error) {
     showToast(error.message || 'Queue trigger failed.', 'error');

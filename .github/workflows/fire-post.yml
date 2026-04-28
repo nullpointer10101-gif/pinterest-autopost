@@ -1,0 +1,52 @@
+name: 🚀 Fire Post (Instant)
+
+on:
+  workflow_dispatch:
+
+# Prevent multiple fire-posts from running at the same time
+concurrency:
+  group: fire-post
+  cancel-in-progress: false
+
+jobs:
+  fire-post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache Puppeteer Browser
+        id: cache-puppeteer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies (Production only)
+        run: npm ci --omit=dev
+
+      - name: Install Puppeteer Browser
+        if: steps.cache-puppeteer.outputs.cache-hit != 'true'
+        run: npx puppeteer browsers install chrome
+
+      - name: 🚀 Fire Post
+        run: node scripts/fire-post.js
+        env:
+          NODE_ENV: production
+          FIRE_POST_MAX: 5
+          PINTEREST_POSTING_MODE: bot
+          PINTEREST_SESSION_COOKIE: ${{ secrets.PINTEREST_SESSION_COOKIE }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          APP_STATE_KEY: ${{ secrets.APP_STATE_KEY || 'pinterest_autopost_state_v1' }}

@@ -4,11 +4,9 @@ const cors = require('cors');
 const path = require('path');
 
 const apiRoutes = require('./routes/api');
-const queueService = require('./services/queueService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const IS_SERVERLESS = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -30,23 +28,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-// In serverless environments there is no reliable always-on process.
-if (!IS_SERVERLESS) {
-  setInterval(() => {
-    queueService.processNextInQueue().catch((err) => {
-      console.error('[Queue Worker] Error:', err.message);
-    });
-  }, 2 * 60 * 1000);
-}
-
+// No local queue processor — all posting goes through GitHub Actions bot
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`\nReel to Pinterest Auto Poster running at http://localhost:${PORT}`);
     console.log(`Dashboard: http://localhost:${PORT}`);
     console.log(`API:       http://localhost:${PORT}/api`);
-    if (!IS_SERVERLESS) {
-      console.log('Queue processor: enabled (checks every 2 mins)');
-    }
+    console.log('Posting mode: GitHub Actions Bot (instant fire-and-forget)');
     console.log('');
   });
 }

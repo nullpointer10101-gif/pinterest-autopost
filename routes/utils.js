@@ -18,12 +18,11 @@ function getRedirectUri(req) {
 }
 
 function resolvePostingMode() {
-  const configuredMode = queueService.getPostingMode ? queueService.getPostingMode() : 'auto';
-  const useBrowserBot = !!(puppeteerService && queueService.shouldUseBrowserBot && queueService.shouldUseBrowserBot());
+  // Always GitHub Bot mode — no API posting
   return {
-    configuredMode,
-    resolvedMode: useBrowserBot ? 'bot' : 'api',
-    useBrowserBot,
+    configuredMode: 'bot',
+    resolvedMode: 'bot',
+    useBrowserBot: true,
   };
 }
 

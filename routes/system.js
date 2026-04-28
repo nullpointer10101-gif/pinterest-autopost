@@ -37,15 +37,12 @@ router.get('/status', async (req, res) => {
         nodeVersion: process.version,
       },
       posting: {
-        configuredMode: posting.configuredMode,
-        resolvedMode: posting.resolvedMode,
-        botAvailable: !!puppeteerService,
-        botUsable: posting.useBrowserBot,
-        apiTokenConfigured: !!process.env.PINTEREST_ACCESS_TOKEN,
+        configuredMode: 'bot',
+        resolvedMode: 'bot',
+        botAvailable: true,
+        botUsable: true,
         sessionCookieConfigured: !!session.hasSession,
-        recommendation: IS_SERVERLESS
-          ? 'Use API mode for reliable free-host deployments.'
-          : 'Bot mode can run on long-lived servers or local machine.',
+        recommendation: 'GitHub Bot mode — all posting goes through GitHub Actions.',
       },
       queue: queueStats,
       storage,
