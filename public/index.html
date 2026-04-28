@@ -65,9 +65,12 @@
 
                         <div class="field-wrap">
                             <label for="reel-url">Instagram Reel URL</label>
-                            <div class="inline-field">
+                            <div class="inline-field inline-field-reel">
                                 <input type="text" id="reel-url" placeholder="https://www.instagram.com/reel/...">
-                                <button id="extract-btn" class="btn btn-primary" type="button">Extract</button>
+                                <div class="inline-actions">
+                                    <button id="paste-reel-btn" class="btn btn-secondary compact-btn" type="button">Paste</button>
+                                    <button id="extract-btn" class="btn btn-primary" type="button">Extract</button>
+                                </div>
                             </div>
                         </div>
 
@@ -80,7 +83,14 @@
                         </div>
 
                         <section id="preview-section" class="preview-shell hidden">
-                            <img id="preview-img" class="preview-img" alt="Mission preview">
+                            <div class="preview-media-wrap">
+                                <img id="preview-img" class="preview-img" alt="Mission preview">
+                                <video id="preview-video" class="preview-video hidden" muted loop playsinline preload="metadata"></video>
+                                <div class="preview-media-actions">
+                                    <button id="preview-audio-btn" class="pill-btn hidden" type="button">Unmute</button>
+                                    <button id="preview-scroll-btn" class="pill-btn hidden" type="button">No Scroll: Off</button>
+                                </div>
+                            </div>
                             <div class="preview-fields">
                                 <div class="field-wrap">
                                     <label for="field-title">Pin Title</label>

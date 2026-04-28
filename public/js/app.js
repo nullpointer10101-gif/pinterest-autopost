@@ -7,6 +7,11 @@ const state = {
   drafts: [],
   refreshTimer: null,
   clockTimer: null,
+  preview: {
+    isVideo: false,
+    muted: true,
+    scrollLocked: false,
+  },
 };
 
 const REFRESH_INTERVAL_MS = 30000;
@@ -19,6 +24,9 @@ document.addEventListener('DOMContentLoaded', () => {
   startClock();
   refreshAll();
   setAutoRefresh(true);
+  window.addEventListener('beforeunload', () => {
+    setPreviewScrollLock(false);
+  });
 });
 
 function bindEvents() {
@@ -27,7 +35,10 @@ function bindEvents() {
   });
 
   on('extract-btn', 'click', handleExtract);
+  on('paste-reel-btn', 'click', pasteReelUrlFromClipboard);
   on('manual-load-btn', 'click', handleManualLoad);
+  on('preview-audio-btn', 'click', togglePreviewAudio);
+  on('preview-scroll-btn', 'click', togglePreviewScrollLock);
   on('post-now-btn', 'click', handlePostNow);
   on('queue-btn', 'click', handleQueue);
   on('save-draft-btn', 'click', saveDraftFromName);
@@ -88,6 +99,10 @@ function switchTab(tab) {
   document.querySelectorAll('.panel').forEach((panel) => {
     panel.classList.toggle('hidden', panel.id !== `panel-${tab}`);
   });
+
+  if (tab !== 'dashboard') {
+    setPreviewScrollLock(false);
+  }
 
   if (tab === 'queue') renderQueueList();
   if (tab === 'history') renderHistoryList();
@@ -308,7 +323,7 @@ function handleManualLoad() {
     return;
   }
 
-  const isVideo = /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url);
+  const isVideo = isVideoMedia({ mediaUrl: url, mediaType: '' });
   state.lastExtracted = {
     sourceUrl: '',
     reelData: {
@@ -332,27 +347,77 @@ function handleManualLoad() {
 function showPreview(payload) {
   const section = byId('preview-section');
   const image = byId('preview-img');
+  const video = byId('preview-video');
+  const audioBtn = byId('preview-audio-btn');
+  const scrollBtn = byId('preview-scroll-btn');
   const title = byId('field-title');
   const desc = byId('field-desc');
   const alt = byId('field-alt');
 
-  if (!section || !image || !title || !desc || !alt) return;
+  if (!section || !image || !video || !audioBtn || !scrollBtn || !title || !desc || !alt) return;
 
   const reelData = payload.reelData || {};
   const aiContent = payload.aiContent || {};
-  const previewSource = reelData.thumbnailUrl || reelData.mediaUrl || '';
+  const isVideo = isVideoMedia(reelData);
+  const fallbackImage = reelData.thumbnailUrl || reelData.mediaUrl || 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=400';
+  const videoSource = reelData.mediaUrl || reelData.thumbnailUrl || '';
 
-  image.src = proxyMediaUrl(previewSource);
+  resetPreviewMedia();
+  state.preview.isVideo = isVideo;
+  state.preview.muted = true;
+
+  image.src = proxyMediaUrl(fallbackImage);
   image.onerror = () => {
     image.onerror = null;
-    image.src = previewSource || 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=400';
+    image.src = fallbackImage;
   };
+
+  if (isVideo && videoSource) {
+    video.classList.remove('hidden');
+    image.classList.add('hidden');
+    audioBtn.classList.remove('hidden');
+    scrollBtn.classList.remove('hidden');
+
+    const proxiedVideo = proxyMediaUrl(videoSource);
+    video.dataset.directTried = '0';
+    video.src = proxiedVideo;
+    video.muted = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.loop = true;
+    video.controls = true;
+    video.load();
+
+    video.onloadedmetadata = () => {
+      tryPlayPreviewVideo();
+    };
+    video.onerror = () => {
+      if (video.dataset.directTried !== '1' && proxiedVideo !== videoSource) {
+        video.dataset.directTried = '1';
+        video.src = videoSource;
+        video.load();
+        return;
+      }
+      video.classList.add('hidden');
+      image.classList.remove('hidden');
+      audioBtn.classList.add('hidden');
+      showToast('Video preview failed. Showing image preview instead.', 'info');
+    };
+
+    updatePreviewAudioButton();
+  } else {
+    image.classList.remove('hidden');
+    video.classList.add('hidden');
+    audioBtn.classList.add('hidden');
+    scrollBtn.classList.remove('hidden');
+  }
 
   title.value = (aiContent.title || 'New pin mission').slice(0, 100);
   desc.value = (aiContent.description || '').slice(0, 800);
   alt.value = '';
 
   section.classList.remove('hidden');
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function handlePostNow() {
@@ -412,6 +477,7 @@ async function handleQueue() {
     showToast(response.message || 'Mission added to queue.', 'success');
     const preview = byId('preview-section');
     if (preview) preview.classList.add('hidden');
+    resetPreviewMedia();
     await refreshAll();
   } catch (error) {
     showToast(error.message || 'Queue action failed.', 'error');
@@ -913,6 +979,105 @@ function deleteDraft(id) {
   state.drafts = state.drafts.filter((draft) => draft.id !== id);
   persistDrafts();
   renderDrafts();
+}
+
+async function pasteReelUrlFromClipboard() {
+  const input = byId('reel-url');
+  if (!input) return;
+
+  try {
+    if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+      throw new Error('Clipboard read is not available in this browser.');
+    }
+    const text = String(await navigator.clipboard.readText()).trim();
+    if (!text) {
+      showToast('Clipboard is empty.', 'info');
+      return;
+    }
+    input.value = text;
+    input.focus();
+
+    if (/instagram\.com\/(reel|p|tv)\//i.test(text)) {
+      showToast('Instagram URL pasted.', 'success');
+    } else {
+      showToast('Text pasted. Make sure it is a valid Instagram reel URL.', 'info');
+    }
+  } catch (error) {
+    showToast(error.message || 'Clipboard paste failed.', 'error');
+  }
+}
+
+function isVideoMedia(reelData = {}) {
+  const mediaType = String(reelData.mediaType || '').toLowerCase();
+  if (mediaType.includes('video')) return true;
+  const mediaUrl = String(reelData.mediaUrl || '').toLowerCase();
+  return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(mediaUrl);
+}
+
+function tryPlayPreviewVideo() {
+  const video = byId('preview-video');
+  if (!video || video.classList.contains('hidden')) return;
+  const playPromise = video.play();
+  if (playPromise && typeof playPromise.catch === 'function') {
+    playPromise.catch(() => {});
+  }
+}
+
+function togglePreviewAudio() {
+  const video = byId('preview-video');
+  if (!video || video.classList.contains('hidden')) {
+    showToast('No video loaded in preview.', 'info');
+    return;
+  }
+
+  video.muted = !video.muted;
+  state.preview.muted = !!video.muted;
+  updatePreviewAudioButton();
+  tryPlayPreviewVideo();
+}
+
+function updatePreviewAudioButton() {
+  const audioBtn = byId('preview-audio-btn');
+  if (!audioBtn) return;
+  audioBtn.textContent = state.preview.muted ? 'Unmute' : 'Mute';
+}
+
+function togglePreviewScrollLock() {
+  setPreviewScrollLock(!state.preview.scrollLocked);
+}
+
+function setPreviewScrollLock(locked) {
+  state.preview.scrollLocked = !!locked;
+  document.body.classList.toggle('preview-scroll-lock', state.preview.scrollLocked);
+
+  const scrollBtn = byId('preview-scroll-btn');
+  if (scrollBtn) {
+    scrollBtn.textContent = state.preview.scrollLocked ? 'No Scroll: On' : 'No Scroll: Off';
+  }
+}
+
+function resetPreviewMedia() {
+  setPreviewScrollLock(false);
+  state.preview.isVideo = false;
+  state.preview.muted = true;
+
+  const image = byId('preview-img');
+  const video = byId('preview-video');
+  const audioBtn = byId('preview-audio-btn');
+  const scrollBtn = byId('preview-scroll-btn');
+
+  if (image) image.classList.remove('hidden');
+  if (video) {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    video.classList.add('hidden');
+  }
+  if (audioBtn) audioBtn.classList.add('hidden');
+  if (scrollBtn) {
+    scrollBtn.classList.add('hidden');
+    scrollBtn.textContent = 'No Scroll: Off';
+  }
 }
 
 async function apiRequest(url, options = {}) {
