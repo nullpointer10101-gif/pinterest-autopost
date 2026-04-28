@@ -4,7 +4,8 @@ const REPO = 'pinterest-autopost';
 const OWNER = 'nullpointer10101-gif';
 
 function getHeaders() {
-  const token = process.env.GITHUB_TOKEN;
+  // Use GH_PAT_TOKEN if available, otherwise fallback to GITHUB_TOKEN
+  const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN;
   if (!token) return null;
   return {
     Authorization: `Bearer ${token}`,
