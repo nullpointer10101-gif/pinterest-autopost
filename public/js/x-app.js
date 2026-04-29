@@ -126,7 +126,13 @@ async function fireXQueue() {
 
 async function startXEngager() {
   const btn = document.getElementById('x-engage-btn');
-  const count = document.getElementById('engage-count')?.value || 3;
+  const countInput = document.getElementById('x-engage-count');
+  const count = countInput ? countInput.value : 3;
+  
+  if (count < 1 || count > 20) {
+    return showToast('Engagement count must be between 1 and 20', 'error');
+  }
+
   btn.disabled = true;
   try {
     const res = await fetch('/api/x/engage', { 
