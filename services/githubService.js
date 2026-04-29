@@ -14,7 +14,7 @@ function getHeaders() {
   };
 }
 
-async function dispatchWorkflow(workflowFile, label) {
+async function dispatchWorkflow(workflowFile, label, inputs = {}) {
   const headers = getHeaders();
   if (!headers) {
     console.warn(`[GitHub] No GITHUB_TOKEN configured. ${label} skipped.`);
@@ -22,10 +22,14 @@ async function dispatchWorkflow(workflowFile, label) {
   }
 
   try {
-    console.log(`[GitHub] 🚀 Triggering ${label} (${workflowFile})...`);
+    console.log(`[GitHub] 🚀 Triggering ${label} (${workflowFile})...`, inputs);
+    const body = { ref: 'main' };
+    if (Object.keys(inputs).length > 0) {
+      body.inputs = inputs;
+    }
     await axios.post(
       `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${workflowFile}/dispatches`,
-      { ref: 'main' },
+      body,
       { headers }
     );
     console.log(`[GitHub] ✅ ${label} triggered successfully.`);
