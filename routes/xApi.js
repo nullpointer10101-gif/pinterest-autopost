@@ -110,7 +110,19 @@ router.post('/engage', async (req, res) => {
   try {
     const count = parseInt(req.body.count, 10) || 3;
     console.log(`[X-Engage] 🚀 Firing GitHub Bot instant engagement with count: ${count}...`);
-    githubService.triggerXInstantEngagement(count).catch(() => {});
+    
+    const result = await githubService.triggerXInstantEngagement(count);
+    
+    if (!result.success) {
+      return res.status(500).json({ 
+        success: false, 
+        error: result.error || 'GitHub dispatch failed',
+        hint: !process.env.GH_PAT_TOKEN 
+          ? 'GH_PAT_TOKEN is missing from Vercel environment variables. Add it with workflow scope.' 
+          : 'Check that GH_PAT_TOKEN has the correct workflow permissions.'
+      });
+    }
+
     return res.json({ 
       success: true, 
       queued: true, 
