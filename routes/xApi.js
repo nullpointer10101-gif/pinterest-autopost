@@ -133,4 +133,62 @@ router.post('/engage', async (req, res) => {
   }
 });
 
+// === DIAGNOSTIC: Test GitHub dispatch ===
+router.get('/debug-dispatch', async (req, res) => {
+  const axios = require('axios');
+  const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN;
+
+  if (!token) {
+    return res.json({ success: false, error: 'No token found', env: { GH_PAT_TOKEN: false, GITHUB_TOKEN: false } });
+  }
+
+  const tokenPreview = `${token.slice(0, 6)}...${token.slice(-4)}`;
+
+  try {
+    // Test 1: Check token scopes
+    const meResp = await axios.get('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      }
+    });
+    const scopes = meResp.headers['x-oauth-scopes'] || 'not returned';
+    const login = meResp.data.login;
+
+    // Test 2: Try actual dispatch
+    let dispatchStatus = null;
+    let dispatchError = null;
+    try {
+      const dispatchResp = await axios.post(
+        `https://api.github.com/repos/nullpointer10101-gif/pinterest-autopost/actions/workflows/x-instant-engagement.yml/dispatches`,
+        { ref: 'main', inputs: { count: '1' } },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          }
+        }
+      );
+      dispatchStatus = dispatchResp.status;
+    } catch (e) {
+      dispatchError = { status: e.response?.status, message: e.response?.data?.message || e.message };
+    }
+
+    return res.json({
+      success: true,
+      token: tokenPreview,
+      tokenType: process.env.GH_PAT_TOKEN ? 'GH_PAT_TOKEN' : 'GITHUB_TOKEN',
+      githubLogin: login,
+      scopes,
+      dispatchStatus,
+      dispatchError,
+      hasWorkflowScope: scopes.includes('workflow') || scopes.includes('repo'),
+    });
+  } catch (e) {
+    return res.json({ success: false, tokenPreview, error: e.response?.data?.message || e.message });
+  }
+});
+
 module.exports = router;
