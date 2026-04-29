@@ -9,6 +9,7 @@ async function main() {
     maxPostsPerRun: process.env.AUTOMATION_MAX_POSTS_PER_RUN,
     engagementCount: process.env.AUTOMATION_ENGAGEMENTS_PER_HOUR,
     timeZone: process.env.AUTOMATION_TIMEZONE || 'Asia/Calcutta',
+    force: process.env.GITHUB_EVENT_NAME === 'workflow_dispatch',
   });
 
   console.log('[Automation] Hourly run result:');

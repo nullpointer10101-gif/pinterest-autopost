@@ -62,6 +62,20 @@ async function runHourlyAutomation(options = {}) {
 
   const dateKey = getDateKey(timeZone);
   const automation = await historyService.getAutomationState();
+
+  if (!options.force && automation.lastRunAt) {
+    const lastRunTime = new Date(automation.lastRunAt).getTime();
+    const minutesSinceLastRun = (Date.now() - lastRunTime) / (1000 * 60);
+    if (minutesSinceLastRun < 45) {
+      console.log(`[Automation] Skipped: Last run was ${Math.round(minutesSinceLastRun)}m ago (min 45m).`);
+      return {
+        success: true,
+        skipped: true,
+        message: `Skipped to prevent double-execution. Last run was ${Math.round(minutesSinceLastRun)}m ago.`,
+      };
+    }
+  }
+
   let postsToday = dateKey === automation.dateKey ? (automation.postsToday || 0) : 0;
 
   const postsRemaining = Math.max(0, maxPostsPerDay - postsToday);

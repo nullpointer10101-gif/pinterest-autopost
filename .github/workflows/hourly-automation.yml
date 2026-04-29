@@ -2,7 +2,8 @@ name: Unlimited Pinterest Automation (Public Mode)
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '14 * * * *'
+    - cron: '44 * * * *'
   workflow_dispatch:
 
 jobs:
