@@ -317,6 +317,12 @@ async function runAutoEngagerSafe(options = {}) {
         continue;
       }
 
+      const tweetUrl = await page.evaluate((tweet) => {
+        const timeLink = tweet.querySelector('time')?.closest('a');
+        if (timeLink && timeLink.href) return timeLink.href;
+        return 'https://x.com/home';
+      }, tweetElementHandle);
+
       let actionTaken = 'Viewed';
       
       try {
@@ -368,7 +374,7 @@ async function runAutoEngagerSafe(options = {}) {
       }
 
       await xHistoryService.addEngagement({
-        url: 'https://x.com/home', // since we engage in feed
+        url: tweetUrl,
         action: actionTaken,
         comment: commentLeft ? theComment : (actionTaken !== 'Viewed' ? '' : 'Failed to Engage'),
         source: context.source,
