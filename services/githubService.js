@@ -56,4 +56,25 @@ async function triggerInstantEngagement() {
   return dispatchWorkflow('instant-engagement.yml', 'Instant Engagement');
 }
 
-module.exports = { triggerFirePost, triggerAutomation, triggerInstantMission, triggerInstantEngagement };
+// X Automation Triggers
+async function triggerXFirePost() {
+  return dispatchWorkflow('x-fire-post.yml', 'X Fire Post');
+}
+
+async function triggerXAutomation() {
+  return dispatchWorkflow('x-hourly-automation.yml', 'X Hourly Automation');
+}
+
+async function triggerXInstantEngagement() {
+  return dispatchWorkflow('x-instant-engagement.yml', 'X Instant Engagement');
+}
+
+module.exports = { 
+  triggerFirePost, 
+  triggerAutomation, 
+  triggerInstantMission, 
+  triggerInstantEngagement,
+  triggerXFirePost,
+  triggerXAutomation,
+  triggerXInstantEngagement
+};

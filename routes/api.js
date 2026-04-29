@@ -9,6 +9,7 @@ const systemRoutes = require('./system');
 const historyRoutes = require('./history');
 const automationRoutes = require('./automation');
 const autopostRoutes = require('./autopost');
+const xApiRoutes = require('./xApi');
 
 // Mount sub-routers
 // We mount most at root '/' to maintain exact backwards compatibility with existing frontend paths
@@ -20,5 +21,6 @@ router.use('/', historyRoutes);
 router.use('/autopost', autopostRoutes);
 router.use('/queue', queueRoutes);
 router.use('/automation', automationRoutes);
+router.use('/x', xApiRoutes);
 
 module.exports = router;

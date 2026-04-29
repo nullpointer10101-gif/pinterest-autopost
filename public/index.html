@@ -31,6 +31,7 @@
 
         <nav class="tab-nav" aria-label="Main tabs">
             <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-grid" class="tab-icon"></i><span>Dashboard</span></button>
+            <button class="tab-btn" data-tab="x-dashboard" type="button"><i data-lucide="twitter" class="tab-icon"></i><span>X (Twitter)</span></button>
             <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="list-ordered" class="tab-icon"></i><span>Queue</span></button>
             <button class="tab-btn" data-tab="lab" type="button"><i data-lucide="rocket" class="tab-icon"></i><span>Booster</span></button>
             <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Engage Log</span></button>
@@ -174,6 +175,70 @@
                 </div>
             </section>
 
+            <section id="panel-x-dashboard" class="panel hidden">
+                <div class="panel-grid panel-grid-main">
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="twitter" class="heading-icon"></i>X Mission Builder</h2>
+                            <p class="muted-text">Create and queue tweets.</p>
+                        </div>
+
+                        <div class="field-wrap">
+                            <label for="x-manual-media-url">Media URL (Image/Video)</label>
+                            <div class="inline-field">
+                                <input type="text" id="x-manual-media-url" placeholder="Direct image/video URL">
+                                <button id="x-manual-load-btn" class="btn btn-secondary" type="button"><i data-lucide="download" class="btn-icon"></i><span>Load</span></button>
+                            </div>
+                        </div>
+
+                        <section id="x-preview-section" class="preview-shell hidden">
+                            <div class="preview-media-wrap">
+                                <img id="x-preview-img" class="preview-img" alt="Mission preview">
+                                <video id="x-preview-video" class="preview-video hidden" muted loop playsinline preload="metadata"></video>
+                            </div>
+                            <div class="preview-fields">
+                                <div class="field-wrap">
+                                    <label for="x-field-text">Tweet Text</label>
+                                    <textarea id="x-field-text" rows="5" maxlength="280"></textarea>
+                                    <div id="x-field-text-meta" class="input-meta">0/280 chars</div>
+                                </div>
+                                <div class="button-row">
+                                    <button id="x-queue-btn" class="btn btn-secondary" type="button">Queue Tweet</button>
+                                </div>
+                            </div>
+                        </section>
+                    </article>
+
+                    <aside class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="zap" class="heading-icon"></i>X Quick Actions</h2>
+                            <p class="muted-text">Manage X automation processes.</p>
+                        </div>
+                        <div class="quick-actions">
+                            <button id="x-run-bot-btn" class="btn btn-primary" type="button">Fire X Queue</button>
+                            <button id="x-engage-btn" class="btn btn-secondary" type="button"><i data-lucide="activity" class="btn-icon"></i><span>Engage Bot</span></button>
+                        </div>
+                        <div class="sub-title">X Queue Status</div>
+                        <div id="x-queue-list-mini" class="list"></div>
+                    </aside>
+                </div>
+                
+                <div class="panel-grid panel-grid-secondary">
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="history" class="heading-icon"></i>X Recent History</h2>
+                        </div>
+                        <div id="x-history-list" class="list" style="max-height: 400px; overflow-y: auto;"></div>
+                    </article>
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="activity" class="heading-icon"></i>X Engagements</h2>
+                        </div>
+                        <div id="x-engagements-list" class="list" style="max-height: 400px; overflow-y: auto;"></div>
+                    </article>
+                </div>
+            </section>
+
             <section id="panel-queue" class="panel hidden">
                 <article class="card">
                     <div class="card-header-row">
@@ -283,8 +348,15 @@
                                 <button id="link-session-btn" class="btn btn-secondary" type="button"><i data-lucide="link-2" class="btn-icon"></i><span>Link Session</span></button>
                             </div>
                         </div>
+                        <div class="field-wrap" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                            <label for="x-session-cookie">X (Twitter) auth_token</label>
+                            <div class="inline-field">
+                                <input type="password" id="x-session-cookie" placeholder="auth_token=...">
+                                <button id="link-x-session-btn" class="btn btn-secondary" type="button"><i data-lucide="link-2" class="btn-icon"></i><span>Link X Session</span></button>
+                            </div>
+                        </div>
                         <div class="button-row">
-                            <button id="unlink-session-btn" class="btn btn-secondary" type="button"><i data-lucide="unlink-2" class="btn-icon"></i><span>Unlink Session</span></button>
+                            <button id="unlink-session-btn" class="btn btn-secondary" type="button"><i data-lucide="unlink-2" class="btn-icon"></i><span>Unlink Pinterest</span></button>
                             <button id="unlink-api-btn" class="btn btn-danger" type="button"><i data-lucide="link-2-off" class="btn-icon"></i><span>Unlink API</span></button>
                         </div>
                     </article>
@@ -322,5 +394,6 @@
 
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/x-app.js"></script>
 </body>
 </html>

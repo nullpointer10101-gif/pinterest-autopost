@@ -1,0 +1,42 @@
+name: X Instant Engagement
+
+on:
+  workflow_dispatch:
+
+jobs:
+  instant-engagement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache Puppeteer Browser
+        id: cache-puppeteer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Puppeteer Browser
+        if: steps.cache-puppeteer.outputs.cache-hit != 'true'
+        run: npx puppeteer browsers install chrome
+
+      - name: Run manual instant engagement
+        run: node scripts/x-instant-engagement.js
+        env:
+          NODE_ENV: production
+          X_SESSION_COOKIE: ${{ secrets.X_SESSION_COOKIE }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          APP_X_STATE_KEY: ${{ secrets.APP_X_STATE_KEY || 'x_autopost_state_v1' }}

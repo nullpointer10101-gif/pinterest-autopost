@@ -1,0 +1,58 @@
+name: Unlimited X Automation (Public Mode)
+
+on:
+  schedule:
+    - cron: '29 * * * *'
+    - cron: '59 * * * *'
+  workflow_dispatch:
+
+jobs:
+  automation-mission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache Puppeteer Browser
+        id: cache-puppeteer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Puppeteer Browser
+        if: steps.cache-puppeteer.outputs.cache-hit != 'true'
+        run: npx puppeteer browsers install chrome
+
+      - name: Run automation mission
+        run: node scripts/run-x-hourly-automation.js
+        env:
+          NODE_ENV: production
+          AUTOMATION_TIMEZONE: ${{ secrets.AUTOMATION_TIMEZONE || 'Asia/Calcutta' }}
+          X_AUTOMATION_MAX_POSTS_PER_DAY: 100
+          X_AUTOMATION_MAX_POSTS_PER_RUN: 5
+          X_AUTOMATION_ENGAGEMENTS_PER_HOUR: 5
+          X_AUTOMATION_ENGAGEMENTS_HARD_CAP: 10
+          AUTOMATION_ENGAGEMENT_START_JITTER_MIN_MS: 60000
+          AUTOMATION_ENGAGEMENT_START_JITTER_MAX_MS: 180000
+          AUTOMATION_ENGAGEMENT_MIN_GAP_MS: 60000
+          AUTOMATION_ENGAGEMENT_MAX_GAP_MS: 180000
+          AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
+          X_SESSION_COOKIE: ${{ secrets.X_SESSION_COOKIE }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          APP_X_STATE_KEY: ${{ secrets.APP_X_STATE_KEY || 'x_autopost_state_v1' }}
