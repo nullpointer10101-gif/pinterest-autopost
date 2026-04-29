@@ -39,8 +39,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function bindEvents() {
+  const tabNav = document.querySelector('.tab-nav');
+  if (tabNav) tabNav.setAttribute('role', 'tablist');
+
   document.querySelectorAll('.tab-btn').forEach((button) => {
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-controls', `panel-${button.dataset.tab}`);
     button.addEventListener('click', () => switchTab(button.dataset.tab));
+  });
+
+  document.querySelectorAll('.panel').forEach((panel) => {
+    panel.setAttribute('role', 'tabpanel');
+    panel.setAttribute('tabindex', '0');
   });
 
   on('extract-btn', 'click', handleExtract);
@@ -108,11 +118,16 @@ function switchTab(tab) {
   state.currentTab = tab;
 
   document.querySelectorAll('.tab-btn').forEach((button) => {
-    button.classList.toggle('active', button.dataset.tab === tab);
+    const isActive = button.dataset.tab === tab;
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    button.setAttribute('tabindex', isActive ? '0' : '-1');
   });
 
   document.querySelectorAll('.panel').forEach((panel) => {
-    panel.classList.toggle('hidden', panel.id !== `panel-${tab}`);
+    const isVisible = panel.id === `panel-${tab}`;
+    panel.classList.toggle('hidden', !isVisible);
+    panel.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
   });
 
   if (tab !== 'dashboard') {
@@ -442,7 +457,7 @@ async function handlePostNow() {
   if (!payload) return;
 
   btn.disabled = true;
-  btn.textContent = '🚀 Firing...';
+  btn.textContent = 'Firing...';
 
   try {
     const response = await apiRequest('/api/pinterest/post', {
@@ -450,7 +465,7 @@ async function handlePostNow() {
       body: payload,
     });
 
-    showToast(response.message || '🚀 Mission fired! GitHub Bot will post shortly.', 'success');
+    showToast(response.message || 'Mission fired! GitHub Bot will post shortly.', 'success');
     const preview = byId('preview-section');
     if (preview) preview.classList.add('hidden');
     resetPreviewMedia();
@@ -870,10 +885,10 @@ function setBadge(el, text, tone) {
 async function processQueueNow() {
   const button = byId('run-bot-btn');
   button.disabled = true;
-  button.textContent = '🚀 Firing...';
+  button.textContent = 'Firing...';
   try {
     const response = await apiRequest('/api/queue/process', { method: 'POST' });
-    showToast(response.message || '🚀 GitHub Bot fired!', 'success');
+    showToast(response.message || 'GitHub Bot fired.', 'success');
     await refreshAll();
   } catch (error) {
     showToast(error.message || 'Queue trigger failed.', 'error');

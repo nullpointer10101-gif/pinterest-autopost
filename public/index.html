@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#111315">
     <title>Pinterest Mission Control</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
@@ -11,7 +12,8 @@
     <div class="app-shell">
         <header class="topbar">
             <div class="brand-wrap">
-                <div class="brand-title">Pinterest Mission Control</div>
+                <div class="brand-title"><i data-lucide="satellite" class="brand-icon"></i><span>Pinterest Mission Control</span></div>
+                <div class="brand-subtitle">Automated publishing and engagement console</div>
                 <div class="status-wrap">
                     <span id="connection-status" class="badge badge-success">ONLINE</span>
                     <span id="active-mode" class="badge">Mode: Auto</span>
@@ -22,7 +24,7 @@
                     <input id="auto-refresh-toggle" type="checkbox" checked>
                     <span>Live Refresh</span>
                 </label>
-                <button id="manual-refresh-btn" class="btn btn-secondary compact-btn" type="button">Refresh</button>
+                <button id="manual-refresh-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="refresh-cw" class="btn-icon"></i><span>Refresh</span></button>
                 <div id="live-time" class="clock">00:00</div>
             </div>
         </header>
@@ -38,19 +40,31 @@
 
         <section class="stats-grid">
             <article class="stat-card">
-                <div class="stat-label">Total Published</div>
+                <div class="stat-head">
+                    <div class="stat-label">Total Published</div>
+                    <i data-lucide="send" class="stat-icon"></i>
+                </div>
                 <div class="stat-value" id="stat-total-posts">0</div>
             </article>
             <article class="stat-card">
-                <div class="stat-label">Queue Pending</div>
+                <div class="stat-head">
+                    <div class="stat-label">Queue Pending</div>
+                    <i data-lucide="clock-3" class="stat-icon"></i>
+                </div>
                 <div class="stat-value" id="stat-queue-pending">0</div>
             </article>
             <article class="stat-card">
-                <div class="stat-label">Success Rate</div>
+                <div class="stat-head">
+                    <div class="stat-label">Success Rate</div>
+                    <i data-lucide="trending-up" class="stat-icon"></i>
+                </div>
                 <div class="stat-value" id="stat-success-rate">0%</div>
             </article>
             <article class="stat-card">
-                <div class="stat-label">Queue Failed</div>
+                <div class="stat-head">
+                    <div class="stat-label">Queue Failed</div>
+                    <i data-lucide="alert-triangle" class="stat-icon"></i>
+                </div>
                 <div class="stat-value" id="stat-queue-failed">0</div>
             </article>
         </section>
@@ -60,7 +74,7 @@
                 <div class="panel-grid panel-grid-main">
                     <article class="card">
                         <div class="card-title-wrap">
-                            <h2>Create Mission</h2>
+                            <h2><i data-lucide="pen-square" class="heading-icon"></i>Create Mission</h2>
                             <p class="muted-text">Mobile-first mission builder for quick publish and queue runs.</p>
                         </div>
 
@@ -69,7 +83,7 @@
                             <div class="inline-field inline-field-reel">
                                 <input type="text" id="reel-url" placeholder="https://www.instagram.com/reel/...">
                                 <div class="inline-actions">
-                                    <button id="paste-reel-btn" class="btn btn-secondary compact-btn" type="button">Paste</button>
+                                    <button id="paste-reel-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="clipboard" class="btn-icon"></i><span>Paste</span></button>
                                     <button id="extract-btn" class="btn btn-primary" type="button">Extract</button>
                                 </div>
                             </div>
@@ -79,7 +93,7 @@
                             <label for="manual-media-url">Manual Media URL</label>
                             <div class="inline-field">
                                 <input type="text" id="manual-media-url" placeholder="Direct image/video URL">
-                                <button id="manual-load-btn" class="btn btn-secondary" type="button">Load</button>
+                                <button id="manual-load-btn" class="btn btn-secondary" type="button"><i data-lucide="download" class="btn-icon"></i><span>Load</span></button>
                             </div>
                         </div>
 
@@ -116,7 +130,7 @@
                                 <div class="button-row">
                                     <button id="post-now-btn" class="btn btn-primary" type="button">Post Now</button>
                                     <button id="queue-btn" class="btn btn-secondary" type="button">Queue</button>
-                                    <button id="save-draft-from-preview-btn" class="btn btn-ghost" type="button">Save Draft</button>
+                                    <button id="save-draft-from-preview-btn" class="btn btn-ghost" type="button"><i data-lucide="bookmark-plus" class="btn-icon"></i><span>Save Draft</span></button>
                                 </div>
                             </div>
                         </section>
@@ -124,13 +138,13 @@
 
                     <aside class="card">
                         <div class="card-title-wrap">
-                            <h2>Quick Actions</h2>
+                            <h2><i data-lucide="zap" class="heading-icon"></i>Quick Actions</h2>
                             <p class="muted-text">Shortcuts designed for thumb-first mobile usage.</p>
                         </div>
                         <div class="quick-actions">
                             <button id="run-bot-btn" class="btn btn-primary" type="button">Run Queue Bot</button>
-                            <button id="quick-open-queue-btn" class="btn btn-secondary" type="button">Open Queue</button>
-                            <button id="quick-open-history-btn" class="btn btn-secondary" type="button">Open History</button>
+                            <button id="quick-open-queue-btn" class="btn btn-secondary" type="button"><i data-lucide="list-ordered" class="btn-icon"></i><span>Open Queue</span></button>
+                            <button id="quick-open-history-btn" class="btn btn-secondary" type="button"><i data-lucide="history" class="btn-icon"></i><span>Open History</span></button>
                         </div>
                         <div class="sub-title">Next Missions</div>
                         <div id="queue-list-mini" class="list"></div>
@@ -140,19 +154,19 @@
                 <div class="panel-grid panel-grid-secondary">
                     <article class="card">
                         <div class="card-title-wrap">
-                            <h2>Reusable Drafts</h2>
+                            <h2><i data-lucide="bookmark" class="heading-icon"></i>Reusable Drafts</h2>
                             <p class="muted-text">Save your best title + description combos and reapply instantly.</p>
                         </div>
                         <div class="inline-field">
                             <input type="text" id="draft-name" maxlength="40" placeholder="Draft name">
-                            <button id="save-draft-btn" class="btn btn-secondary" type="button">Save</button>
+                            <button id="save-draft-btn" class="btn btn-secondary" type="button"><i data-lucide="save" class="btn-icon"></i><span>Save</span></button>
                         </div>
                         <div id="draft-list" class="list"></div>
                     </article>
 
                     <article class="card">
                         <div class="card-title-wrap">
-                            <h2>Mission Pulse</h2>
+                            <h2><i data-lucide="activity" class="heading-icon"></i>Mission Pulse</h2>
                             <p class="muted-text">Live operational hints based on queue, posts, and success rate.</p>
                         </div>
                         <div id="mission-pulse" class="pulse-list"></div>
@@ -163,10 +177,10 @@
             <section id="panel-queue" class="panel hidden">
                 <article class="card">
                     <div class="card-header-row">
-                        <h2>Mission Queue</h2>
+                        <h2><i data-lucide="list-ordered" class="heading-icon"></i>Mission Queue</h2>
                         <div class="button-row">
-                            <button id="retry-failed-btn" class="btn btn-secondary compact-btn" type="button">Retry Failed</button>
-                            <button id="clear-queue-btn" class="btn btn-danger compact-btn" type="button">Clear Queue</button>
+                            <button id="retry-failed-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="rotate-ccw" class="btn-icon"></i><span>Retry Failed</span></button>
+                            <button id="clear-queue-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear Queue</span></button>
                         </div>
                     </div>
                     <div class="control-row">
@@ -186,7 +200,7 @@
             <section id="panel-lab" class="panel hidden">
                 <article class="card">
                     <div class="card-title-wrap">
-                        <h2>Booster Lab</h2>
+                        <h2><i data-lucide="rocket" class="heading-icon"></i>Booster Lab</h2>
                         <p class="muted-text">Run safe engagement bursts and monitor the action log.</p>
                     </div>
                     <div class="field-wrap">
@@ -206,7 +220,7 @@
                     </div>
                     <div class="button-row">
                         <button id="engage-btn" class="btn btn-primary" type="button">Launch Booster</button>
-                        <button id="clear-engagements-btn" class="btn btn-secondary" type="button">Clear Logs</button>
+                        <button id="clear-engagements-btn" class="btn btn-secondary" type="button"><i data-lucide="eraser" class="btn-icon"></i><span>Clear Logs</span></button>
                     </div>
                     <div id="engagement-logs" class="list"></div>
                 </article>
@@ -215,10 +229,10 @@
             <section id="panel-history" class="panel hidden">
                 <article class="card">
                     <div class="card-header-row">
-                        <h2>History</h2>
+                        <h2><i data-lucide="history" class="heading-icon"></i>History</h2>
                         <div class="button-row">
-                            <button id="export-history-btn" class="btn btn-secondary compact-btn" type="button">Export JSON</button>
-                            <button id="clear-history-btn" class="btn btn-danger compact-btn" type="button">Clear History</button>
+                            <button id="export-history-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="download" class="btn-icon"></i><span>Export JSON</span></button>
+                            <button id="clear-history-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear History</span></button>
                         </div>
                     </div>
                     <div class="control-row">
@@ -258,26 +272,26 @@
                 <div class="panel-grid panel-grid-secondary">
                     <article class="card">
                         <div class="card-title-wrap">
-                            <h2>Connection Center</h2>
+                            <h2><i data-lucide="link" class="heading-icon"></i>Connection Center</h2>
                             <p class="muted-text">Manage API OAuth and fallback session cookie from one place.</p>
                         </div>
-                        <a href="/api/pinterest" class="btn btn-primary settings-link">Connect Pinterest OAuth</a>
+                        <a href="/api/pinterest" class="btn btn-primary settings-link"><i data-lucide="shield-check" class="btn-icon"></i><span>Connect Pinterest OAuth</span></a>
                         <div class="field-wrap">
                             <label for="session-cookie">Session Cookie</label>
                             <div class="inline-field">
                                 <input type="password" id="session-cookie" placeholder="_pinterest_sess value">
-                                <button id="link-session-btn" class="btn btn-secondary" type="button">Link Session</button>
+                                <button id="link-session-btn" class="btn btn-secondary" type="button"><i data-lucide="link-2" class="btn-icon"></i><span>Link Session</span></button>
                             </div>
                         </div>
                         <div class="button-row">
-                            <button id="unlink-session-btn" class="btn btn-secondary" type="button">Unlink Session</button>
-                            <button id="unlink-api-btn" class="btn btn-danger" type="button">Unlink API</button>
+                            <button id="unlink-session-btn" class="btn btn-secondary" type="button"><i data-lucide="unlink-2" class="btn-icon"></i><span>Unlink Session</span></button>
+                            <button id="unlink-api-btn" class="btn btn-danger" type="button"><i data-lucide="link-2-off" class="btn-icon"></i><span>Unlink API</span></button>
                         </div>
                     </article>
 
                     <article class="card">
                         <div class="card-title-wrap">
-                            <h2>Diagnostics</h2>
+                            <h2><i data-lucide="stethoscope" class="heading-icon"></i>Diagnostics</h2>
                             <p class="muted-text">Runtime, posting mode, and session health for troubleshooting.</p>
                         </div>
                         <div class="diag-list">
