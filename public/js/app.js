@@ -745,13 +745,20 @@ function renderEngagementAuditList() {
 
   const search = String(byId('engagement-search')?.value || '').trim().toLowerCase();
   const sourceFilter = byId('engagement-source-filter')?.value || 'github_actions';
-  const normalized = state.engagements.map(normalizeEngagementEntry);
+  
+  let sourceArray = state.engagements;
+  if (sourceFilter === 'x_twitter') {
+    sourceArray = typeof xState !== 'undefined' ? xState.engagements : [];
+  }
+  
+  const normalized = sourceArray.map(normalizeEngagementEntry);
 
   const rows = normalized.filter((entry) => {
+    if (sourceFilter === 'x_twitter') return true; // X logs don't use 'source' field strictly yet
     const sourceOk = sourceFilter === 'all' ? true : entry.source === sourceFilter;
     if (!sourceOk) return false;
     if (!search) return true;
-    const haystack = `${entry.action} ${entry.url} ${entry.comment}`.toLowerCase();
+    const haystack = `${entry.action} ${entry.url || ''} ${entry.comment || ''}`.toLowerCase();
     return haystack.includes(search);
   });
 
@@ -760,11 +767,19 @@ function renderEngagementAuditList() {
   const shownCount = rows.length;
   const latestTime = rows[0]?.when ? formatDateTime12h(rows[0].when) : 'No logs';
 
-  summary.innerHTML = `
-    <div class="pulse-item"><strong>Visible Logs:</strong> ${shownCount}</div>
-    <div class="pulse-item"><strong>GitHub Entries:</strong> ${githubCount} • <strong>Other:</strong> ${localCount}</div>
-    <div class="pulse-item"><strong>Latest Engagement:</strong> ${escHtml(latestTime)}</div>
-  `;
+  if (sourceFilter === 'x_twitter') {
+    summary.innerHTML = `
+      <div class="pulse-item"><strong>Platform:</strong> X (Twitter)</div>
+      <div class="pulse-item"><strong>Visible Logs:</strong> ${shownCount}</div>
+      <div class="pulse-item"><strong>Latest Engagement:</strong> ${escHtml(latestTime)}</div>
+    `;
+  } else {
+    summary.innerHTML = `
+      <div class="pulse-item"><strong>Visible Logs:</strong> ${shownCount}</div>
+      <div class="pulse-item"><strong>GitHub Entries:</strong> ${githubCount} • <strong>Other:</strong> ${localCount}</div>
+      <div class="pulse-item"><strong>Latest Engagement:</strong> ${escHtml(latestTime)}</div>
+    `;
+  }
 
   if (!rows.length) {
     list.innerHTML = '<div class="pulse-item">No engagement logs match this filter.</div>';
@@ -778,9 +793,14 @@ function renderEngagementAuditList() {
       const whenAgo = formatTimeAgo(entry.when);
       const actionText = String(entry.action || 'Viewed');
       const actionIcon = getEngagementActionIcon(actionText);
-      const sourceBadge = entry.source === 'github_actions'
-        ? '<span class="badge badge-success">GITHUB</span>'
-        : `<span class="badge">${escHtml(String(entry.source || 'local').toUpperCase())}</span>`;
+      let sourceBadge = '';
+      if (sourceFilter === 'x_twitter') {
+        sourceBadge = '<span class="badge badge-info">X (TWITTER)</span>';
+      } else {
+        sourceBadge = entry.source === 'github_actions'
+          ? '<span class="badge badge-success">GITHUB</span>'
+          : `<span class="badge">${escHtml(String(entry.source || 'local').toUpperCase())}</span>`;
+      }
       const commentMeta = entry.comment ? `<div class="engagement-note">${escHtml(entry.comment)}</div>` : '';
       const openLink = entry.url ? `<a class="pill-btn" href="${escAttr(entry.url)}" target="_blank" rel="noopener noreferrer">Open Pin</a>` : '';
       const pinLabel = extractPinLabel(entry.url);
