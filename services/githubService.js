@@ -65,8 +65,8 @@ async function triggerXAutomation() {
   return dispatchWorkflow('x-hourly-automation.yml', 'X Hourly Automation');
 }
 
-async function triggerXInstantEngagement() {
-  return dispatchWorkflow('x-instant-engagement.yml', 'X Instant Engagement');
+async function triggerXInstantEngagement(count = 3) {
+  return dispatchWorkflow('x-instant-engagement.yml', 'X Instant Engagement', { count: String(count) });
 }
 
 module.exports = { 

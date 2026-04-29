@@ -2,6 +2,11 @@ name: X Instant Engagement
 
 on:
   workflow_dispatch:
+    inputs:
+      count:
+        description: 'Number of engagements'
+        required: false
+        default: '3'
 
 jobs:
   instant-engagement:
@@ -40,3 +45,4 @@ jobs:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           APP_X_STATE_KEY: ${{ secrets.APP_X_STATE_KEY || 'x_autopost_state_v1' }}
+          X_ENGAGEMENT_COUNT: ${{ github.event.inputs.count }}

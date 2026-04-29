@@ -7,8 +7,9 @@ async function runInstantEngagement() {
   console.log('====================================================');
 
   try {
+    const targetCount = parseInt(process.env.X_ENGAGEMENT_COUNT || '3', 10);
     const result = await xPuppeteerService.runAutoEngagerSafe({
-      count: 3, // Manual trigger does 3 engagements default
+      count: targetCount, 
       minGapMs: 10000, 
       maxGapMs: 30000, 
       commentChance: 0.60,

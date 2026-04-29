@@ -126,9 +126,14 @@ async function fireXQueue() {
 
 async function startXEngager() {
   const btn = document.getElementById('x-engage-btn');
+  const count = document.getElementById('engage-count')?.value || 3;
   btn.disabled = true;
   try {
-    const res = await fetch('/api/x/engage', { method: 'POST' }).then(r=>r.json());
+    const res = await fetch('/api/x/engage', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count: parseInt(count, 10) })
+    }).then(r=>r.json());
     if (res.success) showToast(res.message, 'success');
     else showToast(res.error, 'error');
   } catch(e) { showToast(e.message, 'error'); }

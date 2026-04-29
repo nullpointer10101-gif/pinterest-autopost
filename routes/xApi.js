@@ -108,12 +108,13 @@ router.post('/session', async (req, res) => {
 // === X ENGAGE ROUTE ===
 router.post('/engage', async (req, res) => {
   try {
-    console.log('[X-Engage] 🚀 Firing GitHub Bot instant engagement...');
-    githubService.triggerXInstantEngagement().catch(() => {});
+    const count = parseInt(req.body.count, 10) || 3;
+    console.log(`[X-Engage] 🚀 Firing GitHub Bot instant engagement with count: ${count}...`);
+    githubService.triggerXInstantEngagement(count).catch(() => {});
     return res.json({ 
       success: true, 
       queued: true, 
-      message: '🚀 X Engager fired! It will run in the background.' 
+      message: `🚀 X Engager fired for ${count} tweets! It will run in the background.` 
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
