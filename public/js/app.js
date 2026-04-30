@@ -199,6 +199,7 @@ async function refreshAll() {
 
   if (state.currentTab === 'queue') renderQueueList();
   if (state.currentTab === 'history') renderHistoryList();
+  if (state.currentTab === 'pinterest') renderMiniQueue();
   if (state.currentTab === 'engagements') await renderEngagementAuditList();
   if (state.currentTab === 'settings') await loadDiagnostics();
 }
@@ -608,6 +609,27 @@ function renderQueueList() {
     .join('');
 }
 
+function renderMiniQueue() {
+  const list = byId('pin-queue-list-mini');
+  if (!list) return;
+
+  const pending = state.queue.filter(item => item.status === 'pending' || item.status === 'processing');
+  
+  if (!pending.length) {
+    list.innerHTML = '<div class="pulse-item">No pending Pinterest missions.</div>';
+    return;
+  }
+
+  list.innerHTML = pending.slice(0, 5).map(item => `
+    <div class="list-item" style="padding: 8px;">
+      <div class="list-item-main">
+        <div style="font-size: 13px; font-weight: 600;">${escHtml(item.title || 'Untitled')}</div>
+      </div>
+      <span class="badge status-${escHtml(item.status || 'pending')}" style="font-size: 10px;">${String(item.status || 'PENDING').toUpperCase()}</span>
+    </div>
+  `).join('');
+}
+
 function renderHistoryList() {
   const list = byId('history-list');
   if (!list) return;
@@ -801,23 +823,23 @@ function renderEngagements() {
 
 async function startEngager() {
   const button = byId('engage-btn');
-  const count = parseInt(byId('engage-count')?.value || '3', 10);
+  const count = parseInt(byId('engage-count-manual')?.value || byId('engage-count')?.value || '20', 10);
   const niche = byId('engage-niche')?.value || 'all';
 
   button.disabled = true;
-  button.textContent = 'Launching...';
+  button.textContent = 'Firing...';
   try {
     const response = await apiRequest('/api/engage', {
       method: 'POST',
       body: { count, niche },
     });
     showToast(response.message || 'Booster started.', 'success');
-    await loadEngagements();
+    await renderEngagementAuditList();
   } catch (error) {
     showToast(error.message || 'Booster failed to start.', 'error');
   } finally {
     button.disabled = false;
-    button.textContent = 'Launch Booster';
+    button.textContent = 'Engage Bot';
   }
 }
 
