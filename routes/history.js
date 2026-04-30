@@ -166,7 +166,9 @@ router.post('/engage', async (req, res) => {
   try {
     const hardCap = Math.max(1, parseInt(process.env.AUTOMATION_ENGAGEMENTS_HARD_CAP || '20', 10));
     const requested = Math.max(1, parseInt(req.body?.count || '2', 10));
+    const niche = req.body?.niche || 'all';
     const targetCount = Math.min(requested, hardCap);
+    
     if (!puppeteerService || typeof puppeteerService.runAutoEngager !== 'function') {
       return res.status(500).json({
         success: false,
@@ -175,18 +177,18 @@ router.post('/engage', async (req, res) => {
     }
 
     if (IS_SERVERLESS) {
-      console.log('[Engager] Routing to Cloud Bot (GitHub Actions)...');
+      console.log(`[Engager] Routing to Cloud Bot (GitHub Actions)... Niche: ${niche}`);
       await historyService.addEngagement({
         url: '',
         action: 'Dispatch Engagement Mission',
-        comment: `Requested ${targetCount} engagement action(s) from dashboard.`,
+        comment: `Requested ${targetCount} engagement action(s) for ${niche} niche from dashboard.`,
         source: 'github_actions',
         command: 'workflow_dispatch instant-engagement.yml',
         workflow: 'instant-engagement.yml',
         actor: 'dashboard_user',
         engagedAt: new Date().toISOString(),
       });
-      githubService.triggerInstantEngagement().catch(() => {});
+      githubService.triggerInstantEngagement(targetCount, niche).catch(() => {});
       return res.json({
         success: true,
         queued: true,
@@ -196,6 +198,7 @@ router.post('/engage', async (req, res) => {
 
     puppeteerService.runAutoEngager({
       count: targetCount,
+      niche: niche,
       context: {
         source: 'api_manual',
         command: 'POST /api/engage',

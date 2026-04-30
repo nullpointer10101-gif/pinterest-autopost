@@ -56,8 +56,11 @@ async function triggerInstantMission() {
   return dispatchWorkflow('fire-post.yml', 'Instant Mission → Fire Post');
 }
 
-async function triggerInstantEngagement() {
-  return dispatchWorkflow('instant-engagement.yml', 'Instant Engagement');
+async function triggerInstantEngagement(count = 3, niche = 'all') {
+  return dispatchWorkflow('instant-engagement.yml', 'Instant Engagement', { 
+    count: String(count), 
+    niche: String(niche) 
+  });
 }
 
 // X Automation Triggers

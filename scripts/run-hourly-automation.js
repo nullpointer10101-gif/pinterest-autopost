@@ -8,6 +8,7 @@ async function main() {
     maxPostsPerDay: process.env.AUTOMATION_MAX_POSTS_PER_DAY,
     maxPostsPerRun: process.env.AUTOMATION_MAX_POSTS_PER_RUN,
     engagementCount: process.env.AUTOMATION_ENGAGEMENTS_PER_HOUR,
+    engagementNiche: process.env.AUTOMATION_ENGAGEMENT_NICHE || 'all',
     timeZone: process.env.AUTOMATION_TIMEZONE || 'Asia/Calcutta',
     force: process.env.GITHUB_EVENT_NAME === 'workflow_dispatch',
   });

@@ -2,6 +2,15 @@ name: Instant Pinterest Engagement (Algorithm Booster)
 
 on:
   workflow_dispatch:
+    inputs:
+      count:
+        description: 'Number of pins to engage'
+        required: false
+        default: '3'
+      niche:
+        description: 'Target niche (fashion|home|all)'
+        required: false
+        default: 'all'
 
 jobs:
   engagement-mission:
@@ -39,7 +48,8 @@ jobs:
           AUTOMATION_TIMEZONE: ${{ secrets.AUTOMATION_TIMEZONE || 'Asia/Calcutta' }}
           AUTOMATION_MAX_POSTS_PER_DAY: 0 # Skip posts
           AUTOMATION_MAX_POSTS_PER_RUN: 0 # Skip posts
-          AUTOMATION_ENGAGEMENTS_PER_HOUR: 2 # Target for instant booster
+          AUTOMATION_ENGAGEMENTS_PER_HOUR: ${{ github.event.inputs.count || '2' }}
+          AUTOMATION_ENGAGEMENT_NICHE: ${{ github.event.inputs.niche || 'all' }}
           AUTOMATION_ENGAGEMENT_START_JITTER_MIN_MS: 0 # No wait for manual trigger
           AUTOMATION_ENGAGEMENT_START_JITTER_MAX_MS: 5000 # Max 5s wait
           AUTOMATION_ENGAGEMENT_MIN_GAP_MS: 15000 # Fast gaps for manual booster

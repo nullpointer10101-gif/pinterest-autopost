@@ -149,6 +149,7 @@ async function runHourlyAutomation(options = {}) {
         
         const result = await puppeteerService.runAutoEngagerSafe({
           count: engagementCount,
+          niche: options.engagementNiche || 'all',
           minGapMs: engagementMinGapMs,
           maxGapMs: engagementMaxGapMs,
           commentChance,

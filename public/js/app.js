@@ -139,9 +139,11 @@ function switchTab(tab) {
     setPreviewScrollLock(false);
   }
 
-  if (tab === 'queue') renderQueueList();
   if (tab === 'history') renderHistoryList();
-  if (tab === 'engagements') renderEngagementAuditList();
+  if (tab === 'engagements') {
+      loadEngagements();
+      if (typeof window.refreshXData === 'function') window.refreshXData();
+  }
   if (tab === 'settings') loadDiagnostics();
 }
 
