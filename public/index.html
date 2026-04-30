@@ -72,15 +72,35 @@
                     </article>
                 </section>
                 
-                <article class="card welcome-card" style="text-align: center; padding: 40px 20px;">
-                    <div class="card-title-wrap">
-                        <i data-lucide="sparkles" style="width: 48px; height: 48px; color: var(--accent); margin: 0 auto 16px;"></i>
-                        <h2 style="font-size: 24px; margin-bottom: 8px;">Welcome to Mission Control</h2>
-                        <p class="muted-text" style="max-width: 500px; margin: 0 auto 24px;">Your autonomous content engine is ready. Navigate to Pinterest or X to manage your campaigns and engage with your audience.</p>
+                <article class="card dashboard-op-card">
+                    <div class="countdown-wrap">
+                        <div class="countdown-label">Next Automation Cycle</div>
+                        <div id="countdown-clock" class="countdown-timer">--:--</div>
+                        <div class="countdown-subtext"><i data-lucide="zap" style="width: 14px; height: 14px; vertical-align: middle;"></i> Triggering @ :15 hourly</div>
                     </div>
-                    <div class="button-row" style="display: flex; justify-content: center; gap: 12px; max-width: 400px; margin: 0 auto;">
-                        <button class="btn btn-primary" style="flex: 1;" onclick="switchTab('pinterest')">Pinterest Hub</button>
-                        <button class="btn btn-secondary" style="flex: 1;" onclick="switchTab('x-dashboard')">X Console</button>
+
+                    <div class="health-grid">
+                        <div class="health-item">
+                            <div id="light-pinterest" class="status-light"></div>
+                            <div>
+                                <div class="stat-label">Pinterest Session</div>
+                                <div id="status-text-pinterest" class="input-meta">Checking...</div>
+                            </div>
+                        </div>
+                        <div class="health-item">
+                            <div id="light-x" class="status-light"></div>
+                            <div>
+                                <div class="stat-label">X Token</div>
+                                <div id="status-text-x" class="input-meta">Checking...</div>
+                            </div>
+                        </div>
+                        <div class="health-item">
+                            <div id="light-ai" class="status-light"></div>
+                            <div>
+                                <div class="stat-label">AI Engine</div>
+                                <div id="status-text-ai" class="input-meta">Ready</div>
+                            </div>
+                        </div>
                     </div>
                 </article>
             </section>

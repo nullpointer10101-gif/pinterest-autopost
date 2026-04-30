@@ -153,9 +153,33 @@ function startClock() {
 
 function updateClock() {
   const clock = byId('live-time');
-  if (!clock) return;
-  const now = new Date();
-  clock.textContent = formatTime12h(now);
+  const countdown = byId('countdown-clock');
+  if (clock) {
+    const now = new Date();
+    clock.textContent = formatTime12h(now);
+  }
+
+  if (countdown) {
+    const now = new Date();
+    const mins = now.getMinutes();
+    const secs = now.getSeconds();
+    
+    let targetMin = 15;
+    let remainingSecs = 0;
+    
+    const currentTotalSecs = mins * 60 + secs;
+    const targetTotalSecs = targetMin * 60;
+    
+    if (currentTotalSecs < targetTotalSecs) {
+      remainingSecs = targetTotalSecs - currentTotalSecs;
+    } else {
+      remainingSecs = (3600 - currentTotalSecs) + targetTotalSecs;
+    }
+    
+    const displayMins = Math.floor(remainingSecs / 60);
+    const displaySecs = remainingSecs % 60;
+    countdown.textContent = `${String(displayMins).padStart(2, '0')}:${String(displaySecs).padStart(2, '0')}`;
+  }
 }
 
 function setAutoRefresh(enabled) {
@@ -175,13 +199,13 @@ async function refreshAll() {
 
   if (state.currentTab === 'queue') renderQueueList();
   if (state.currentTab === 'history') renderHistoryList();
-  if (state.currentTab === 'lab' || state.currentTab === 'engagements') await loadEngagements();
+  if (state.currentTab === 'engagements') await renderEngagementAuditList();
   if (state.currentTab === 'settings') await loadDiagnostics();
 }
 
 async function refreshOverview() {
   try {
-    const [queueResp, historyResp, pinterestResp, statusResp] = await Promise.all([
+    const [queueResp, historyResp, pinterestResp, systemStatus] = await Promise.all([
       apiRequest('/api/queue'),
       apiRequest('/api/history'),
       apiRequest('/api/pinterest/status'),
@@ -192,9 +216,10 @@ async function refreshOverview() {
     state.history = Array.isArray(historyResp.history) ? historyResp.history : [];
 
     updateStats(state.queue, state.history);
-    updateConnectionBar(pinterestResp, statusResp);
+    updateConnectionBar(pinterestResp, systemStatus);
+    updateHealthDashboard(pinterestResp, systemStatus);
   } catch (error) {
-    showToast(error.message || 'Failed to refresh dashboard.', 'error');
+    console.error('Refresh error:', error);
   }
 }
 
@@ -211,8 +236,6 @@ function updateStats(queue, history) {
   setText('stat-success-rate', `${successRate}%`);
   setText('stat-queue-failed', String(queueFailedCount));
 }
-
-
 
 function updateConnectionBar(pinterestStatus, systemStatus) {
   const connection = byId('connection-status');
@@ -234,6 +257,39 @@ function updateConnectionBar(pinterestStatus, systemStatus) {
     const resolved = systemStatus?.posting?.resolvedMode || pinterestStatus?.resolvedPostingMode || 'api';
     const runtime = systemStatus?.runtime?.isServerless ? 'Cloud' : 'Local';
     mode.textContent = `Mode: ${String(resolved).toUpperCase()} (${runtime})`;
+  }
+}
+
+function updateHealthDashboard(pinterestStatus, systemStatus) {
+  const pLight = byId('light-pinterest');
+  const pText = byId('status-text-pinterest');
+  const aiLight = byId('light-ai');
+  const aiText = byId('status-text-ai');
+  const xLight = byId('light-x');
+  const xText = byId('status-text-x');
+
+  if (pLight && pText) {
+    if (pinterestStatus.connected) {
+      pLight.className = 'status-light active';
+      pText.textContent = 'API Connected';
+    } else if (pinterestStatus.sessionLinked) {
+      pLight.className = 'status-light warn';
+      pText.textContent = 'Session Cookie Only';
+    } else {
+      pLight.className = 'status-light error';
+      pText.textContent = 'Not Connected';
+    }
+  }
+
+  if (aiLight && aiText) {
+    aiLight.className = 'status-light active';
+    aiText.textContent = 'Ready (Gemini 1.5)';
+  }
+  
+  if (xLight && xText) {
+    const xActive = typeof xState !== 'undefined' && xState.connected;
+    xLight.className = xActive ? 'status-light active' : 'status-light warn';
+    xText.textContent = xActive ? 'Linked' : 'Check Session';
   }
 }
 

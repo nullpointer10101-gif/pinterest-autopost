@@ -1175,3 +1175,92 @@ body.preview-scroll-lock {
         display: none;
     }
 }
+
+/* --- Dashboard Enhancement --- */
+.health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.health-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+}
+
+.status-light {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #444;
+    position: relative;
+}
+
+.status-light.active {
+    background: var(--good);
+    box-shadow: 0 0 12px var(--good);
+}
+
+.status-light.warn {
+    background: var(--warn);
+    box-shadow: 0 0 12px var(--warn);
+}
+
+.status-light.error {
+    background: var(--bad);
+    box-shadow: 0 0 12px var(--bad);
+}
+
+.status-light.active::after {
+    content: " \;
+ position: absolute;
+ inset: -4px;
+ border-radius: 50%;
+ border: 2px solid var(--good);
+ opacity: 0;
+ animation: pulse-ring 2s infinite;
+}
+
+@keyframes pulse-ring {
+ 0% { transform: scale(0.8); opacity: 0.5; }
+ 100% { transform: scale(1.5); opacity: 0; }
+}
+
+.countdown-wrap {
+ text-align: center;
+ padding: 24px;
+ background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), transparent);
+ border: 1px solid var(--line-strong);
+ border-radius: var(--radius-sm);
+ margin-bottom: 12px;
+}
+
+.countdown-label {
+ font-size: 12px;
+ font-weight: 700;
+ color: var(--text-soft);
+ text-transform: uppercase;
+ letter-spacing: 1px;
+}
+
+.countdown-timer {
+ font-family: \Sora\, sans-serif;
+ font-size: 42px;
+ font-weight: 700;
+ color: #fff;
+ margin: 8px 0;
+ letter-spacing: -1px;
+}
+
+.countdown-subtext {
+ font-size: 13px;
+ color: var(--accent);
+ font-weight: 600;
+}
+
