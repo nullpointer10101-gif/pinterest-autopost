@@ -37,9 +37,12 @@ async function processReel(reel) {
     console.log('    ✅ Product: "' + productName + '" (' + productResult.category + ')');
     console.log('    Flipkart query: "' + productResult.flipkartQuery + '"');
 
-    // Step 2: Flipkart search
+    // Step 2: Search on Flipkart
     console.log('\n[2] Searching Flipkart...');
-    const fp = await flipkartSearchService.findProduct(productResult.flipkartQuery, productResult.category);
+    const fp = await flipkartSearchService.findProduct(
+      productResult.flipkartQuery || productName,
+      productResult.fallbackQuery
+    );
     if (fp) {
       flipkartUrl = fp.url;
       console.log('    ✅ Found: "' + fp.title + '"');

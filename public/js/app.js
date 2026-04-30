@@ -55,13 +55,10 @@ function bindEvents() {
 
   on('extract-btn', 'click', handleExtract);
   on('paste-reel-btn', 'click', pasteReelUrlFromClipboard);
-  on('manual-load-btn', 'click', handleManualLoad);
   on('preview-audio-btn', 'click', togglePreviewAudio);
   on('preview-scroll-btn', 'click', togglePreviewScrollLock);
   on('post-now-btn', 'click', handlePostNow);
   on('queue-btn', 'click', handleQueue);
-  on('save-draft-btn', 'click', saveDraftFromName);
-  on('save-draft-from-preview-btn', 'click', saveDraftFromPreview);
   on('run-bot-btn', 'click', processQueueNow);
   on('quick-open-queue-btn', 'click', () => switchTab('queue'));
   on('quick-open-history-btn', 'click', () => switchTab('history'));
@@ -98,9 +95,6 @@ function bindEvents() {
 
   on('reel-url', 'keydown', (event) => {
     if (event.key === 'Enter') handleExtract();
-  });
-  on('manual-media-url', 'keydown', (event) => {
-    if (event.key === 'Enter') handleManualLoad();
   });
 }
 
@@ -188,8 +182,6 @@ async function refreshOverview() {
     state.history = Array.isArray(historyResp.history) ? historyResp.history : [];
 
     updateStats(state.queue, state.history);
-    renderMiniQueue();
-    renderMissionPulse();
     updateConnectionBar(pinterestResp, statusResp);
   } catch (error) {
     showToast(error.message || 'Failed to refresh dashboard.', 'error');
@@ -210,67 +202,7 @@ function updateStats(queue, history) {
   setText('stat-queue-failed', String(queueFailedCount));
 }
 
-function renderMiniQueue() {
-  const list = byId('queue-list-mini');
-  if (!list) return;
 
-  const pending = state.queue.filter((item) => item.status === 'pending' || item.status === 'processing').slice(0, 4);
-  if (!pending.length) {
-    list.innerHTML = '<div class="pulse-item">No pending missions right now.</div>';
-    return;
-  }
-
-  list.innerHTML = pending
-    .map((item) => {
-      const title = escHtml(item.title || 'Untitled mission');
-      const meta = escHtml(item.username || 'unknown');
-      const status = escHtml((item.status || 'pending').toUpperCase());
-      return `
-        <div class="list-item">
-          <div class="list-item-main">
-            <div>
-              <div class="item-title">${title}</div>
-              <div class="item-meta">@${meta}</div>
-            </div>
-          </div>
-          <div class="item-actions">
-            <span class="badge status-${escHtml(item.status || 'pending')}">${status}</span>
-          </div>
-        </div>
-      `;
-    })
-    .join('');
-}
-
-function renderMissionPulse() {
-  const panel = byId('mission-pulse');
-  if (!panel) return;
-
-  const pending = state.queue.filter((item) => item.status === 'pending').length;
-  const processing = state.queue.filter((item) => item.status === 'processing').length;
-  const failedQueue = state.queue.filter((item) => item.status === 'failed').length;
-  const posted = state.history.filter((item) => item.status === 'success').length;
-  const failedHistory = state.history.filter((item) => item.status === 'error').length;
-  const base = posted + failedHistory;
-  const successRate = base > 0 ? Math.round((posted / base) * 100) : 0;
-
-  const rows = [];
-  rows.push(`<div class="pulse-item"><strong>Queue:</strong> ${pending} pending, ${processing} processing</div>`);
-
-  if (failedQueue > 0) {
-    rows.push(`<div class="pulse-item"><strong>Attention:</strong> ${failedQueue} queue item(s) failed. Run retry.</div>`);
-  } else {
-    rows.push('<div class="pulse-item"><strong>Queue Health:</strong> No failed queue items detected.</div>');
-  }
-
-  if (base === 0) {
-    rows.push('<div class="pulse-item"><strong>Publishing:</strong> No post outcomes yet. Run a mission to benchmark.</div>');
-  } else {
-    rows.push(`<div class="pulse-item"><strong>Publishing:</strong> Success rate is ${successRate}% across ${base} outcomes.</div>`);
-  }
-
-  panel.innerHTML = rows.join('');
-}
 
 function updateConnectionBar(pinterestStatus, systemStatus) {
   const connection = byId('connection-status');
@@ -344,33 +276,7 @@ async function handleExtract() {
   }
 }
 
-function handleManualLoad() {
-  const url = String(byId('manual-media-url')?.value || '').trim();
-  if (!/^https?:\/\//i.test(url)) {
-    showToast('Enter a valid direct media URL.', 'error');
-    return;
-  }
 
-  const isVideo = isVideoMedia({ mediaUrl: url, mediaType: '' });
-  state.lastExtracted = {
-    sourceUrl: '',
-    reelData: {
-      username: 'manual',
-      caption: '',
-      thumbnailUrl: url,
-      mediaUrl: url,
-      mediaType: isVideo ? 'video' : 'image',
-    },
-    aiContent: {
-      title: 'Manual pin mission',
-      description: 'Prepared from manual media URL.',
-      hashtags: [],
-    },
-  };
-
-  showPreview(state.lastExtracted);
-  showToast('Manual media loaded.', 'success');
-}
 
 function showPreview(payload) {
   const section = byId('preview-section');

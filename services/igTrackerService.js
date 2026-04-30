@@ -382,45 +382,65 @@ async function fetchViaRapidAPI(username) {
 async function fetchLatestReels(username) {
   console.log(`[IG-Tracker] Fetching reels for @${username}...`);
 
+  let finalReels = [];
+
   // Method 0: Instagram internal API with session cookie (fastest, most reliable)
   if (IG_SESSION_COOKIE) {
     const reels = await fetchViaSessionApi(username);
     if (reels.length > 0) {
       console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Session API for @${username}`);
-      return reels;
+      finalReels = reels;
     }
   }
 
   // Method 1: Puppeteer stealth (no login needed)
-  let reels = await fetchViaPuppeteer(username);
-  if (reels.length > 0) {
-    console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Puppeteer for @${username}`);
-    return reels;
+  if (finalReels.length === 0) {
+    let reels = await fetchViaPuppeteer(username);
+    if (reels.length > 0) {
+      console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Puppeteer for @${username}`);
+      finalReels = reels;
+    }
   }
 
   // Method 2: Instagram unofficial API
-  reels = await fetchViaUnofficialApi(username);
-  if (reels.length > 0) {
-    console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via unofficial API for @${username}`);
-    return reels;
+  if (finalReels.length === 0) {
+    let reels = await fetchViaUnofficialApi(username);
+    if (reels.length > 0) {
+      console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via unofficial API for @${username}`);
+      finalReels = reels;
+    }
   }
 
   // Method 3: Picuki mirror
-  reels = await fetchViaPicuki(username);
-  if (reels.length > 0) {
-    console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Picuki for @${username}`);
-    return reels;
+  if (finalReels.length === 0) {
+    let reels = await fetchViaPicuki(username);
+    if (reels.length > 0) {
+      console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Picuki for @${username}`);
+      finalReels = reels;
+    }
   }
 
   // Method 4: RapidAPI
-  reels = await fetchViaRapidAPI(username);
-  if (reels.length > 0) {
-    console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via RapidAPI for @${username}`);
-    return reels;
+  if (finalReels.length === 0) {
+    let reels = await fetchViaRapidAPI(username);
+    if (reels.length > 0) {
+      console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via RapidAPI for @${username}`);
+      finalReels = reels;
+    }
   }
 
-  console.warn(`[IG-Tracker] ⚠️ Could not fetch reels for @${username}`);
-  return [];
+  if (finalReels.length === 0) {
+    console.warn(`[IG-Tracker] ⚠️ Could not fetch reels for @${username}`);
+    return [];
+  }
+
+  // Filter out any image posts, keeping only videos/reels as requested by user
+  const videoOnlyReels = finalReels.filter(r => r.mediaType === 'video');
+  if (videoOnlyReels.length < finalReels.length) {
+    console.log(`[IG-Tracker] Filtered out ${finalReels.length - videoOnlyReels.length} image posts for @${username}`);
+  }
+  
+  return videoOnlyReels;
 }
 
 // ─── Channel Management ────────────────────────────────────────────────────────

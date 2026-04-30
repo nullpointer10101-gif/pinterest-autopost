@@ -55,7 +55,24 @@ async function getQueueStats() {
 async function addToQueue(items, prepend = false) {
   const queue = await getQueue();
   const now = new Date().toISOString();
-  const newItems = items.map(item => ({
+  
+  // Filter out items that already exist in the queue (by shortcode tag)
+  const filteredItems = items.filter(newItem => {
+    if (!newItem.tags?.shortcode) return true;
+    const exists = queue.some(existing => 
+      existing.tags?.shortcode === newItem.tags.shortcode && 
+      (existing.status === 'pending' || existing.status === 'completed')
+    );
+    if (exists) {
+      console.log(`[Queue] Skipping duplicate shortcode: ${newItem.tags.shortcode}`);
+      return false;
+    }
+    return true;
+  });
+
+  if (filteredItems.length === 0) return queue;
+
+  const newItems = filteredItems.map(item => ({
     id: item.id || `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     ...item,
     status: 'pending',
@@ -70,6 +87,13 @@ async function addToQueue(items, prepend = false) {
 async function clearQueue() {
   await saveQueue([]);
   return [];
+}
+
+async function clearPending() {
+  const queue = await getQueue();
+  const clean = queue.filter(item => item.status !== 'pending');
+  await saveQueue(clean);
+  return clean;
 }
 
 async function retryFailedItems() {
@@ -198,6 +222,8 @@ module.exports = {
   getQueue,
   addToQueue,
   clearQueue,
+  clearPending,
+  saveQueue,
   retryFailedItems,
   processNextInQueue,
   getQueueStats,
