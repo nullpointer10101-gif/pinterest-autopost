@@ -157,23 +157,42 @@ async function identifyProduct({ caption = '', username = '', thumbnailUrl = '' 
         retries--;
         continue;
       }
-      console.warn('[AI] identifyProduct failed:', err.message);
-      return { found: false };
+      break; 
     }
   }
-  return { found: false };
+
+  // AI Failed or Rate Limited — Use Heuristic Fallback
+  console.warn(`[AI] Falling back to Keyword Heuristic for @${username}`);
+  return heuristicIdentifyProduct(caption);
+}
+
+function heuristicIdentifyProduct(caption) {
+  const productKeywords = ['buy', 'shop', 'link', 'available', 'price', 'offer', 'discount', 'order', 'get', 'grab', 'sneakers', 'shirt', 'jeans', 'watch', 'phone', 'gadget'];
+  const lower = caption.toLowerCase();
+  const hasKeyword = productKeywords.some(k => lower.includes(k));
+  
+  if (!hasKeyword && caption.length < 20) return { found: false };
+
+  // Clean the caption to get a searchable product name
+  // 1. Take first line or first 60 chars
+  let productName = caption.split('\n')[0].substring(0, 80);
+  // 2. Remove hashtags and emojis
+  productName = productName.replace(/#\w+/g, '').replace(/[^\w\s]/gi, '').trim();
+  
+  if (productName.length < 3) return { found: false };
+
+  return { 
+    found: true, 
+    productName, 
+    flipkartQuery: productName, 
+    fallbackQuery: productName.split(' ').slice(0, 2).join(' '),
+    category: 'other' 
+  };
 }
 
 async function identifyProductInternal({ caption = '', username = '', thumbnailUrl = '' }) {
   if (!openai) {
-    // No AI — try a lightweight keyword heuristic
-    const productKeywords = ['buy', 'shop', 'link in bio', 'available', 'price', 'offer', 'discount', 'order', 'get yours', 'grab'];
-    const lower = caption.toLowerCase();
-    const hasKeyword = productKeywords.some(k => lower.includes(k));
-    if (!hasKeyword) return { found: false };
-    // Rough product name: first line of caption
-    const productName = caption.split('\n')[0].replace(/#\w+/g, '').trim().substring(0, 80);
-    return { found: true, productName, flipkartQuery: productName, fallbackQuery: productName, category: 'other' };
+    return heuristicIdentifyProduct(caption);
   }
 
   const systemPrompt = 'You are an AI visual product identifier for affiliate marketing. You must visually analyze the provided image frame from an Instagram reel alongside the caption to determine the exact product being showcased. Be concise and return only valid JSON.';
