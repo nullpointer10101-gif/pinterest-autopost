@@ -22,17 +22,21 @@ async function dispatchWorkflow(workflowFile, label, inputs = {}) {
   }
 
   try {
-    console.log(`[GitHub] 🚀 Triggering ${label} (${workflowFile})...`, inputs);
+    console.log(`[GitHub] 🚀 Triggering ${label} (${workflowFile})...`);
+    console.log(`[GitHub] Inputs:`, JSON.stringify(inputs, null, 2));
+    
     const body = { ref: 'main' };
     if (Object.keys(inputs).length > 0) {
       body.inputs = inputs;
     }
-    await axios.post(
+    
+    const response = await axios.post(
       `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${workflowFile}/dispatches`,
       body,
       { headers }
     );
-    console.log(`[GitHub] ✅ ${label} triggered successfully.`);
+    
+    console.log(`[GitHub] ✅ ${label} response: ${response.status} ${response.statusText}`);
     return { success: true };
   } catch (err) {
     console.error(`[GitHub] ❌ Failed to trigger ${label}:`, err.response?.data || err.message);

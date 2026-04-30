@@ -4,17 +4,15 @@ function getAIConfig() {
   const apiKey =
     process.env.AI_API_KEY ||
     process.env.OPENAI_API_KEY ||
-    process.env.QWEN_API_KEY ||
-    process.env.DASHSCOPE_API_KEY ||
+    process.env.GEMINI_API_KEY ||
     '';
 
-  const isGemini = apiKey.startsWith('AIza');
+  // Force Gemini unless explicitly overridden by AI_MODEL env var
+  const isGemini = apiKey.startsWith('AIza') || !!process.env.GEMINI_API_KEY || !process.env.OPENAI_API_KEY;
   
   const baseURL =
     process.env.AI_BASE_URL ||
     (isGemini ? 'https://generativelanguage.googleapis.com/v1beta/openai/' : '') ||
-    process.env.OPENAI_BASE_URL ||
-    process.env.QWEN_BASE_URL ||
     '';
 
   const model =
@@ -64,7 +62,7 @@ function fallbackGenerate({ caption, username }) {
   return { title, description, hashtags: tags, aiGenerated: false };
 }
 
-// ─── OpenAI Generation ────────────────────────────────────────────────────────
+// ─── Gemini Generation ────────────────────────────────────────────────────────
 async function generateWithAI({ caption, username, mediaType }) {
   const systemPrompt = `You are the world's top Pinterest SEO and Viral Marketing Expert. Your goal is to turn Instagram Reels into high-traffic Pinterest Pins.
   You understand Pinterest's search algorithm and user behavior. 
@@ -106,10 +104,8 @@ Return JSON: { "title": "...", "description": "...", "hashtags": ["#tag1", "#tag
     max_tokens: 800,
   };
 
-  // Only use json_object for OpenAI, some providers like Gemini 1.5 via OpenAI shim don't like it
-  if (!aiConfig.isGemini && aiConfig.model.includes('gpt')) {
-    options.response_format = { type: 'json_object' };
-  }
+  // Use JSON mode for structured output
+  options.response_format = { type: 'json_object' };
 
   const response = await openai.chat.completions.create(options);
 
@@ -230,9 +226,8 @@ Return ONLY the JSON object. No explanation.`;
     temperature: 0.3,
     max_tokens: 150,
   };
-  if (!aiConfig.isGemini && aiConfig.model.includes('gpt')) {
-    options.response_format = { type: 'json_object' };
-  }
+  // Use JSON mode for structured output
+  options.response_format = { type: 'json_object' };
   const response = await openai.chat.completions.create(options);
   const raw = response.choices[0].message.content.trim();
   // Strip markdown code fences if present
