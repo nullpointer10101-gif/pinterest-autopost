@@ -49,6 +49,7 @@ async function runIgAffiliateTracker() {
           const productResult = await aiService.identifyProduct({
             caption: reel.caption || '',
             username: reel.username,
+            thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl
           });
 
           if (productResult.found) {
@@ -105,7 +106,7 @@ async function runIgAffiliateTracker() {
 
         // Step 7: Queue the pin
         await queueService.addToQueue([{
-          sourceUrl: reel.url,
+          sourceUrl: affiliateUrl || '',
           caption: reel.caption || '',
           username: reel.username,
           thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl,

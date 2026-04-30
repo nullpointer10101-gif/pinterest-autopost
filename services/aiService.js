@@ -145,7 +145,7 @@ async function generatePinterestContent({ caption = '', username = 'creator', me
  * Analyses an Instagram caption to determine if a physical shoppable product
  * is featured. Returns { found, productName, flipkartQuery, category } or { found: false }.
  */
-async function identifyProduct({ caption = '', username = '' }) {
+async function identifyProduct({ caption = '', username = '', thumbnailUrl = '' }) {
   if (!openai) {
     // No AI — try a lightweight keyword heuristic
     const productKeywords = ['buy', 'shop', 'link in bio', 'available', 'price', 'offer', 'discount', 'order', 'get yours', 'grab'];
@@ -157,23 +157,38 @@ async function identifyProduct({ caption = '', username = '' }) {
     return { found: true, productName, flipkartQuery: productName, category: 'other' };
   }
 
-  const systemPrompt = 'You are a product identification expert for affiliate marketing. Be concise and return only valid JSON.';
-  const userPrompt = `Instagram Reel from @${username}:
+  const systemPrompt = 'You are an AI visual product identifier for affiliate marketing. You must visually analyze the provided image frame from an Instagram reel alongside the caption to determine the exact product being showcased. Be concise and return only valid JSON.';
+  
+  const textPrompt = `Instagram Reel from @${username}:
 Caption: "${caption.substring(0, 600)}"
 
-Does this reel feature a specific physical product that can be purchased online (electronics, fashion, home goods, beauty, etc.)?
+Task: Identify the exact primary product being promoted in this reel. You must use BOTH the text caption and the provided image frame.
+1. The caption often contains the exact product name, brand, or type.
+2. The image shows the visual style, color, and design.
 
-If YES → Return: { "found": true, "productName": "exact product name", "flipkartQuery": "5-word search phrase for Flipkart", "category": "electronics|fashion|home|beauty|other" }
-If NO or unclear → Return: { "found": false }
+Combine BOTH sources of information. If the caption mentions "white sneakers" and the image shows casual white sneakers, your search query should be highly specific to find that exact item.
+
+If YES, a specific physical product is clearly showcased → Return: { "found": true, "productName": "exact product name from caption and image", "flipkartQuery": "4-6 word highly specific search phrase for Flipkart including color and type", "category": "electronics|fashion|home|beauty|other" }
+If NO clear product → Return: { "found": false }
 
 Return ONLY the JSON object. No explanation.`;
 
   try {
+    const userMessageContent = [];
+    userMessageContent.push({ type: 'text', text: textPrompt });
+    
+    if (thumbnailUrl) {
+      userMessageContent.push({
+        type: 'image_url',
+        image_url: { url: thumbnailUrl }
+      });
+    }
+
     const options = {
       model: aiConfig.model,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: userMessageContent },
       ],
       temperature: 0.3,
       max_tokens: 150,
