@@ -87,7 +87,18 @@ function bindEvents() {
   on('history-search', 'input', renderHistoryList);
   on('history-status-filter', 'change', renderHistoryList);
   on('engagement-search', 'input', renderEngagementAuditList);
-  on('engagement-source-filter', 'change', renderEngagementAuditList);
+  
+  const platformToggle = byId('engagement-platform-toggle');
+  if (platformToggle) {
+    platformToggle.addEventListener('click', (e) => {
+      const btn = e.target.closest('.segment-btn');
+      if (!btn) return;
+      
+      platformToggle.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderEngagementAuditList();
+    });
+  }
   on('field-title', 'input', updateComposerMeta);
   on('field-desc', 'input', updateComposerMeta);
   on('field-alt', 'input', updateComposerMeta);
@@ -642,96 +653,94 @@ function renderEngagements() {
       `;
     })
     .join('');
-}
-
-function renderEngagementAuditList() {
+}function renderEngagementAuditList() {
   const list = byId('engagement-readonly-list');
   const summary = byId('engagement-summary');
   if (!list || !summary) return;
 
   const search = String(byId('engagement-search')?.value || '').trim().toLowerCase();
-  const sourceFilter = byId('engagement-source-filter')?.value || 'github_actions';
+  
+  const activeBtn = document.querySelector('#engagement-platform-toggle .segment-btn.active');
+  const platform = activeBtn ? activeBtn.dataset.platform : 'pinterest';
   
   let sourceArray = state.engagements;
-  if (sourceFilter === 'x_twitter') {
+  if (platform === 'x_twitter') {
     sourceArray = typeof xState !== 'undefined' ? xState.engagements : [];
   }
   
-  const normalized = sourceArray.map(normalizeEngagementEntry);
+  const now = Date.now();
+  const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+
+  const normalized = sourceArray
+    .map(normalizeEngagementEntry)
+    .filter(entry => {
+      const entryTime = new Date(entry.when).getTime();
+      return entryTime >= twentyFourHoursAgo;
+    });
 
   const rows = normalized.filter((entry) => {
-    if (sourceFilter === 'x_twitter') return true; // X logs don't use 'source' field strictly yet
-    const sourceOk = sourceFilter === 'all' ? true : entry.source === sourceFilter;
-    if (!sourceOk) return false;
     if (!search) return true;
     const haystack = `${entry.action} ${entry.url || ''} ${entry.comment || ''}`.toLowerCase();
     return haystack.includes(search);
   });
 
-  const githubCount = normalized.filter((entry) => entry.source === 'github_actions').length;
-  const localCount = normalized.filter((entry) => entry.source !== 'github_actions').length;
   const shownCount = rows.length;
-  const latestTime = rows[0]?.when ? formatDateTime12h(rows[0].when) : 'No logs';
+  const latestTime = rows[0]?.when ? formatTime12h(rows[0].when) : 'None';
+  const platformLabel = platform === 'x_twitter' ? 'X (Twitter)' : 'Pinterest';
 
-  if (sourceFilter === 'x_twitter') {
-    summary.innerHTML = `
-      <div class="pulse-item"><strong>Platform:</strong> X (Twitter)</div>
-      <div class="pulse-item"><strong>Visible Logs:</strong> ${shownCount}</div>
-      <div class="pulse-item"><strong>Latest Engagement:</strong> ${escHtml(latestTime)}</div>
-    `;
-  } else {
-    summary.innerHTML = `
-      <div class="pulse-item"><strong>Visible Logs:</strong> ${shownCount}</div>
-      <div class="pulse-item"><strong>GitHub Entries:</strong> ${githubCount} • <strong>Other:</strong> ${localCount}</div>
-      <div class="pulse-item"><strong>Latest Engagement:</strong> ${escHtml(latestTime)}</div>
-    `;
-  }
+  summary.innerHTML = `
+    <div class="mini-stat-card">
+      <div class="mini-stat-label">Platform</div>
+      <div class="mini-stat-value">${platformLabel}</div>
+    </div>
+    <div class="mini-stat-card">
+      <div class="mini-stat-label">Active (24h)</div>
+      <div class="mini-stat-value">${shownCount} Logs</div>
+    </div>
+    <div class="mini-stat-card">
+      <div class="mini-stat-label">Latest</div>
+      <div class="mini-stat-value">${latestTime}</div>
+    </div>
+  `;
 
   if (!rows.length) {
-    list.innerHTML = '<div class="pulse-item">No engagement logs match this filter.</div>';
+    list.innerHTML = '<div class="pulse-item">No logs found in the last 24 hours.</div>';
     return;
   }
 
   list.innerHTML = rows
-    .slice(0, 80)
+    .slice(0, 100)
     .map((entry) => {
       const when = entry.when ? formatDateTime12h(entry.when) : 'Unknown time';
       const whenAgo = formatTimeAgo(entry.when);
-      const actionText = String(entry.action || 'Viewed');
+      const actionText = String(entry.action || 'Engagement');
       const actionIcon = getEngagementActionIcon(actionText);
-      let sourceBadge = '';
-      if (sourceFilter === 'x_twitter') {
-        sourceBadge = '<span class="badge badge-info">X (TWITTER)</span>';
-      } else {
-        sourceBadge = entry.source === 'github_actions'
-          ? '<span class="badge badge-success">GITHUB</span>'
-          : `<span class="badge">${escHtml(String(entry.source || 'local').toUpperCase())}</span>`;
-      }
-      const commentMeta = entry.comment ? `<div class="engagement-note">${escHtml(entry.comment)}</div>` : '';
-      const openLink = entry.url ? `<a class="pill-btn" href="${escAttr(entry.url)}" target="_blank" rel="noopener noreferrer">Open Pin</a>` : '';
-      const pinLabel = extractPinLabel(entry.url);
+      
+      const noteHtml = entry.comment ? `<div class="audit-note">"${escHtml(entry.comment)}"</div>` : '';
+      const linkHtml = entry.url ? `<a class="pill-btn" href="${escAttr(entry.url)}" target="_blank" rel="noopener noreferrer">Open Link</a>` : '';
 
       return `
-        <div class="list-item engagement-item">
-          <div class="list-item-main">
-            <div class="engagement-main">
-              <div class="engagement-title"><i data-lucide="${escAttr(actionIcon)}" class="engagement-row-icon"></i>${escHtml(actionText)}</div>
-              <div class="engagement-subtitle">${escHtml(whenAgo)} • ${escHtml(when)}</div>
-              <div class="engagement-tags">
-                ${sourceBadge}
-                ${pinLabel ? `<span class="badge">${escHtml(pinLabel)}</span>` : ''}
-              </div>
-              ${commentMeta}
-            </div>
+        <div class="audit-card">
+          <div class="audit-icon-wrap">
+            <i data-lucide="${actionIcon}" class="audit-icon"></i>
           </div>
-          <div class="item-actions">
-            ${openLink}
+          <div class="audit-content">
+            <div class="audit-title">${escHtml(actionText)}</div>
+            <div class="audit-meta">
+              <span>${escHtml(whenAgo)}</span>
+              <span class="audit-time-dot"></span>
+              <span>${escHtml(when)}</span>
+            </div>
+            ${noteHtml}
+          </div>
+          <div class="audit-actions">
+            ${linkHtml}
           </div>
         </div>
       `;
     })
     .join('');
-
+  
   hydrateIcons();
 }
 
@@ -1166,11 +1175,12 @@ function normalizeEngagementEntry(entry = {}) {
 }
 
 function getEngagementActionIcon(action) {
-  const value = String(action || '').toLowerCase();
-  if (value.includes('comment')) return 'message-circle-more';
-  if (value.includes('like')) return 'heart';
-  if (value.includes('dispatch')) return 'send';
-  if (value.includes('view')) return 'eye';
+  const lower = String(action || '').toLowerCase();
+  if (lower.includes('like')) return 'heart';
+  if (lower.includes('comment')) return 'message-circle';
+  if (lower.includes('follow')) return 'user-plus';
+  if (lower.includes('post')) return 'send';
+  if (lower.includes('extract')) return 'scissors';
   return 'activity';
 }
 

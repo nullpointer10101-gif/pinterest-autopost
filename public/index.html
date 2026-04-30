@@ -292,18 +292,15 @@
                         <h2><i data-lucide="activity" class="heading-icon"></i>Engagement Logbook</h2>
                         <p class="muted-text">Read-only timeline of engagement activity from your automation runs.</p>
                     </div>
-                    <div class="control-row">
-                        <input type="text" id="engagement-search" placeholder="Search by action, pin, or note...">
-                        <select id="engagement-source-filter">
-                            <option value="github_actions">GitHub Actions</option>
-                            <option value="x_twitter">X (Twitter)</option>
-                            <option value="all">All sources</option>
-                            <option value="local">Local</option>
-                            <option value="api_manual">Manual API</option>
-                        </select>
+                    <div class="control-row engagement-controls">
+                        <div class="segmented-control" id="engagement-platform-toggle">
+                            <button class="segment-btn active" data-platform="pinterest">Pinterest</button>
+                            <button class="segment-btn" data-platform="x_twitter">X (Twitter)</button>
+                        </div>
+                        <input type="text" id="engagement-search" placeholder="Search logs...">
                     </div>
-                    <div id="engagement-summary" class="pulse-list"></div>
-                    <div id="engagement-readonly-list" class="list"></div>
+                    <div id="engagement-summary" class="stats-mini-grid"></div>
+                    <div id="engagement-readonly-list" class="list audit-list"></div>
                 </article>
             </section>
 
