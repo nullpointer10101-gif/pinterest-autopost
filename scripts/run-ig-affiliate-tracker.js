@@ -4,6 +4,7 @@ const aiService = require('../services/aiService');
 const flipkartSearchService = require('../services/flipkartSearchService');
 const earnKaroService = require('../services/earnKaroService');
 const queueService = require('../services/queueService');
+const puppeteerService = require('../services/puppeteerService');
 
 async function runIgAffiliateTracker() {
   console.log('====================================================');
@@ -58,10 +59,11 @@ async function runIgAffiliateTracker() {
             console.log(`  [AI] Product identified: "${productName}" (${productResult.category})`);
             console.log(`  [AI] Flipkart query: "${productResult.flipkartQuery}"`);
 
-            // Step 4: Find on Flipkart
+            // Step 4: Find on Flipkart using precise visual query, falling back to generalized query
+            console.log('\n[2] Searching Flipkart...');
             const flipkartProduct = await flipkartSearchService.findProduct(
               productResult.flipkartQuery,
-              productResult.category
+              productResult.fallbackQuery
             );
 
             if (flipkartProduct) {
@@ -104,32 +106,72 @@ async function runIgAffiliateTracker() {
           finalDescription = `${finalDescription}\n\n🛒 Buy it here → ${affiliateUrl}`.substring(0, 800);
         }
 
-        // Step 7: Queue the pin
-        await queueService.addToQueue([{
-          sourceUrl: affiliateUrl || '',
-          caption: reel.caption || '',
-          username: reel.username,
-          thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl,
-          mediaUrl: reel.mediaUrl,
+        // Step 7: POST DIRECTLY TO PINTEREST (Instant Mode)
+        console.log(`  🚀 [Instant] Posting reel ${reel.shortcode} to Pinterest...`);
+        
+        const pinData = {
           title: pinContent.title,
           description: finalDescription,
-          aiContent: {
-            title: pinContent.title,
-            description: finalDescription,
-            hashtags: pinContent.hashtags || [],
-          },
-          // link field = the Pin "source URL" that Pinterest shows
-          sourceUrl: affiliateUrl || reel.url,
-          tags: {
-            channel: reel.username,
-            shortcode: reel.shortcode,
-            hasAffiliate: !!affiliateUrl,
-            product: productName || null,
-            flipkartUrl: flipkartUrl || null,
-          },
-        }]);
+          alt_text: `Product: ${productName || 'Showcased item'} from @${reel.username}`,
+          link: affiliateUrl || '',
+          media_source: { url: reel.mediaUrl },
+        };
 
-        results.queued++;
+        try {
+          const postResult = await puppeteerService.createPinWithBot(pinData);
+          console.log(`  ✅ [Instant] Posted successfully: ${postResult.url || 'Live'}`);
+          
+          // Still add to queue/history but marked as COMPLETED
+          await queueService.addToQueue([{
+            ...pinData,
+            status: 'completed',
+            username: reel.username,
+            thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl,
+            mediaUrl: reel.mediaUrl,
+            aiContent: {
+              title: pinContent.title,
+              description: finalDescription,
+              hashtags: pinContent.hashtags || [],
+            },
+            sourceUrl: affiliateUrl || '',
+            tags: {
+              channel: reel.username,
+              shortcode: reel.shortcode,
+              hasAffiliate: !!affiliateUrl,
+              product: productName || null,
+              flipkartUrl: flipkartUrl || null,
+              isInstant: true,
+              publishUrl: postResult.url || null
+            },
+          }]);
+          results.queued++;
+        } catch (postErr) {
+          console.error(`  ⚠️ [Instant] Direct posting failed, falling back to Queue: ${postErr.message}`);
+          // If posting fails, add to queue as PENDING so it can be retried later by fire-post
+          await queueService.addToQueue([{
+            ...pinData,
+            status: 'pending',
+            username: reel.username,
+            thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl,
+            mediaUrl: reel.mediaUrl,
+            aiContent: {
+              title: pinContent.title,
+              description: finalDescription,
+              hashtags: pinContent.hashtags || [],
+            },
+            sourceUrl: affiliateUrl || '',
+            tags: {
+              channel: reel.username,
+              shortcode: reel.shortcode,
+              hasAffiliate: !!affiliateUrl,
+              product: productName || null,
+              flipkartUrl: flipkartUrl || null,
+              isInstant: true,
+              error: postErr.message
+            },
+          }]);
+          results.skipped++;
+        }
         console.log(`  ✅ Queued successfully! Affiliate: ${affiliateUrl ? 'YES' : 'NO'}`);
       } catch (reelErr) {
         console.error(`  ❌ Failed to process reel ${reel.shortcode}: ${reelErr.message}`);
