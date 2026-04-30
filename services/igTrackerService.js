@@ -99,7 +99,18 @@ async function fetchViaSessionApi(username) {
       { headers: igHeaders(), timeout: 12000 }
     );
     const items = feedRes.data?.items || [];
-    return items.map(item => {
+
+    // Filter out pinned posts — they sit permanently at the top of the profile
+    // and would be re-detected every run if not excluded.
+    const nonPinned = items.filter(item => {
+      if (item.is_pinned === true) {
+        console.log(`[IG-Tracker] Skipping pinned post ${item.code} from @${username}`);
+        return false;
+      }
+      return true;
+    });
+
+    return nonPinned.map(item => {
       const isVideo = item.media_type === 2 || !!item.video_url;
       const shortcode = item.code || item.shortcode;
       const imageVersions = item.image_versions2?.candidates || [];
@@ -113,6 +124,7 @@ async function fetchViaSessionApi(username) {
         caption: item.caption?.text || '',
         username,
         mediaType: isVideo ? 'video' : 'image',
+        isPinned: false,
       };
     }).filter(r => r.shortcode && r.thumbnailUrl);
   } catch (err) {
