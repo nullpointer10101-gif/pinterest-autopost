@@ -250,4 +250,53 @@ Return ONLY the JSON object. No explanation.`;
   return { found: false };
 }
 
-module.exports = { generatePinterestContent, identifyProduct };
+/**
+ * Generates a high-quality, professional Pinterest comment based on a pin's content.
+ */
+async function generateEngagementComment({ title, description }) {
+  if (!openai) {
+    const fallbacks = [
+        'Absolutely love this style! ✨',
+        'This is such a clean look. 🧥',
+        'So inspiring! Thanks for sharing.',
+        'Adding this to my mood board for sure.',
+        'The details here are incredible.'
+    ];
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+  }
+
+  const systemPrompt = `You are a high-end Fashion & Lifestyle Blogger. 
+  Your goal is to leave authentic, professional, and helpful comments on Pinterest pins.
+  Rules:
+  1. Be specific to the content.
+  2. Use a positive, authoritative tone.
+  3. Keep it to 1-2 sentences.
+  4. DO NOT use hashtags. 
+  5. DO NOT sound like a bot. No "Great post!", "Cool video!".
+  6. Mention a specific detail from the title or description if possible.`;
+
+  const userPrompt = `Generate a comment for this Pin:
+  Title: ${title}
+  Description: ${description}
+  
+  Comment:`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: aiConfig.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.85,
+      max_tokens: 100,
+    });
+
+    return response.choices[0].message.content.trim().replace(/^"/, '').replace(/"$/, '');
+  } catch (err) {
+    console.error('[AI] Comment generation failed:', err.message);
+    return 'This looks absolutely incredible! ✨';
+  }
+}
+
+module.exports = { generatePinterestContent, identifyProduct, generateEngagementComment };

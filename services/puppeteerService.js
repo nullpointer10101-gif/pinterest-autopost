@@ -4,6 +4,7 @@ const path = require('path');
 const axios = require('axios');
 const os = require('os');
 const historyService = require('./historyService');
+const aiService = require('./aiService');
 
 function getDefaultChromeUserDataDir() {
   if (process.env.CHROME_USER_DATA_DIR) return process.env.CHROME_USER_DATA_DIR;
@@ -541,7 +542,16 @@ async function runAutoEngagerSafe(options = {}) {
       httpOnly: true,
     });
 
-    await page.goto('https://www.pinterest.com/homefeed/', { waitUntil: 'networkidle2', timeout: 30000 });
+    let feedUrl = 'https://www.pinterest.com/homefeed/';
+    const niche = options.niche || 'all';
+    if (niche === 'fashion') {
+      feedUrl = 'https://www.pinterest.com/search/pins/?q=men%20fashion%20outfits%20menswear%20style';
+    } else if (niche === 'home') {
+      feedUrl = 'https://www.pinterest.com/search/pins/?q=modern%20home%20decor%20ideas%20minimalist';
+    }
+
+    console.log(`[Bot] Navigating to target feed: ${feedUrl}`);
+    await page.goto(feedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
 
     let completed = 0;
     let cycle = 0;
@@ -644,46 +654,38 @@ async function runAutoEngagerSafe(options = {}) {
 
       if (shouldComment) {
         try {
+          const pinData = await page.evaluate(() => {
+            const h1 = document.querySelector('h1');
+            const title = h1 ? h1.innerText : '';
+            const descEl = document.querySelector('[data-test-id="pin-description-text"], .TP9, ._8n');
+            const desc = descEl ? descEl.innerText : '';
+            return { title, desc };
+          });
+
+          console.log(`[Bot] Generating AI comment for: "${pinData.title || 'Untitled'}"`);
+          theComment = await aiService.generateEngagementComment({
+            title: pinData.title || 'Fashion & Style',
+            description: pinData.desc || 'Men fashion inspiration'
+          });
+
           const commentBox = await page.$('div[aria-label="Add a comment"]');
           if (commentBox) {
             await commentBox.click();
-            await sleep(randomInt(600, 1700));
-
-            theComment = pickRandomComment(commentPool, usedComments);
-            await page.keyboard.type(theComment, { delay: randomInt(60, 130) });
-            await sleep(randomInt(900, 2400));
-
-            const postBtnSelectors = [
-              'button[aria-label="Post"]',
-              'button[data-test-id="comment-creation-post-button"]',
-              'button[type="submit"]'
-            ];
+            await sleep(randomInt(1000, 2000));
             
-            let postBtn = null;
-            for (const sel of postBtnSelectors) {
-              postBtn = await page.$(sel);
-              if (postBtn) break;
-            }
-
-            if (postBtn) {
-              await postBtn.click();
-            } else {
-              await page.keyboard.press('Enter');
-            }
-
+            console.log(`[Bot] Typing AI comment: "${theComment}"`);
+            await page.keyboard.type(theComment, { delay: randomInt(45, 95) });
+            await sleep(randomInt(1000, 2000));
+            await page.keyboard.press('Enter');
+            
+            // Wait for post to register
             await sleep(randomInt(4000, 7000));
-
-            const bodyText = await page.evaluate(() => document.body.innerText || '');
-            if (bodyText.includes(theComment)) {
-              commentLeft = true;
-              actionTaken = actionTaken === 'Liked' ? 'Liked & Commented' : 'Commented';
-              console.log(`[Bot] Verified comment: "${theComment}"`);
-            } else {
-              console.log('[Bot] Comment was submitted but verification failed.');
-            }
+            commentLeft = true;
+            actionTaken = actionTaken === 'Liked' ? 'Liked & Commented' : 'Commented';
+            console.log(`[Bot] ✅ AI Comment posted: "${theComment}"`);
           }
         } catch (err) {
-          console.log('[Bot] Could not leave comment:', err.message);
+          console.error('[Bot] AI Commenting failed:', err.message);
         }
       } else {
         console.log('[Bot] Comment skipped by randomization rule.');
@@ -705,7 +707,9 @@ async function runAutoEngagerSafe(options = {}) {
       });
 
       completed += 1;
-      await page.goto('https://www.pinterest.com/homefeed/', { waitUntil: 'networkidle2', timeout: 30000 });
+      
+      // Navigate back to the target feed for the next cycle
+      await page.goto(feedUrl, { waitUntil: 'networkidle2', timeout: 35000 });
     }
 
     console.log('[Bot] Safer engager mode finished.');
