@@ -19,7 +19,7 @@ function getAIConfig() {
 
   const model =
     process.env.AI_MODEL ||
-    (isGemini ? 'gemini-1.5-flash' : 'gpt-4o');
+    (isGemini ? 'gemini-2.0-flash' : 'gpt-4o');
 
   return { apiKey, baseURL, model, isGemini };
 }
@@ -140,4 +140,65 @@ async function generatePinterestContent({ caption = '', username = 'creator', me
   }
 }
 
-module.exports = { generatePinterestContent };
+// ─── Product Identifier (for IG Affiliate Tracker) ───────────────────────────
+/**
+ * Analyses an Instagram caption to determine if a physical shoppable product
+ * is featured. Returns { found, productName, flipkartQuery, category } or { found: false }.
+ */
+async function identifyProduct({ caption = '', username = '' }) {
+  if (!openai) {
+    // No AI — try a lightweight keyword heuristic
+    const productKeywords = ['buy', 'shop', 'link in bio', 'available', 'price', 'offer', 'discount', 'order', 'get yours', 'grab'];
+    const lower = caption.toLowerCase();
+    const hasKeyword = productKeywords.some(k => lower.includes(k));
+    if (!hasKeyword) return { found: false };
+    // Rough product name: first line of caption
+    const productName = caption.split('\n')[0].replace(/#\w+/g, '').trim().substring(0, 80);
+    return { found: true, productName, flipkartQuery: productName, category: 'other' };
+  }
+
+  const systemPrompt = 'You are a product identification expert for affiliate marketing. Be concise and return only valid JSON.';
+  const userPrompt = `Instagram Reel from @${username}:
+Caption: "${caption.substring(0, 600)}"
+
+Does this reel feature a specific physical product that can be purchased online (electronics, fashion, home goods, beauty, etc.)?
+
+If YES → Return: { "found": true, "productName": "exact product name", "flipkartQuery": "5-word search phrase for Flipkart", "category": "electronics|fashion|home|beauty|other" }
+If NO or unclear → Return: { "found": false }
+
+Return ONLY the JSON object. No explanation.`;
+
+  try {
+    const options = {
+      model: aiConfig.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 150,
+    };
+    if (!aiConfig.isGemini && aiConfig.model.includes('gpt')) {
+      options.response_format = { type: 'json_object' };
+    }
+    const response = await openai.chat.completions.create(options);
+    const raw = response.choices[0].message.content.trim();
+    // Strip markdown code fences if present
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    const parsed = JSON.parse(cleaned);
+    if (parsed.found === true && parsed.productName) {
+      return {
+        found: true,
+        productName: parsed.productName,
+        flipkartQuery: parsed.flipkartQuery || parsed.productName,
+        category: parsed.category || 'other',
+      };
+    }
+    return { found: false };
+  } catch (err) {
+    console.warn('[AI] identifyProduct failed:', err.message);
+    return { found: false };
+  }
+}
+
+module.exports = { generatePinterestContent, identifyProduct };

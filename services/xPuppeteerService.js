@@ -240,6 +240,62 @@ async function createTweetWithBot(tweetData) {
 }
 
 
+/**
+ * Collect all visible tweet URLs currently rendered in the DOM.
+ */
+async function getVisibleTweetUrls(page) {
+  return page.evaluate(() => {
+    const tweets = Array.from(document.querySelectorAll('[data-testid="tweet"]'));
+    const urls = [];
+    for (const t of tweets) {
+      const timeLink = t.querySelector('time')?.closest('a');
+      if (timeLink && timeLink.href && timeLink.href.includes('/status/')) {
+        urls.push(timeLink.href);
+      }
+    }
+    return urls;
+  });
+}
+
+/**
+ * Scroll the page and wait for new tweet content to load.
+ * Returns a list of newly visible tweet URLs not in `seenUrls`.
+ */
+async function scrollForNewTweets(page, seenUrls, maxScrollAttempts = 8) {
+  for (let attempt = 0; attempt < maxScrollAttempts; attempt++) {
+    const scrollAmount = randomInt(600, 1200);
+    await page.evaluate((amt) => window.scrollBy(0, amt), scrollAmount);
+    await sleep(randomInt(1800, 3500)); // wait for lazy-loaded tweets
+
+    const visible = await getVisibleTweetUrls(page);
+    const fresh = visible.filter(u => !seenUrls.has(u));
+    if (fresh.length > 0) {
+      console.log(`[X-Bot] Found ${fresh.length} new tweet(s) after ${attempt + 1} scroll(s).`);
+      return fresh;
+    }
+    console.log(`[X-Bot] No new tweets yet (scroll ${attempt + 1}/${maxScrollAttempts}), scrolling more...`);
+  }
+  return [];
+}
+
+/**
+ * Find the ElementHandle for a tweet with the given URL that has a like button.
+ */
+async function findTweetHandleByUrl(page, tweetUrl) {
+  return page.evaluateHandle((url) => {
+    const tweets = Array.from(document.querySelectorAll('[data-testid="tweet"]'));
+    for (const t of tweets) {
+      const timeLink = t.querySelector('time')?.closest('a');
+      if (timeLink && timeLink.href === url) {
+        // Accept if there is either a like or unlike button (both mean tweet is rendered)
+        const btn = t.querySelector('[data-testid="like"], [data-testid="unlike"]');
+        if (btn) return t;
+      }
+    }
+    return null;
+  }, tweetUrl);
+}
+
 async function runAutoEngagerSafe(options = {}) {
   const sessionCookie = await getActiveSessionCookie();
   if (!sessionCookie) throw new Error('X_SESSION_COOKIE is missing.');
@@ -271,15 +327,21 @@ async function runAutoEngagerSafe(options = {}) {
   const commentPool = buildCommentPool();
   const usedComments = new Set();
 
+  // Track URLs we have already engaged with this session (by URL, not DOM state)
+  const engagedUrls = new Set();
+
   try {
     const page = await browser.newPage();
     await applyXCookies(page, sessionCookie);
 
     await page.goto('https://x.com/home', { waitUntil: 'networkidle2', timeout: 30000 });
+    // Let the initial feed render
+    await sleep(3000);
 
     let completed = 0;
+    // Generous cycle limit: each tweet may need several scroll attempts
+    const maxCycles = Math.max(20, targetCount * 8);
     let cycle = 0;
-    const maxCycles = Math.max(6, targetCount * 4);
 
     while (completed < targetCount && cycle < maxCycles) {
       cycle += 1;
@@ -292,51 +354,58 @@ async function runAutoEngagerSafe(options = {}) {
         await sleep(gapMs);
       }
 
-      const scrollLoops = randomInt(2, 5);
-      for (let i = 0; i < scrollLoops; i++) {
-        await page.evaluate(() => window.scrollBy(0, Math.floor(700 + Math.random() * 900)));
-        await sleep(randomInt(1200, 3500));
+      // --- Step 1: find a fresh tweet URL we haven't engaged with yet ---
+      let targetUrl = null;
+
+      // First check what's already visible
+      const alreadyVisible = await getVisibleTweetUrls(page);
+      const freshVisible = alreadyVisible.filter(u => !engagedUrls.has(u));
+      if (freshVisible.length > 0) {
+        targetUrl = freshVisible[0];
+      } else {
+        // Need to scroll to find new tweets
+        const freshFound = await scrollForNewTweets(page, engagedUrls, 10);
+        if (freshFound.length > 0) {
+          targetUrl = freshFound[0];
+        }
       }
 
-      // Find unliked tweets on the screen
-      const tweetElementHandle = await page.evaluateHandle(() => {
-        const tweets = Array.from(document.querySelectorAll('[data-testid="tweet"]'));
-        for (const t of tweets) {
-          const likeBtn = t.querySelector('[data-testid="like"]');
-          if (likeBtn && likeBtn.offsetParent !== null) {
-            return t;
-          }
-        }
-        return null;
-      });
-
-      if (!tweetElementHandle || !tweetElementHandle.asElement()) {
-        console.log('[X-Bot] No unliked tweets found on screen, scrolling more...');
-        await page.evaluate(() => window.scrollBy(0, 1500));
+      if (!targetUrl) {
+        console.log('[X-Bot] ⚠️ Could not find any new tweets after scrolling. Retrying cycle...');
         await sleep(5000);
         continue;
       }
 
-      const tweetUrl = await page.evaluate((tweet) => {
-        const timeLink = tweet.querySelector('time')?.closest('a');
-        if (timeLink && timeLink.href) return timeLink.href;
-        return 'https://x.com/home';
-      }, tweetElementHandle);
+      // Mark as seen immediately to avoid double-engaging
+      engagedUrls.add(targetUrl);
 
+      // --- Step 2: get the ElementHandle for that tweet ---
+      const tweetElementHandle = await findTweetHandleByUrl(page, targetUrl);
+
+      if (!tweetElementHandle || !tweetElementHandle.asElement()) {
+        console.log(`[X-Bot] Could not get handle for tweet ${targetUrl}, skipping.`);
+        continue;
+      }
+
+      // --- Step 3: Like the tweet (only if not already liked) ---
       let actionTaken = 'Viewed';
-      
+
       try {
+        // Prefer the 'like' button; if only 'unlike' exists the tweet was already liked
         const likeBtn = await tweetElementHandle.$('[data-testid="like"]');
         if (likeBtn) {
           await likeBtn.click();
           actionTaken = 'Liked';
           console.log('[X-Bot] ✅ Liked tweet successfully');
           await sleep(randomInt(1200, 2500));
+        } else {
+          console.log('[X-Bot] Tweet already liked, recording as Viewed and skipping like step.');
         }
       } catch (e) {
-        console.log('[X-Bot] ❌ Reaction failed:', e.message);
+        console.log('[X-Bot] ❌ Like failed:', e.message);
       }
 
+      // --- Step 4: Optionally comment ---
       const shouldComment = Math.random() < commentChance;
       let commentLeft = false;
       let theComment = '';
@@ -349,8 +418,8 @@ async function runAutoEngagerSafe(options = {}) {
             await sleep(randomInt(1000, 2500));
 
             const textSelector = '[data-testid="tweetTextarea_0"]';
-            await page.waitForSelector(textSelector, { timeout: 5000 });
-            
+            await page.waitForSelector(textSelector, { timeout: 8000 });
+
             theComment = pickRandomComment(commentPool, usedComments);
             await page.type(textSelector, theComment, { delay: randomInt(60, 130) });
             await sleep(randomInt(900, 2400));
@@ -366,15 +435,16 @@ async function runAutoEngagerSafe(options = {}) {
             await sleep(randomInt(3000, 5000));
             commentLeft = true;
             actionTaken = actionTaken === 'Liked' ? 'Liked & Commented' : 'Commented';
-            console.log(`[X-Bot] Verified comment: "${theComment}"`);
+            console.log(`[X-Bot] ✅ Left comment: "${theComment}"`);
           }
         } catch (err) {
           console.log('[X-Bot] Could not leave comment:', err.message);
         }
       }
 
+      // --- Step 5: Record to history ---
       await xHistoryService.addEngagement({
-        url: tweetUrl,
+        url: targetUrl,
         action: actionTaken,
         comment: commentLeft ? theComment : (actionTaken !== 'Viewed' ? '' : 'Failed to Engage'),
         source: context.source,

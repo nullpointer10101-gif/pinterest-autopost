@@ -1,0 +1,58 @@
+name: IG Affiliate Tracker
+
+on:
+  schedule:
+    # Every hour at :15 — staggered between Pinterest (:00) and X (:29)
+    - cron: '15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ig-affiliate-tracker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache Puppeteer Browser
+        id: cache-puppeteer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Puppeteer Browser
+        if: steps.cache-puppeteer.outputs.cache-hit != 'true'
+        run: npx puppeteer browsers install chrome
+
+      - name: Run IG Affiliate Tracker
+        run: node scripts/run-ig-affiliate-tracker.js
+        env:
+          NODE_ENV: production
+          # AI (Gemini)
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          # Instagram session cookie (for authenticated feed API)
+          INSTAGRAM_SESSION_COOKIE: ${{ secrets.INSTAGRAM_SESSION_COOKIE }}
+          # EarnKaro session cookie (for affiliate link generation via Puppeteer)
+          EARNKARO_SESSION_COOKIE: ${{ secrets.EARNKARO_SESSION_COOKIE }}
+          # Pinterest posting (reuses existing service)
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          # Cloud state storage (Upstash)
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          APP_STATE_KEY: ${{ secrets.APP_STATE_KEY }}
+          APP_IG_TRACKER_STATE_KEY: 'ig_tracker_state_v1'
+          # Automation secret
+          AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
