@@ -146,6 +146,25 @@ async function generatePinterestContent({ caption = '', username = 'creator', me
  * is featured. Returns { found, productName, flipkartQuery, category } or { found: false }.
  */
 async function identifyProduct({ caption = '', username = '', thumbnailUrl = '' }) {
+  let retries = 2;
+  while (retries >= 0) {
+    try {
+      return await identifyProductInternal({ caption, username, thumbnailUrl });
+    } catch (err) {
+      if (err.message.includes('429') && retries > 0) {
+        console.warn(`[AI] Rate limited (429). Retrying in 10s... (${retries} left)`);
+        await new Promise(r => setTimeout(r, 10000));
+        retries--;
+        continue;
+      }
+      console.warn('[AI] identifyProduct failed:', err.message);
+      return { found: false };
+    }
+  }
+  return { found: false };
+}
+
+async function identifyProductInternal({ caption = '', username = '', thumbnailUrl = '' }) {
   if (!openai) {
     // No AI — try a lightweight keyword heuristic
     const productKeywords = ['buy', 'shop', 'link in bio', 'available', 'price', 'offer', 'discount', 'order', 'get yours', 'grab'];
@@ -154,7 +173,7 @@ async function identifyProduct({ caption = '', username = '', thumbnailUrl = '' 
     if (!hasKeyword) return { found: false };
     // Rough product name: first line of caption
     const productName = caption.split('\n')[0].replace(/#\w+/g, '').trim().substring(0, 80);
-    return { found: true, productName, flipkartQuery: productName, category: 'other' };
+    return { found: true, productName, flipkartQuery: productName, fallbackQuery: productName, category: 'other' };
   }
 
   const systemPrompt = 'You are an AI visual product identifier for affiliate marketing. You must visually analyze the provided image frame from an Instagram reel alongside the caption to determine the exact product being showcased. Be concise and return only valid JSON.';
@@ -168,52 +187,48 @@ Task: Identify the exact primary product being promoted in this reel. You must u
 
 Combine BOTH sources of information. If the caption mentions "white sneakers" and the image shows casual white sneakers, your search query should be highly specific to find that exact item.
 
-If YES, a specific physical product is clearly showcased → Return: { "found": true, "productName": "exact product name from caption and image", "flipkartQuery": "4-6 word highly specific search phrase for Flipkart including color and type", "category": "electronics|fashion|home|beauty|other" }
+If YES, a specific physical product is clearly showcased → Return: { "found": true, "productName": "exact product name from caption and image", "flipkartQuery": "4-6 word highly specific search phrase for Flipkart including color and type", "fallbackQuery": "2-3 word generic search phrase (e.g. 'white casual sneakers')", "category": "electronics|fashion|home|beauty|other" }
 If NO clear product → Return: { "found": false }
 
 Return ONLY the JSON object. No explanation.`;
 
-  try {
-    const userMessageContent = [];
-    userMessageContent.push({ type: 'text', text: textPrompt });
-    
-    if (thumbnailUrl) {
-      userMessageContent.push({
-        type: 'image_url',
-        image_url: { url: thumbnailUrl }
-      });
-    }
-
-    const options = {
-      model: aiConfig.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessageContent },
-      ],
-      temperature: 0.3,
-      max_tokens: 150,
-    };
-    if (!aiConfig.isGemini && aiConfig.model.includes('gpt')) {
-      options.response_format = { type: 'json_object' };
-    }
-    const response = await openai.chat.completions.create(options);
-    const raw = response.choices[0].message.content.trim();
-    // Strip markdown code fences if present
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-    const parsed = JSON.parse(cleaned);
-    if (parsed.found === true && parsed.productName) {
-      return {
-        found: true,
-        productName: parsed.productName,
-        flipkartQuery: parsed.flipkartQuery || parsed.productName,
-        category: parsed.category || 'other',
-      };
-    }
-    return { found: false };
-  } catch (err) {
-    console.warn('[AI] identifyProduct failed:', err.message);
-    return { found: false };
+  const userMessageContent = [];
+  userMessageContent.push({ type: 'text', text: textPrompt });
+  
+  if (thumbnailUrl) {
+    userMessageContent.push({
+      type: 'image_url',
+      image_url: { url: thumbnailUrl }
+    });
   }
+
+  const options = {
+    model: aiConfig.model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessageContent },
+    ],
+    temperature: 0.3,
+    max_tokens: 150,
+  };
+  if (!aiConfig.isGemini && aiConfig.model.includes('gpt')) {
+    options.response_format = { type: 'json_object' };
+  }
+  const response = await openai.chat.completions.create(options);
+  const raw = response.choices[0].message.content.trim();
+  // Strip markdown code fences if present
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  const parsed = JSON.parse(cleaned);
+  if (parsed.found === true && parsed.productName) {
+    return {
+      found: true,
+      productName: parsed.productName,
+      flipkartQuery: parsed.flipkartQuery || parsed.productName,
+      fallbackQuery: parsed.fallbackQuery || parsed.category || 'other',
+      category: parsed.category || 'other',
+    };
+  }
+  return { found: false };
 }
 
 module.exports = { generatePinterestContent, identifyProduct };
