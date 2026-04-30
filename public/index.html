@@ -326,34 +326,69 @@
                 <div class="panel-grid panel-grid-secondary">
                     <article class="card">
                         <div class="card-title-wrap">
-                            <h2><i data-lucide="link" class="heading-icon"></i>Connection Center</h2>
-                            <p class="muted-text">Manage API OAuth and fallback session cookie from one place.</p>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <h2><i data-lucide="camera" class="heading-icon"></i>Pinterest Setup</h2>
+                                <span id="settings-badge-pin" class="badge">Checking...</span>
+                            </div>
+                            <p class="muted-text">Connect your Pinterest account via OAuth or Session Cookie.</p>
                         </div>
-                        <a href="/api/pinterest" class="btn btn-primary settings-link"><i data-lucide="shield-check" class="btn-icon"></i><span>Connect Pinterest OAuth</span></a>
+                        
                         <div class="field-wrap">
-                            <label for="session-cookie">Session Cookie</label>
+                            <label>Method 1: Official API (Recommended)</label>
+                            <a href="/api/pinterest" class="btn btn-primary settings-link" style="width: 100%; margin-top: 8px;">
+                                <i data-lucide="shield-check" class="btn-icon"></i><span>Link via OAuth</span>
+                            </a>
+                        </div>
+
+                        <div class="field-wrap" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line);">
+                            <label for="session-cookie">Method 2: Session Cookie</label>
                             <div class="inline-field">
                                 <input type="password" id="session-cookie" placeholder="_pinterest_sess value">
-                                <button id="link-session-btn" class="btn btn-secondary" type="button"><i data-lucide="link-2" class="btn-icon"></i><span>Link Session</span></button>
+                                <button id="link-session-btn" class="btn btn-secondary" type="button">Link</button>
+                                <button id="unlink-session-btn" class="btn btn-danger hidden" type="button">Unlink</button>
                             </div>
-                        </div>
-                        <div class="field-wrap" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-                            <label for="x-session-cookie">X (Twitter) auth_token</label>
-                            <div class="inline-field">
-                                <input type="password" id="x-session-cookie" placeholder="auth_token=...">
-                                <button id="link-x-session-btn" class="btn btn-secondary" type="button"><i data-lucide="link-2" class="btn-icon"></i><span>Link X Session</span></button>
-                            </div>
-                        </div>
-                        <div class="button-row">
-                            <button id="unlink-session-btn" class="btn btn-secondary" type="button"><i data-lucide="unlink-2" class="btn-icon"></i><span>Unlink Pinterest</span></button>
-                            <button id="unlink-api-btn" class="btn btn-danger" type="button"><i data-lucide="link-2-off" class="btn-icon"></i><span>Unlink API</span></button>
                         </div>
                     </article>
 
                     <article class="card">
                         <div class="card-title-wrap">
-                            <h2><i data-lucide="stethoscope" class="heading-icon"></i>Diagnostics</h2>
-                            <p class="muted-text">Runtime, posting mode, and session health for troubleshooting.</p>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <h2><i data-lucide="twitter" class="heading-icon"></i>X Console Setup</h2>
+                                <span id="settings-badge-x" class="badge">Checking...</span>
+                            </div>
+                            <p class="muted-text">Link your X account using the browser auth_token.</p>
+                        </div>
+                        
+                        <div class="field-wrap">
+                            <label for="x-session-cookie">Auth Token</label>
+                            <div class="inline-field">
+                                <input type="password" id="x-session-cookie" placeholder="auth_token=...">
+                                <button id="link-x-session-btn" class="btn btn-secondary" type="button">Link</button>
+                                <button id="unlink-x-session-btn" class="btn btn-danger hidden" type="button">Unlink</button>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="instagram" class="heading-icon"></i>Extraction Engine</h2>
+                            <p class="muted-text">Credentials for the Instagram reel crawler.</p>
+                        </div>
+                        
+                        <div class="field-wrap">
+                            <label for="ig-session-cookie">Instagram Cookie (Optional)</label>
+                            <div class="inline-field">
+                                <input type="password" id="ig-session-cookie" placeholder="sessionid=...">
+                                <button id="link-ig-session-btn" class="btn btn-secondary" type="button">Save</button>
+                            </div>
+                            <div class="input-meta">Required only for high-frequency extraction or restricted reels.</div>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="stethoscope" class="heading-icon"></i>System Status</h2>
+                            <p class="muted-text">Runtime and environment diagnostics.</p>
                         </div>
                         <div class="diag-list">
                             <div class="diag-item">
@@ -361,15 +396,11 @@
                                 <span id="diag-runtime" class="badge">Checking...</span>
                             </div>
                             <div class="diag-item">
-                                <span>Posting Mode</span>
+                                <span>Posting</span>
                                 <span id="diag-posting" class="badge">Checking...</span>
                             </div>
                             <div class="diag-item">
-                                <span>Session</span>
-                                <span id="diag-session" class="badge">Checking...</span>
-                            </div>
-                            <div class="diag-item">
-                                <span>Queue Storage</span>
+                                <span>Storage</span>
                                 <span id="diag-storage" class="badge">Checking...</span>
                             </div>
                         </div>

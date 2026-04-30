@@ -71,7 +71,7 @@ function bindEvents() {
   on('manual-refresh-btn', 'click', refreshAll);
   on('link-session-btn', 'click', linkSessionCookie);
   on('unlink-session-btn', 'click', unlinkSessionCookie);
-  on('unlink-api-btn', 'click', unlinkApiConnection);
+  on('link-ig-session-btn', 'click', linkIgSession);
 
   on('auto-refresh-toggle', 'change', (event) => {
     setAutoRefresh(!!event.target.checked);
@@ -863,20 +863,61 @@ async function loadDiagnostics() {
       apiRequest('/api/pinterest/session/status'),
     ]);
 
-    setBadgeByState('diag-runtime', system.runtime?.isServerless ? 'Serverless' : 'Node', 'success');
+    // System Status Panel
+    setBadgeByState('diag-runtime', system.runtime?.isServerless ? 'Cloud' : 'Local', 'success');
     setBadgeByState('diag-posting', String(system.posting?.resolvedMode || pinterest.resolvedPostingMode || 'api').toUpperCase(), 'success');
-    setBadgeByState(
-      'diag-session',
-      session.session?.hasSession ? `Linked (${session.session.source || 'storage'})` : 'Not Linked',
-      session.session?.hasSession ? 'success' : 'error'
-    );
-    setBadgeByState(
-      'diag-storage',
-      String(system.queue?.storageMode || system.storage?.mode || 'unknown').toUpperCase(),
-      'warn'
-    );
+    setBadgeByState('diag-storage', String(system.queue?.storageMode || system.storage?.mode || 'memory').toUpperCase(), 'warn');
+
+    // Pinterest Setup Card
+    const pinBadge = byId('settings-badge-pin');
+    const pinLinkBtn = byId('link-session-btn');
+    const pinUnlinkBtn = byId('unlink-session-btn');
+    
+    if (session.session?.hasSession) {
+      setBadge(pinBadge, 'Linked', 'success');
+      pinLinkBtn?.classList.add('hidden');
+      pinUnlinkBtn?.classList.remove('hidden');
+    } else {
+      setBadge(pinBadge, 'Not Linked', 'error');
+      pinLinkBtn?.classList.remove('hidden');
+      pinUnlinkBtn?.classList.add('hidden');
+    }
+
+    // X Console Setup Card (Mock check using system status or global xState)
+    const xBadge = byId('settings-badge-x');
+    const xLinkBtn = byId('link-x-session-btn');
+    const xUnlinkBtn = byId('unlink-x-session-btn');
+    const xActive = typeof xState !== 'undefined' && xState.connected;
+
+    if (xActive) {
+      setBadge(xBadge, 'Linked', 'success');
+      xLinkBtn?.classList.add('hidden');
+      xUnlinkBtn?.classList.remove('hidden');
+    } else {
+      setBadge(xBadge, 'Not Linked', 'error');
+      xLinkBtn?.classList.remove('hidden');
+      xUnlinkBtn?.classList.add('hidden');
+    }
+
   } catch (error) {
-    showToast(error.message || 'Diagnostics unavailable.', 'error');
+    console.error('Diagnostics failed', error);
+  }
+}
+
+async function linkIgSession() {
+  const val = byId('ig-session-cookie')?.value.trim();
+  if (!val) return showToast('Enter Instagram sessionid', 'error');
+  
+  try {
+    // We assume an endpoint for IG session exists or will be added
+    const res = await apiRequest('/api/ig/session', {
+      method: 'POST',
+      body: { cookie: val }
+    });
+    showToast(res.message || 'Instagram session saved', 'success');
+    byId('ig-session-cookie').value = '';
+  } catch (error) {
+    showToast(error.message || 'Failed to save IG session', 'error');
   }
 }
 

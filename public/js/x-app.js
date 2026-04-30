@@ -23,7 +23,23 @@ function bindXEvents() {
   on('x-run-bot-btn', 'click', fireXQueue);
   on('x-engage-btn', 'click', startXEngager);
   on('link-x-session-btn', 'click', linkXSession);
+  on('unlink-x-session-btn', 'click', unlinkXSession);
   on('x-field-text', 'input', updateXTextMeta);
+}
+
+async function unlinkXSession() {
+  if (!confirm('Are you sure you want to unlink X session?')) return;
+  try {
+    const res = await fetch('/api/x/session', { method: 'DELETE' }).then(r => r.json());
+    if (res.success) {
+      showToast('X Session Unlinked', 'success');
+      if (typeof refreshAll === 'function') refreshAll();
+    } else {
+      showToast(res.error || 'Failed to unlink', 'error');
+    }
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
 }
 
 function updateXTextMeta() {
