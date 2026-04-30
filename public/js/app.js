@@ -141,8 +141,7 @@ function switchTab(tab) {
 
   if (tab === 'queue') renderQueueList();
   if (tab === 'history') renderHistoryList();
-  if (tab === 'lab') loadEngagements();
-  if (tab === 'engagements') loadEngagements();
+  if (tab === 'engagements') renderEngagementAuditList();
   if (tab === 'settings') loadDiagnostics();
 }
 

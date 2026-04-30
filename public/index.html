@@ -30,11 +30,11 @@
         </header>
 
         <nav class="tab-nav" aria-label="Main tabs">
-            <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-grid" class="tab-icon"></i><span>Dashboard</span></button>
+            <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
+            <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
             <button class="tab-btn" data-tab="x-dashboard" type="button"><i data-lucide="twitter" class="tab-icon"></i><span>X (Twitter)</span></button>
             <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="list-ordered" class="tab-icon"></i><span>Queue</span></button>
-            <button class="tab-btn" data-tab="lab" type="button"><i data-lucide="rocket" class="tab-icon"></i><span>Booster</span></button>
-            <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Engage Log</span></button>
+            <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="zap" class="tab-icon"></i><span>Engage Log</span></button>
             <button class="tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
             <button class="tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
         </nav>
@@ -71,11 +71,26 @@
                         <div class="stat-value" id="stat-queue-failed">0</div>
                     </article>
                 </section>
+                
+                <article class="card welcome-card" style="text-align: center; padding: 40px 20px;">
+                    <div class="card-title-wrap">
+                        <i data-lucide="sparkles" style="width: 48px; height: 48px; color: var(--accent); margin: 0 auto 16px;"></i>
+                        <h2 style="font-size: 24px; margin-bottom: 8px;">Welcome to Mission Control</h2>
+                        <p class="muted-text" style="max-width: 500px; margin: 0 auto 24px;">Your autonomous content engine is ready. Navigate to Pinterest or X to manage your campaigns and engage with your audience.</p>
+                    </div>
+                    <div class="button-row" style="display: flex; justify-content: center; gap: 12px; max-width: 400px; margin: 0 auto;">
+                        <button class="btn btn-primary" style="flex: 1;" onclick="switchTab('pinterest')">Pinterest Hub</button>
+                        <button class="btn btn-secondary" style="flex: 1;" onclick="switchTab('x-dashboard')">X Console</button>
+                    </div>
+                </article>
+            </section>
+
+            <section id="panel-pinterest" class="panel hidden">
                 <div class="panel-grid panel-grid-main">
                     <article class="card">
                         <div class="card-title-wrap">
-                            <h2><i data-lucide="pen-square" class="heading-icon"></i>Create Mission</h2>
-                            <p class="muted-text">Mobile-first mission builder for quick publish and queue runs.</p>
+                            <h2><i data-lucide="pen-square" class="heading-icon"></i>Mission Builder</h2>
+                            <p class="muted-text">Extract reels and build high-conversion pins instantly.</p>
                         </div>
 
                         <div class="field-wrap">
@@ -127,20 +142,44 @@
                         </section>
                     </article>
 
-                    <aside class="card">
-                        <div class="card-title-wrap">
-                            <h2><i data-lucide="zap" class="heading-icon"></i>Quick Actions</h2>
-                            <p class="muted-text">Shortcuts designed for thumb-first mobile usage.</p>
-                        </div>
-                        <div class="quick-actions">
-                            <button id="run-bot-btn" class="btn btn-primary" type="button">Run Queue Bot</button>
-                            <button id="quick-open-queue-btn" class="btn btn-secondary" type="button"><i data-lucide="list-ordered" class="btn-icon"></i><span>Open Queue</span></button>
-                            <button id="quick-open-history-btn" class="btn btn-secondary" type="button"><i data-lucide="history" class="btn-icon"></i><span>Open History</span></button>
-                        </div>
-                    </aside>
-                </div>
+                    <aside class="sidebar-col" style="display: flex; flex-direction: column; gap: 12px;">
+                        <article class="card">
+                            <div class="card-title-wrap">
+                                <h2><i data-lucide="rocket" class="heading-icon"></i>Booster Lab</h2>
+                                <p class="muted-text">Run safe engagement bursts for your niche.</p>
+                            </div>
+                            <div class="field-wrap">
+                                <label for="engage-niche">Target Niche</label>
+                                <select id="engage-niche">
+                                    <option value="all">General Growth</option>
+                                    <option value="fashion">Fashion and Style</option>
+                                    <option value="home">Home Decor</option>
+                                </select>
+                            </div>
+                            <div class="field-wrap">
+                                <label for="engage-count">Intensity</label>
+                                <div class="range-wrap">
+                                    <input type="range" id="engage-count" min="1" max="10" value="3">
+                                    <span id="engage-count-value">3</span>
+                                </div>
+                            </div>
+                            <div class="button-row">
+                                <button id="engage-btn" class="btn btn-primary" style="width: 100%;" type="button">Launch Booster</button>
+                            </div>
+                        </article>
 
-                <div class="panel-grid panel-grid-secondary hidden">
+                        <article class="card">
+                            <div class="card-title-wrap">
+                                <h2><i data-lucide="zap" class="heading-icon"></i>Actions</h2>
+                                <p class="muted-text">Manage Pinterest automation.</p>
+                            </div>
+                            <div class="quick-actions" style="display: flex; flex-direction: column; gap: 8px;">
+                                <button id="run-bot-btn" class="btn btn-primary" type="button">Run Queue Bot</button>
+                                <button id="quick-open-queue-btn" class="btn btn-secondary" type="button"><i data-lucide="list-ordered" class="btn-icon"></i><span>Open Queue</span></button>
+                                <button id="quick-open-history-btn" class="btn btn-secondary" type="button"><i data-lucide="history" class="btn-icon"></i><span>Open History</span></button>
+                            </div>
+                        </article>
+                    </aside>
                 </div>
             </section>
 
@@ -232,35 +271,6 @@
                         </select>
                     </div>
                     <div id="queue-list" class="list"></div>
-                </article>
-            </section>
-
-            <section id="panel-lab" class="panel hidden">
-                <article class="card">
-                    <div class="card-title-wrap">
-                        <h2><i data-lucide="rocket" class="heading-icon"></i>Booster Lab</h2>
-                        <p class="muted-text">Run safe engagement bursts and monitor the action log.</p>
-                    </div>
-                    <div class="field-wrap">
-                        <label for="engage-niche">Target Niche</label>
-                        <select id="engage-niche">
-                            <option value="all">General Growth</option>
-                            <option value="fashion">Fashion and Style</option>
-                            <option value="home">Home Decor</option>
-                        </select>
-                    </div>
-                    <div class="field-wrap">
-                        <label for="engage-count">Intensity</label>
-                        <div class="range-wrap">
-                            <input type="range" id="engage-count" min="1" max="10" value="3">
-                            <span id="engage-count-value">3</span>
-                        </div>
-                    </div>
-                    <div class="button-row">
-                        <button id="engage-btn" class="btn btn-primary" type="button">Launch Booster</button>
-                        <button id="clear-engagements-btn" class="btn btn-secondary" type="button"><i data-lucide="eraser" class="btn-icon"></i><span>Clear Logs</span></button>
-                    </div>
-                    <div id="engagement-logs" class="list"></div>
                 </article>
             </section>
 
