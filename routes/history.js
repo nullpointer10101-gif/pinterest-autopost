@@ -164,7 +164,7 @@ router.delete('/engagements', async (req, res) => {
 
 router.post('/engage', async (req, res) => {
   try {
-    const hardCap = Math.max(1, parseInt(process.env.AUTOMATION_ENGAGEMENTS_HARD_CAP || '2', 10));
+    const hardCap = Math.max(1, parseInt(process.env.AUTOMATION_ENGAGEMENTS_HARD_CAP || '20', 10));
     const requested = Math.max(1, parseInt(req.body?.count || '2', 10));
     const targetCount = Math.min(requested, hardCap);
     if (!puppeteerService || typeof puppeteerService.runAutoEngager !== 'function') {
