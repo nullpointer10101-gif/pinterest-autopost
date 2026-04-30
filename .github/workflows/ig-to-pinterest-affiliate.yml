@@ -1,58 +1,53 @@
-name: IG Affiliate Tracker
+name: 📸 IG-to-Pinterest Affiliate Pipeline
 
 on:
   schedule:
-    # Every hour at :15 — staggered between Pinterest (:00) and X (:29)
+    # Run every hour at :15 to ensure fresh content is captured quickly
     - cron: '15 * * * *'
   workflow_dispatch:
 
 jobs:
-  ig-affiliate-tracker:
+  affiliate-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
-      - name: Checkout
+      - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Cache Puppeteer Browser
+      - name: 📦 Cache Puppeteer
         id: cache-puppeteer
         uses: actions/cache@v4
         with:
           path: ~/.cache/puppeteer
           key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
 
-      - name: Install dependencies
+      - name: 🚀 Install Dependencies
         run: npm ci
 
-      - name: Install Puppeteer Browser
+      - name: 🌐 Install Chrome
         if: steps.cache-puppeteer.outputs.cache-hit != 'true'
         run: npx puppeteer browsers install chrome
 
-      - name: Run IG Affiliate Tracker
-        run: node scripts/run-ig-affiliate-tracker.js
+      - name: 🎬 Run Full Pipeline (Instant Post)
+        run: node scripts/ig-pinterest-pipeline.js
         env:
           NODE_ENV: production
-          # AI (Gemini)
+          # AI & Search
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ secrets.AI_MODEL }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
-          # Instagram session cookie (for authenticated feed API)
+          # Auth Cookies
           INSTAGRAM_SESSION_COOKIE: ${{ secrets.INSTAGRAM_SESSION_COOKIE }}
-          # EarnKaro session cookie (for affiliate link generation via Puppeteer)
           EARNKARO_SESSION_COOKIE: ${{ secrets.EARNKARO_SESSION_COOKIE }}
-          # Pinterest posting (reuses existing service)
-          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
-          # Cloud state storage (Upstash)
+          PINTEREST_SESSION_COOKIE: ${{ secrets.PINTEREST_SESSION_COOKIE }}
+          # Database/Queue
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-          APP_STATE_KEY: ${{ secrets.APP_STATE_KEY }}
-          APP_IG_TRACKER_STATE_KEY: 'ig_tracker_state_v1'
-          # Automation secret
-          AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
+          APP_STATE_KEY: ${{ secrets.APP_STATE_KEY || 'pinterest_autopost_state_v1' }}
