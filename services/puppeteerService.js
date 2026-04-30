@@ -499,6 +499,38 @@ async function createPinWithBot(pinData) {
 }
 
 
+function isPinRelevant(title, description, niche) {
+  if (niche !== 'fashion' && niche !== 'home') return true;
+  
+  const text = (title + ' ' + description).toLowerCase();
+  
+  if (niche === 'fashion') {
+    // Whitelist: Must have at least one of these
+    const mustHave = ['men', 'man', 'menswear', 'fashion', 'style', 'outfit', 'clothes', 'trouser', 'pants', 'shirt', 'jacket', 'streetwear', 'suit', 'sneaker', 'denim', 'blazer', 'hoodie'];
+    // Blacklist: Must NOT have any of these
+    const blacklisted = ['decor', 'home', 'furniture', 'interior', 'kitchen', 'light', 'architecture', 'garden', 'recipe', 'food', 'art', 'drawing', 'diy', 'craft', 'room', 'apartment'];
+    
+    const hasBlacklisted = blacklisted.some(word => text.includes(word));
+    if (hasBlacklisted) return false;
+    
+    const hasRequired = mustHave.some(word => text.includes(word));
+    return hasRequired;
+  }
+
+  if (niche === 'home') {
+    const mustHave = ['home', 'decor', 'interior', 'room', 'furniture', 'design', 'apartment', 'house', 'living', 'kitchen', 'bedroom'];
+    const blacklisted = ['fashion', 'clothes', 'outfit', 'makeup', 'beauty', 'recipe', 'food', 'car', 'tech'];
+    
+    const hasBlacklisted = blacklisted.some(word => text.includes(word));
+    if (hasBlacklisted) return false;
+    
+    const hasRequired = mustHave.some(word => text.includes(word));
+    return hasRequired;
+  }
+  
+  return true;
+}
+
 async function runAutoEngagerSafe(options = {}) {
   const sessionCookie = await getActiveSessionCookie();
   if (!sessionCookie) throw new Error('PINTEREST_SESSION_COOKIE is missing. Link a session in Settings.');
@@ -611,7 +643,24 @@ async function runAutoEngagerSafe(options = {}) {
       const randomPin = pinLinks[randomInt(0, pinLinks.length - 1)];
       console.log(`[Bot] Viewing pin: ${randomPin}`);
       await page.goto(randomPin, { waitUntil: 'networkidle2', timeout: 30000 });
-      await sleep(randomInt(4500, 10000));
+      await sleep(randomInt(3000, 6000));
+
+      const pinData = await page.evaluate(() => {
+        const h1 = document.querySelector('h1');
+        const title = h1 ? h1.innerText : '';
+        const descEl = document.querySelector('[data-test-id="pin-description-text"], .TP9, ._8n');
+        const desc = descEl ? descEl.innerText : '';
+        return { title, desc };
+      });
+
+      // --- NEW: Strict Relevancy Check ---
+      if (!isPinRelevant(pinData.title, pinData.desc, niche)) {
+        console.log(`[Bot] ⏭️ Skipping irrelevant pin (Niche: ${niche}): "${pinData.title || 'No Title'}"`);
+        // Don't count this as completed or cycle, just continue the while loop
+        continue;
+      }
+
+      console.log(`[Bot] ✅ Pin verified as relevant: "${pinData.title || 'Untitled'}"`);
 
       let actionTaken = 'Viewed';
       try {
@@ -654,15 +703,7 @@ async function runAutoEngagerSafe(options = {}) {
 
       if (shouldComment) {
         try {
-          const pinData = await page.evaluate(() => {
-            const h1 = document.querySelector('h1');
-            const title = h1 ? h1.innerText : '';
-            const descEl = document.querySelector('[data-test-id="pin-description-text"], .TP9, ._8n');
-            const desc = descEl ? descEl.innerText : '';
-            return { title, desc };
-          });
-
-          console.log(`[Bot] Generating AI comment for: "${pinData.title || 'Untitled'}"`);
+          console.log(`[Bot] Generating AI comment...`);
           theComment = await aiService.generateEngagementComment({
             title: pinData.title || 'Fashion & Style',
             description: pinData.desc || 'Men fashion inspiration'
