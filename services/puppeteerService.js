@@ -245,12 +245,15 @@ async function createPinWithBot(pinData) {
 
   console.log('[Bot] Starting Pinterest Browser Bot...');
   
-  // 1. Download the video to a temp file
+  // 1. Download the media to a temp file
   const tempDir = os.tmpdir();
-  const videoPath = path.join(tempDir, `pin_${Date.now()}.mp4`);
-  console.log('[Bot] Downloading video to temp storage...');
-  await downloadVideo(media_source.url, videoPath);
-  console.log('[Bot] Video downloaded successfully.');
+  const isImage = media_source.url.match(/\.(jpeg|jpg|png|webp)(\?.*)?$/i) || media_source.url.includes('dst-jpg');
+  const ext = isImage ? '.jpg' : '.mp4';
+  const mediaPath = path.join(tempDir, `pin_${Date.now()}${ext}`);
+  
+  console.log(`[Bot] Downloading media (${ext}) to temp storage...`);
+  await downloadVideo(media_source.url, mediaPath);
+  console.log('[Bot] Media downloaded successfully.');
 
   // 2. Launch Puppeteer (Headless mode for server deployment)
   const browser = await puppeteer.launch({
@@ -287,15 +290,15 @@ async function createPinWithBot(pinData) {
       throw new Error('Pinterest session expired or invalid. Please update PINTEREST_SESSION_COOKIE.');
     }
 
-    // 3. Upload Video
-    console.log('[Bot] Uploading video file...');
+    // 3. Upload Media
+    console.log('[Bot] Uploading media file...');
     const fileInputSelector = 'input[type="file"]';
     await page.waitForSelector(fileInputSelector, { timeout: 10000 });
     const fileInput = await page.$(fileInputSelector);
-    await fileInput.uploadFile(videoPath);
+    await fileInput.uploadFile(mediaPath);
 
-    // Wait for video to upload and processing to complete
-    console.log('[Bot] Waiting for video upload...');
+    // Wait for media to upload and processing to complete
+    console.log('[Bot] Waiting for media upload...');
     await page.waitForFunction(() => {
       const text = document.body.innerText || '';
       // Check for upload/processing indicators to disappear
@@ -490,7 +493,7 @@ async function createPinWithBot(pinData) {
   } finally {
     // Cleanup
     await browser.close();
-    try { fs.unlinkSync(videoPath); } catch (e) {}
+    try { fs.unlinkSync(mediaPath); } catch (e) {}
   }
 }
 
