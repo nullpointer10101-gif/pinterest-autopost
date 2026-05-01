@@ -191,21 +191,19 @@ async function identifyProductInternal({ caption = '', username = '', thumbnailU
     return heuristicIdentifyProduct(caption);
   }
 
-  const systemPrompt = 'You are an AI visual product identifier for affiliate marketing. You must visually analyze the provided image frame from an Instagram reel alongside the caption to determine the exact product being showcased. Be concise and return only valid JSON.';
+  const systemPrompt = 'You are an AI visual product identifier for affiliate marketing. You must analyze the provided caption and image to determine if a shoppable product (fashion, electronics, home decor, etc.) is showcased. Be helpful and try to find a product if the caption implies one. Return only valid JSON.';
   
   const textPrompt = `Instagram Reel from @${username}:
-Caption: "${caption.substring(0, 600)}"
+Caption: "${caption.substring(0, 700)}"
 
-Task: Identify the exact primary product being promoted in this reel. You must use BOTH the text caption and the provided image frame.
-1. The caption often contains the exact product name, brand, or type.
-2. The image shows the visual style, color, and design.
+Task: Identify the primary product being promoted. 
+- Look for keywords like "shop", "link", "available", "buy", or specific product names (sneakers, watch, dress, etc.).
+- Even if it's a general fashion reel, try to identify the main item (e.g., "Casual White Sneakers" or "Men's Leather Watch").
 
-Combine BOTH sources of information. If the caption mentions "white sneakers" and the image shows casual white sneakers, your search query should be highly specific to find that exact item.
+If a product is found → Return: { "found": true, "productName": "specific product name", "flipkartQuery": "detailed search query for Flipkart", "fallbackQuery": "generic search query", "category": "fashion|electronics|home|beauty|other" }
+If absolutely no product → Return: { "found": false }
 
-If YES, a specific physical product is clearly showcased → Return: { "found": true, "productName": "exact product name from caption and image", "flipkartQuery": "4-6 word highly specific search phrase for Flipkart including color and type", "fallbackQuery": "2-3 word generic search phrase (e.g. 'white casual sneakers')", "category": "electronics|fashion|home|beauty|other" }
-If NO clear product → Return: { "found": false }
-
-Return ONLY the JSON object. No explanation.`;
+Return ONLY the JSON object.`;
 
   const userMessageContent = [];
   userMessageContent.push({ type: 'text', text: textPrompt });
@@ -223,7 +221,7 @@ Return ONLY the JSON object. No explanation.`;
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessageContent },
     ],
-    temperature: 0.3,
+    temperature: 0.4,
     max_tokens: 150,
   };
   // Use JSON mode for structured output
@@ -233,6 +231,16 @@ Return ONLY the JSON object. No explanation.`;
   // Strip markdown code fences if present
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   const parsed = JSON.parse(cleaned);
+
+  // If AI says not found, but we have strong keywords, use heuristic anyway
+  if (parsed.found !== true) {
+    const heuristic = heuristicIdentifyProduct(caption);
+    if (heuristic.found) {
+        console.log(`[AI] AI said no product, but heuristic found one. Using heuristic.`);
+        return heuristic;
+    }
+  }
+
   if (parsed.found === true && parsed.productName) {
     return {
       found: true,

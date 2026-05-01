@@ -133,7 +133,8 @@ async function runIgPinterestPipeline() {
               description: finalDescription,
               hashtags: pinContent.hashtags || [],
             },
-            sourceUrl: affiliateUrl || '',
+            sourceUrl: reel.url, // Original IG URL
+            link: affiliateUrl || '', // Affiliate link
             tags: {
               channel: reel.username,
               shortcode: reel.shortcode,
@@ -159,7 +160,8 @@ async function runIgPinterestPipeline() {
               description: finalDescription,
               hashtags: pinContent.hashtags || [],
             },
-            sourceUrl: affiliateUrl || '',
+            sourceUrl: reel.url, // Original IG URL
+            link: affiliateUrl || '', // Affiliate link
             tags: {
               channel: reel.username,
               shortcode: reel.shortcode,

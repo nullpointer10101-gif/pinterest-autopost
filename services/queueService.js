@@ -56,15 +56,20 @@ async function addToQueue(items, prepend = false) {
   const queue = await getQueue();
   const now = new Date().toISOString();
   
-  // Filter out items that already exist in the queue (by shortcode tag)
+  // Filter out items that already exist in the queue (by sourceUrl or shortcode tag)
   const filteredItems = items.filter(newItem => {
-    if (!newItem.tags?.shortcode) return true;
-    const exists = queue.some(existing => 
-      existing.tags?.shortcode === newItem.tags.shortcode && 
-      (existing.status === 'pending' || existing.status === 'completed')
-    );
+    const newShortcode = newItem.tags?.shortcode;
+    const newUrl = newItem.sourceUrl;
+    
+    const exists = queue.some(existing => {
+      const sameUrl = newUrl && existing.sourceUrl === newUrl;
+      const sameShortcode = newShortcode && existing.tags?.shortcode === newShortcode;
+      const isActive = existing.status === 'pending' || existing.status === 'completed' || existing.status === 'processing';
+      return (sameUrl || sameShortcode) && isActive;
+    });
+
     if (exists) {
-      console.log(`[Queue] Skipping duplicate shortcode: ${newItem.tags.shortcode}`);
+      console.log(`[Queue] Skipping duplicate: ${newUrl || newShortcode}`);
       return false;
     }
     return true;
@@ -122,10 +127,20 @@ async function processNextInQueue() {
   if (nextItemIndex === -1) return null;
 
   isProcessing = true;
-  const item = queue[nextItemIndex];
+  
+  // RE-FETCH the queue to ensure we have the absolute latest state before marking as processing
+  const freshQueue = await getQueue();
+  const item = freshQueue.find((it, idx) => idx === nextItemIndex && it.status === 'pending');
+  
+  if (!item) {
+    console.log('[Queue] Item was already picked up or changed status. Skipping.');
+    isProcessing = false;
+    return null;
+  }
+
   item.status = 'processing';
   item.processingAt = new Date().toISOString();
-  await saveQueue(queue);
+  await saveQueue(freshQueue);
 
   try {
     let aiContent = item.aiContent;
@@ -140,7 +155,7 @@ async function processNextInQueue() {
     const title = (aiContent?.title || item.title || 'Pinterest Post').substring(0, 100);
     const description = (aiContent?.description || item.description || '').substring(0, 800);
     const altText = (item.altText || '').substring(0, 500);
-    const link = item.sourceUrl || '';
+    const link = item.link || item.sourceUrl || '';
     const mediaUrl = item.mediaUrl;
 
     let result;

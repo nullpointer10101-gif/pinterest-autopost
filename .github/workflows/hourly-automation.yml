@@ -4,7 +4,10 @@ on:
   schedule:
     - cron: '14 * * * *'
     - cron: '44 * * * *'
-  workflow_dispatch:
+# Prevent multiple automation missions or fire-posts from running at the same time
+concurrency:
+  group: fire-post
+  cancel-in-progress: false
 
 jobs:
   automation-mission:

@@ -271,6 +271,8 @@ async function createPinWithBot(pinData) {
 
   try {
     const page = await browser.newPage();
+    page.on('console', msg => console.log(`[Bot-Browser] ${msg.text()}`));
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
     
     // Set the Pinterest session cookie
     await page.setCookie({
@@ -285,33 +287,30 @@ async function createPinWithBot(pinData) {
     console.log('[Bot] Logged in. Navigating to Pin Builder...');
     await page.goto('https://www.pinterest.com/pin-creation-tool/', { waitUntil: 'networkidle2', timeout: 45000 });
 
-    // Check if we were redirected to login
-    const currentUrl = await page.url();
-    if (currentUrl.includes('/login/') || currentUrl.includes('/register/')) {
-      throw new Error('Pinterest session expired or invalid. Please update PINTEREST_SESSION_COOKIE.');
-    }
-
     // 3. Upload Media
     console.log('[Bot] Uploading media file...');
-    const fileInputSelector = 'input[type="file"]';
-    await page.waitForSelector(fileInputSelector, { timeout: 10000 });
+    const fileInputSelector = 'input[type="file"], #storyboard-upload-input';
+    await page.waitForSelector(fileInputSelector, { timeout: 15000 });
     const fileInput = await page.$(fileInputSelector);
     await fileInput.uploadFile(mediaPath);
 
-    // Wait for media to upload and processing to complete
-    console.log('[Bot] Waiting for media upload...');
+    console.log('[Bot] Waiting for media upload and processing...');
+    // Video processing can take a while on Pinterest
     await page.waitForFunction(() => {
       const text = document.body.innerText || '';
-      // Check for upload/processing indicators to disappear
-      return !text.includes('Uploading') && !text.includes('Processing') && !text.includes('uploading');
-    }, { timeout: 60000 });
-    await new Promise(r => setTimeout(r, 3000));
+      const isProcessing = text.includes('Uploading') || text.includes('Processing') || text.includes('uploading') || text.includes('processing');
+      const hasError = text.includes('Something went wrong') || text.includes('could not be uploaded');
+      if (hasError) throw new Error('Pinterest UI reported an upload error.');
+      return !isProcessing;
+    }, { timeout: 180000 }).catch(err => {
+        console.log('[Bot] Upload wait warning:', err.message);
+    });
 
     // 4. Fill in Details
     console.log('[Bot] Filling details...');
-    const titleSelector = '[placeholder*="title"], [aria-label*="title"], [role="textbox"][aria-label*="title"], textarea[id*="title"]';
+    const titleSelector = 'textarea#storyboard-selector-title, [placeholder*="title"], [aria-label*="title"]';
     try {
-      await page.waitForSelector(titleSelector, { timeout: 5000 });
+      await page.waitForSelector(titleSelector, { timeout: 10000 });
       await page.click(titleSelector);
       await page.keyboard.down('Control');
       await page.keyboard.press('A');
@@ -320,67 +319,71 @@ async function createPinWithBot(pinData) {
       await page.type(titleSelector, title, { delay: 30 });
     } catch (e) { console.log('[Bot] Title error:', e.message); }
 
-    const descSelector = '[placeholder*="description"], [aria-label*="description"], [role="textbox"][aria-label*="description"]';
+    const descSelector = 'div#storyboard-selector-description, [placeholder*="description"], [aria-label*="description"]';
     try {
+      await page.waitForSelector(descSelector, { timeout: 5000 });
       await page.click(descSelector);
       await page.type(descSelector, description, { delay: 10 });
     } catch (e) {}
 
-    const linkSelector = '[placeholder*="link"], [aria-label*="link"]';
+    const linkSelector = 'textarea#storyboard-selector-link, [placeholder*="link"], [aria-label*="link"]';
     try {
+      await page.waitForSelector(linkSelector, { timeout: 5000 });
       await page.click(linkSelector);
-      await page.type(linkSelector, link, { delay: 10 });
-    } catch (e) {}
+      await page.keyboard.down('Control');
+      await page.keyboard.press('A');
+      await page.keyboard.up('Control');
+      await page.keyboard.press('Backspace');
+      
+      console.log(`[Bot] Typing link: ${link}`);
+      await page.type(linkSelector, link, { delay: 20 });
+    } catch (e) {
+      console.log('[Bot] Link field warning:', e.message);
+    }
 
     // 5. Select Board
     console.log('[Bot] Selecting board...');
     try {
-      // 5a. Click the board dropdown
-      const boardMenuSelector = '[data-test-id="board-dropdown-select-button"], .board-dropdown button, [aria-label*="board"], [aria-label*="Board"]';
-      await page.waitForSelector(boardMenuSelector, { timeout: 8000 });
+      const boardMenuSelector = '[data-test-id="board-dropdown-select-button"], .board-dropdown button, [aria-label*="board"]';
+      await page.waitForSelector(boardMenuSelector, { timeout: 15000 });
       await page.click(boardMenuSelector);
       console.log('[Bot] Opened board menu.');
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 4000));
 
-      // 5b. Select the first board in the list
-      await page.evaluate(() => {
-        // Try various board selectors
-        const boardItems = document.querySelectorAll('[role="listitem"], [data-test-id="board-row"], .board-row, [data-test-id="board-section"] div[role="button"]');
-        if (boardItems && boardItems.length > 0) {
-          // Find the first visible/clickable one
-          for (const item of boardItems) {
-            if (item.offsetParent !== null) {
-              item.scrollIntoView();
-              item.click();
-              return true;
-            }
-          }
+      const boardSelected = await page.evaluate(() => {
+        const items = Array.from(document.querySelectorAll('[role="listitem"], [data-test-id="board-row"], div[role="button"]'));
+        const boardItem = items.find(el => {
+            const text = (el.innerText || '').toLowerCase();
+            return el.offsetParent !== null && text.length > 1 && !text.includes('choose') && !text.includes('search');
+        });
+
+        if (boardItem) {
+          boardItem.scrollIntoView();
+          boardItem.click();
+          return true;
         }
         return false;
       });
-      console.log('[Bot] Board selected.');
-    } catch (e) {
-      console.log('[Bot] Board selection warning (skipping):', e.message);
-    }
 
-    await new Promise(r => setTimeout(r, 2000));
+      if (boardSelected) {
+        console.log('[Bot] Board item clicked.');
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    } catch (e) {
+      console.log('[Bot] Board selection error:', e.message);
+    }
 
     // 6. Final Publish
     console.log('[Bot] Clicking Publish button...');
-    
-    // Focus on the page first to ensure button is clickable
     await page.mouse.click(10, 10);
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 1000));
 
-    // Click directly on the Save/Publish button - scroll to find it first
     const publishResult = await page.evaluate(() => {
-      window.scrollTo(0, 0);
-      
-      // 1. Try specific data-test-id first
-      const saveBtn = document.querySelector('[data-test-id="board-dropdown-save-button"]');
-      if (saveBtn && saveBtn.offsetParent !== null) {
-        saveBtn.click();
-        return 'clicked_data_test_id_save';
+      // 1. Try precise pwt-publish-button first
+      const pubBtn = document.querySelector('button[data-test-id="pwt-publish-button"]');
+      if (pubBtn && pubBtn.offsetParent !== null && !pubBtn.disabled) {
+        pubBtn.click();
+        return 'clicked_pwt_publish_button';
       }
 
       // 2. Try general button search
@@ -398,11 +401,7 @@ async function createPinWithBot(pinData) {
     });
 
     console.log('[Bot] Publish result:', publishResult);
-
     if (publishResult === 'not found') {
-       console.log('[Bot] Last resort: Pressing Enter to Publish');
-       await page.keyboard.press('Enter');
-    }
 
     await new Promise(resolve => setTimeout(resolve, 8000));
 
@@ -550,7 +549,6 @@ async function runAutoEngagerSafe(options = {}) {
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    defaultViewport: { width: 1920, height: 1080 },
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -559,12 +557,13 @@ async function runAutoEngagerSafe(options = {}) {
       '--window-size=1920,1080'
     ]
   });
-
   const commentPool = buildCommentPool();
   const usedComments = new Set();
 
   try {
     const page = await browser.newPage();
+    page.on('console', msg => console.log(`[Bot-Browser] ${msg.text()}`));
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
     await page.setCookie({
       name: '_pinterest_sess',
       value: sessionCookie,
