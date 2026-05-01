@@ -402,6 +402,9 @@ async function createPinWithBot(pinData) {
 
     console.log('[Bot] Publish result:', publishResult);
     if (publishResult === 'not found') {
+        console.log('[Bot] Fallback: Pressing Enter to Publish');
+        await page.keyboard.press('Enter');
+    }
 
     await new Promise(resolve => setTimeout(resolve, 8000));
 
