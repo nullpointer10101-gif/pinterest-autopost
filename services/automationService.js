@@ -67,6 +67,12 @@ async function runHourlyAutomation(options = {}) {
 
   const dateKey = getDateKey(timeZone);
   const automation = await historyService.getAutomationState();
+  const config = await historyService.getWorkflowConfig();
+
+  if (config.pinterestEngagement === false) {
+    console.log('[Automation] Pinterest Engagement is DISABLED in Workflow Config. Skipping bot session.');
+    // We might still want to process queue if pinterestPosting is on
+  }
 
   if (!options.force && automation.lastRunAt) {
     const lastRunTime = new Date(automation.lastRunAt).getTime();
@@ -95,7 +101,11 @@ async function runHourlyAutomation(options = {}) {
   const processedItems = [];
 
   if (targetPostsThisRun > 0) {
-    const queue = await queueService.getQueue();
+    const config = await historyService.getWorkflowConfig();
+    if (config.pinterestPosting === false && !options.force) {
+      console.log('[Automation] Pinterest Posting is DISABLED. Skipping queue processing.');
+    } else {
+      const queue = await queueService.getQueue();
     const pending = queue.filter(item => item.status === 'pending').length;
     console.log(`[Automation] Found ${pending} pending items in queue.`);
 
@@ -142,7 +152,10 @@ async function runHourlyAutomation(options = {}) {
   };
 
   if (engagementCount > 0) {
-    if (puppeteerService && typeof puppeteerService.runAutoEngagerSafe === 'function') {
+    const config = await historyService.getWorkflowConfig();
+    if (config.pinterestEngagement === false && !options.force) {
+       console.log('[Automation] Pinterest Engagement is DISABLED. Skipping bot.');
+    } else if (puppeteerService && typeof puppeteerService.runAutoEngagerSafe === 'function') {
       try {
         const startDelayMs = randomInt(engagementStartJitterMinMs, engagementStartJitterMaxMs);
         if (startDelayMs > 0) {
@@ -220,6 +233,12 @@ async function runHourlyAutomation(options = {}) {
 }
 
 async function processInstagramReels(options = {}) {
+  const config = await historyService.getWorkflowConfig();
+  if (config.pinterestPosting === false && !options.force) {
+    console.log('[Automation] Instagram-to-Pinterest Posting is DISABLED. Skipping scan.');
+    return { success: true, count: 0, message: 'Workflow disabled' };
+  }
+
   const username = options.username; // If provided, only process this channel
   const limit = options.limit || 0; // If provided, limit number of reels processed
   const force = !!options.force;

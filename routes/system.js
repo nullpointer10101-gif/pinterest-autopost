@@ -51,6 +51,7 @@ router.get('/status', async (req, res) => {
         configured: !!(process.env.AI_API_KEY || process.env.OPENAI_API_KEY || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY),
         model: process.env.AI_MODEL || process.env.OPENAI_MODEL || process.env.QWEN_MODEL || process.env.DASHSCOPE_MODEL || null,
       },
+      workflows: await historyService.getWorkflowConfig(),
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -106,6 +107,24 @@ router.get('/proxy', async (req, res) => {
     response.data.pipe(res);
   } catch (err) {
     res.status(500).send(err.message);
+  }
+});
+
+router.get('/workflows', async (req, res) => {
+  try {
+    const config = await historyService.getWorkflowConfig();
+    res.json({ success: true, config });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/workflows', async (req, res) => {
+  try {
+    const config = await historyService.setWorkflowConfig(req.body);
+    res.json({ success: true, config });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

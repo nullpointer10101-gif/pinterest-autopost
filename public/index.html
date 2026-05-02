@@ -73,6 +73,71 @@
                 </section>
                 
                 <article class="card dashboard-op-card">
+                    <div class="card-title-wrap">
+                        <h2><i data-lucide="cog" class="heading-icon"></i>Workflow Control Center</h2>
+                        <p class="muted-text">One-tap master switches for all background automation processes.</p>
+                    </div>
+
+                    <div class="workflow-grid">
+                        <div class="workflow-item">
+                            <div class="workflow-info">
+                                <i data-lucide="camera" class="workflow-icon"></i>
+                                <div>
+                                    <div class="workflow-name">Pinterest Posting</div>
+                                    <div class="workflow-desc">IG Scraping & Auto-Publishing</div>
+                                </div>
+                            </div>
+                            <label class="master-switch">
+                                <input type="checkbox" id="wf-pinterest-posting" checked>
+                                <span class="master-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="workflow-item">
+                            <div class="workflow-info">
+                                <i data-lucide="activity" class="workflow-icon"></i>
+                                <div>
+                                    <div class="workflow-name">Pinterest Engagement</div>
+                                    <div class="workflow-desc">Auto-Liking & Commenting</div>
+                                </div>
+                            </div>
+                            <label class="master-switch">
+                                <input type="checkbox" id="wf-pinterest-engagement" checked>
+                                <span class="master-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="workflow-item">
+                            <div class="workflow-info">
+                                <i data-lucide="twitter" class="workflow-icon"></i>
+                                <div>
+                                    <div class="workflow-name">X (Twitter) Posting</div>
+                                    <div class="workflow-desc">Automated Fire-Post Tweets</div>
+                                </div>
+                            </div>
+                            <label class="master-switch">
+                                <input type="checkbox" id="wf-x-posting" checked>
+                                <span class="master-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="workflow-item">
+                            <div class="workflow-info">
+                                <i data-lucide="zap" class="workflow-icon"></i>
+                                <div>
+                                    <div class="workflow-name">X Engagement</div>
+                                    <div class="workflow-desc">Bot interactions for X/Twitter</div>
+                                </div>
+                            </div>
+                            <label class="master-switch">
+                                <input type="checkbox" id="wf-x-engagement" checked>
+                                <span class="master-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card dashboard-op-card">
                     <div class="countdown-wrap">
                         <div class="countdown-label">Next Automation Cycle</div>
                         <div id="countdown-clock" class="countdown-timer">--:--</div>

@@ -112,6 +112,10 @@ function bindEvents() {
   on('new-channel-input', 'keydown', (event) => {
     if (event.key === 'Enter') handleAddChannel();
   });
+
+  ['wf-pinterest-posting', 'wf-pinterest-engagement', 'wf-x-posting', 'wf-x-engagement'].forEach(id => {
+    on(id, 'change', (e) => handleWorkflowToggle(id, e.target.checked));
+  });
 }
 
 function on(id, event, handler) {
@@ -230,6 +234,15 @@ async function refreshOverview() {
     updateStats(state.queue, state.history);
     updateConnectionBar(pinterestResp, systemStatus);
     updateHealthDashboard(pinterestResp, systemStatus);
+    
+    // Sync workflow toggles
+    if (systemStatus.workflows) {
+      updateWorkflowUI(systemStatus.workflows);
+    } else {
+      // Fallback: fetch directly
+      const wfResp = await apiRequest('/api/system/workflows');
+      if (wfResp.success) updateWorkflowUI(wfResp.config);
+    }
   } catch (error) {
     console.error('Refresh error:', error);
   }
@@ -1623,3 +1636,45 @@ async function handleRemoveChannel(username) {
 }
 
 window.handleRemoveChannel = handleRemoveChannel;
+
+async function handleWorkflowToggle(id, enabled) {
+  const mapping = {
+    'wf-pinterest-posting': 'pinterestPosting',
+    'wf-pinterest-engagement': 'pinterestEngagement',
+    'wf-x-posting': 'xPosting',
+    'wf-x-engagement': 'xEngagement'
+  };
+  
+  const key = mapping[id];
+  if (!key) return;
+
+  try {
+    await apiRequest('/api/system/workflows', {
+      method: 'POST',
+      body: { [key]: enabled }
+    });
+    showToast(`${key} workflow ${enabled ? 'ENABLED' : 'DISABLED'}`, 'info');
+  } catch (err) {
+    showToast(`Failed to update workflow: ${err.message}`, 'error');
+    // Revert UI on failure
+    const el = byId(id);
+    if (el) el.checked = !enabled;
+  }
+}
+
+function updateWorkflowUI(config) {
+  if (!config) return;
+  const mapping = {
+    'pinterestPosting': 'wf-pinterest-posting',
+    'pinterestEngagement': 'wf-pinterest-engagement',
+    'xPosting': 'wf-x-posting',
+    'xEngagement': 'wf-x-engagement'
+  };
+
+  for (const [key, id] of Object.entries(mapping)) {
+    const el = byId(id);
+    if (el && typeof config[key] !== 'undefined') {
+      el.checked = !!config[key];
+    }
+  }
+}

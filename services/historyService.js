@@ -17,6 +17,12 @@ const DEFAULT_STATE = {
     postsToday: 0,
     lastRunAt: null,
   },
+  workflowConfig: {
+    pinterestPosting: true,
+    pinterestEngagement: true,
+    xPosting: true,
+    xEngagement: true,
+  },
 };
 
 function cloneDefault() {
@@ -40,6 +46,10 @@ async function readState() {
     automation: {
       ...DEFAULT_STATE.automation,
       ...(state?.automation || {}),
+    },
+    workflowConfig: {
+      ...DEFAULT_STATE.workflowConfig,
+      ...(state?.workflowConfig || {}),
     },
   };
 }
@@ -271,6 +281,22 @@ async function setAutomationState(automation) {
   return state.automation;
 }
 
+async function getWorkflowConfig() {
+  const state = await readState();
+  return state.workflowConfig || { ...DEFAULT_STATE.workflowConfig };
+}
+
+async function setWorkflowConfig(config) {
+  const state = await readState();
+  state.workflowConfig = {
+    ...DEFAULT_STATE.workflowConfig,
+    ...(state.workflowConfig || {}),
+    ...config,
+  };
+  await writeState(state);
+  return state.workflowConfig;
+}
+
 function getStorageInfo() {
   return storageService.getStorageInfo();
 }
@@ -299,5 +325,7 @@ module.exports = {
   setQueueData,
   getAutomationState,
   setAutomationState,
+  getWorkflowConfig,
+  setWorkflowConfig,
   getStorageInfo,
 };
