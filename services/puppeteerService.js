@@ -827,25 +827,73 @@ async function runAutoEngagerSafe(options = {}) {
             description: pinData.desc || 'Men fashion inspiration'
           });
 
-          const commentBox = await page.$('div[aria-label="Add a comment"]');
+          const commentSelectors = [
+            'div[aria-label="Add a comment"]',
+            'div[data-test-id="comment-composer"]',
+            'input[placeholder="Add a comment"]',
+            'textarea[placeholder="Add a comment"]',
+            '[data-test-id="comment-input-box"]',
+            '.addCommentInput'
+          ];
+
+          let commentBox = null;
+          for (const sel of commentSelectors) {
+            commentBox = await page.$(sel);
+            if (commentBox) {
+              console.log(`[Bot] Found comment box using selector: ${sel}`);
+              break;
+            }
+          }
+
           if (commentBox) {
+            // Scroll it into view just in case
+            await page.evaluate((el) => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), commentBox);
+            await sleep(1000);
+
             await commentBox.click();
             await sleep(randomInt(1000, 2000));
             
             console.log(`[Bot] Typing AI comment: "${theComment}"`);
             await page.keyboard.type(theComment, { delay: randomInt(45, 95) });
             await sleep(randomInt(1000, 2000));
-            await page.keyboard.press('Enter');
             
+            // Try hitting enter first
+            await page.keyboard.press('Enter');
+            await sleep(1000);
+
+            // Sometimes Enter just adds a newline. Let's try to click the Post/Done button just in case.
+            const postBtnSelectors = [
+              'button[aria-label="Post"]',
+              'button[aria-label="post"]',
+              'button[data-test-id="comment-submit-button"]',
+              'button[data-test-id="done-button"]',
+              'div[data-test-id="comment-submit-btn"]'
+            ];
+
+            for (const pSel of postBtnSelectors) {
+              const postBtn = await page.$(pSel);
+              if (postBtn) {
+                // Check if it's not disabled
+                const disabled = await page.evaluate(el => el.disabled || el.getAttribute('aria-disabled') === 'true', postBtn);
+                if (!disabled) {
+                  console.log(`[Bot] Clicking Post button via selector: ${pSel}`);
+                  await postBtn.click();
+                  break;
+                }
+              }
+            }
+
             // Wait for post to register
             await sleep(randomInt(4000, 7000));
             commentLeft = true;
             commentsMade++;
             actionTaken = actionTaken === 'Liked' ? 'Liked & Commented' : 'Commented';
             console.log(`[Bot] ✅ AI Comment posted: "${theComment}"`);
+          } else {
+            console.log(`[Bot] ⚠️ Could not find the comment box. Pinterest UI may have changed, or comments are disabled on this pin.`);
           }
         } catch (err) {
-          console.error('[Bot] AI Commenting failed:', err.message);
+          console.error('[Bot] ❌ AI Commenting completely failed:', err.message);
         }
       } else {
         console.log('[Bot] Comment skipped by randomization rule.');
