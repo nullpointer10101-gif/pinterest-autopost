@@ -38,6 +38,15 @@ async function runIgPinterestPipeline() {
       console.log(`  Caption: ${(reel.caption || '').substring(0, 100)}...`);
 
       try {
+        // Step 1.5: Check if this shortcode is already in the queue to prevent duplicates
+        const currentQueue = await queueService.getQueue();
+        const isAlreadyQueued = currentQueue.some(item => item.tags && item.tags.shortcode === reel.shortcode);
+        if (isAlreadyQueued) {
+          console.log(`  [Skip] Reel ${reel.shortcode} is already in the queue. Marking as seen.`);
+          await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
+          continue;
+        }
+
         // Step 2: Check affiliate cache first
         let affiliateUrl = await igTrackerService.getCachedAffiliateLink(reel.shortcode);
         let productName = null;
@@ -174,7 +183,10 @@ async function runIgPinterestPipeline() {
           }]);
           results.skipped++;
         }
-        console.log(`  ✅ Queued successfully! Affiliate: ${affiliateUrl ? 'YES' : 'NO'}`);
+        
+        // Step 8: Mark as seen because it is now securely in the queue or posted
+        await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
+        console.log(`  ✅ Successfully processed and marked seen! Affiliate: ${affiliateUrl ? 'YES' : 'NO'}`);
       } catch (reelErr) {
         console.error(`  ❌ Failed to process reel ${reel.shortcode}: ${reelErr.message}`);
         results.errors.push({ shortcode: reel.shortcode, error: reelErr.message });

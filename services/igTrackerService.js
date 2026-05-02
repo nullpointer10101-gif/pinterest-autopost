@@ -500,7 +500,7 @@ async function scanForNewReels() {
         console.log(`[IG-Tracker] Already seen reel ${reel.shortcode} from @${username}, skipping.`);
         continue;
       }
-      markSeen(state, username, reel.shortcode);
+      // Do not mark seen here. Let the pipeline mark it seen only after successful processing/queuing.
       newReels.push(reel);
     }
   }
@@ -510,6 +510,17 @@ async function scanForNewReels() {
 
   console.log(`[IG-Tracker] Scan complete. Found ${newReels.length} new reel(s).`);
   return newReels;
+}
+
+/**
+ * Explicitly mark a reel as seen (called after successful processing).
+ */
+async function markReelAsSeen(username, shortcode) {
+  const state = await readState();
+  if (!hasSeen(state, username, shortcode)) {
+    markSeen(state, username, shortcode);
+    await writeState(state);
+  }
 }
 
 async function getTrackerStatus() {
@@ -532,4 +543,5 @@ module.exports = {
   getCachedAffiliateLink,
   setCachedAffiliateLink,
   getTrackerStatus,
+  markReelAsSeen,
 };

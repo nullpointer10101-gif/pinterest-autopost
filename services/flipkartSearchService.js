@@ -55,33 +55,40 @@ function extractFromJsonLd(html) {
 
 /**
  * Fallback: extract product links from raw HTML anchor tags.
+ * We extract the title from the URL slug since CSS classes change constantly.
  */
 function extractFromHtmlLinks(html) {
   const products = [];
   // Match product links like /product-name/p/ITEMCODE
-  const linkRegex = /href="(\/[^"]*\/p\/[A-Z0-9]{16}[^"]*)"/g;
-  const titleRegex = /<[^>]+class="[^"]*KzDlHZ[^"]*"[^>]*>([^<]{5,120})<\/[^>]+>/g;
-
-  const links = [];
+  const linkRegex = /href="(\/([^"]+)\/p\/[A-Z0-9]{16}[^"]*)"/g;
+  
+  const linksMap = new Map();
   let m;
   while ((m = linkRegex.exec(html)) !== null) {
-    const url = `https://www.flipkart.com${m[1].split('"')[0]}`;
-    if (!links.includes(url)) links.push(url);
+    const fullPath = m[1];
+    const slug = m[2]; // this is the product-name part
+    const url = `https://www.flipkart.com${fullPath.split('"')[0]}`;
+    
+    if (!linksMap.has(url)) {
+      // Decode slug and replace hyphens with spaces to form a readable title
+      let title = decodeURIComponent(slug).replace(/-/g, ' ');
+      // Capitalize words
+      title = title.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      linksMap.set(url, title);
+    }
   }
 
-  const titles = [];
-  while ((m = titleRegex.exec(html)) !== null) {
-    titles.push(m[1].trim());
-  }
-
-  for (let i = 0; i < Math.min(links.length, 5); i++) {
+  let i = 0;
+  for (const [url, title] of linksMap.entries()) {
+    if (i >= 5) break;
     products.push({
-      title: titles[i] || `Product ${i + 1}`,
-      url: links[i],
+      title: title || `Product ${i + 1}`,
+      url: url,
       price: null,
       rating: null,
       image: null,
     });
+    i++;
   }
   return products;
 }
