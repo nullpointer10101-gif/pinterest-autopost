@@ -198,8 +198,9 @@ async function identifyProductInternal({ caption = '', username = '', thumbnailU
 Caption: "${caption.substring(0, 700)}"
 
 Task: Identify the primary product being promoted. 
-- Look for keywords like "shop", "link", "available", "buy", or specific product names (sneakers, watch, dress, etc.).
-- Even if it's a general fashion reel, try to identify the main item (e.g., "Casual White Sneakers" or "Men's Leather Watch").
+- CRITICAL: You MUST visually inspect the provided image. Identify the EXACT brand, specific model, and color of the main product shown (e.g., "Puma Smash V2 White Sneakers", "Rolex Submariner Watch").
+- Do not just output generic terms. If the caption says "shop link in bio", you MUST rely on the image to figure out what the exact item is.
+- The goal is to find the EXACT SAME product shown in the reel.
 
 If a product is found → Return: 
 {

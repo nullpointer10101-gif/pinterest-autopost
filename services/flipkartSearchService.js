@@ -203,14 +203,10 @@ async function findProduct(queries, originalProductName) {
     }
   }
 
-  // If we exhausted all tiers but found SOMETHING, return the highest scoring one as a last resort
-  if (bestMatch) {
-    console.log(`[Flipkart] ⚠️ Exhausted all tiers. Returning highest scoring product (Score: ${highestScore.toFixed(2)}).`);
-    console.log(`[Flipkart] ✅ Winner: "${bestMatch.title}" — ${bestMatch.url}`);
-    return bestMatch;
-  }
-
-  console.log(`[Flipkart] ❌ Failed to find any suitable matches.`);
+  // If we exhausted all tiers and nothing passed the minimum threshold, reject it.
+  // We strictly want the EXACT or highly similar product, not a random guess.
+  console.log(`[Flipkart] ❌ Exhausted all tiers. No product met the strict similarity threshold.`);
+  console.log(`[Flipkart] ❌ Rejecting best match (Score: ${highestScore.toFixed(2)}) to avoid posting the wrong product.`);
   return null;
 }
 
