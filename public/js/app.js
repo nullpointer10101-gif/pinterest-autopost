@@ -13,10 +13,32 @@ const state = {
     muted: true,
     scrollLocked: false,
   },
+  visual: {
+    mode: 'atlas',
+    pointerX: null,
+    pointerY: null,
+    pointerRaf: null,
+    pointerBound: false,
+  },
 };
 
 const REFRESH_INTERVAL_MS = 30000;
 const DRAFTS_STORAGE_KEY = 'pmc_drafts_v1';
+const VISUAL_MODE_STORAGE_KEY = 'pmc_visual_mode_v1';
+const VISUAL_MODES = {
+  atlas: {
+    label: 'Atlas',
+    themeColor: '#08141b',
+  },
+  solar: {
+    label: 'Solar',
+    themeColor: '#0b1b16',
+  },
+  nova: {
+    label: 'Nova',
+    themeColor: '#160705',
+  },
+};
 const PINTEREST_LIMITS = {
   titleChars: 100,
   descriptionChars: 800,
@@ -27,6 +49,7 @@ const PINTEREST_LIMITS = {
 
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
+  initVisualSystem();
   loadDrafts();
   switchTab('dashboard');
   startClock();
@@ -70,6 +93,10 @@ function bindEvents() {
   on('engage-btn', 'click', startEngager);
   on('clear-engagements-btn', 'click', clearEngagements);
   on('manual-refresh-btn', 'click', refreshAll);
+  on('visual-mode-btn', 'click', handleVisualModeToggle);
+  on('hero-open-channels-btn', 'click', () => switchTab('channels'));
+  on('hero-open-history-btn', 'click', () => switchTab('history'));
+  on('hero-refresh-btn', 'click', refreshAll);
   on('link-session-btn', 'click', linkSessionCookie);
   on('unlink-session-btn', 'click', unlinkSessionCookie);
   on('link-ig-session-btn', 'click', linkIgSession);
@@ -126,6 +153,118 @@ function on(id, event, handler) {
 
 function byId(id) {
   return document.getElementById(id);
+}
+
+function resolveVisualMode(mode) {
+  return Object.prototype.hasOwnProperty.call(VISUAL_MODES, mode) ? mode : 'atlas';
+}
+
+function updateThemeMetaColor(color) {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta && color) meta.setAttribute('content', color);
+}
+
+function applyVisualMode(mode, options = {}) {
+  const { persist = true, notify = false } = options;
+  const resolvedMode = resolveVisualMode(mode);
+  const modeMeta = VISUAL_MODES[resolvedMode];
+
+  state.visual.mode = resolvedMode;
+  if (document.body) {
+    document.body.dataset.visualMode = resolvedMode;
+  }
+
+  const label = byId('visual-mode-label');
+  if (label) label.textContent = modeMeta.label;
+
+  const heroLabel = byId('hero-mode-label');
+  if (heroLabel) heroLabel.textContent = modeMeta.label;
+
+  const btn = byId('visual-mode-btn');
+  if (btn) {
+    btn.setAttribute('aria-label', `Switch visual mode. Current mode: ${modeMeta.label}`);
+    btn.setAttribute('title', `Switch visual mode (current: ${modeMeta.label})`);
+  }
+
+  updateThemeMetaColor(modeMeta.themeColor);
+
+  if (persist) {
+    try {
+      localStorage.setItem(VISUAL_MODE_STORAGE_KEY, resolvedMode);
+    } catch {
+      // Ignore storage failures (private mode, blocked storage, etc)
+    }
+  }
+
+  if (notify) {
+    showToast(`Style mode changed to ${modeMeta.label}.`, 'success');
+  }
+}
+
+function queuePointerGlowUpdate(x, y) {
+  state.visual.pointerX = x;
+  state.visual.pointerY = y;
+  if (state.visual.pointerRaf) return;
+
+  state.visual.pointerRaf = window.requestAnimationFrame(() => {
+    const px = Number.isFinite(state.visual.pointerX) ? state.visual.pointerX : window.innerWidth * 0.5;
+    const py = Number.isFinite(state.visual.pointerY) ? state.visual.pointerY : window.innerHeight * 0.34;
+    document.documentElement.style.setProperty('--cursor-x', `${Math.round(px)}px`);
+    document.documentElement.style.setProperty('--cursor-y', `${Math.round(py)}px`);
+    state.visual.pointerRaf = null;
+  });
+}
+
+function bindPointerGlow() {
+  if (state.visual.pointerBound) return;
+  state.visual.pointerBound = true;
+
+  const seedCenter = () => {
+    queuePointerGlowUpdate(window.innerWidth * 0.5, window.innerHeight * 0.34);
+  };
+
+  seedCenter();
+
+  window.addEventListener('resize', seedCenter, { passive: true });
+
+  window.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch') return;
+    queuePointerGlowUpdate(event.clientX, event.clientY);
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (event) => {
+    const touch = event.touches && event.touches[0];
+    if (!touch) return;
+    queuePointerGlowUpdate(touch.clientX, touch.clientY);
+  }, { passive: true });
+}
+
+function initVisualSystem() {
+  let savedMode = '';
+  try {
+    savedMode = localStorage.getItem(VISUAL_MODE_STORAGE_KEY) || '';
+  } catch {
+    savedMode = '';
+  }
+
+  applyVisualMode(savedMode || 'atlas', { persist: false, notify: false });
+
+  const prefersReducedMotion = typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (!prefersReducedMotion) {
+    bindPointerGlow();
+  } else {
+    document.documentElement.style.setProperty('--cursor-x', '50vw');
+    document.documentElement.style.setProperty('--cursor-y', '28vh');
+  }
+}
+
+function handleVisualModeToggle() {
+  const modeKeys = Object.keys(VISUAL_MODES);
+  const currentIndex = modeKeys.indexOf(resolveVisualMode(state.visual.mode));
+  const nextMode = modeKeys[(currentIndex + 1) % modeKeys.length];
+  applyVisualMode(nextMode, { persist: true, notify: true });
 }
 
 function switchTab(tab) {
@@ -190,7 +329,9 @@ function updateClock() {
     
     const displayMins = Math.floor(remainingSecs / 60);
     const displaySecs = remainingSecs % 60;
-    countdown.textContent = `${String(displayMins).padStart(2, '0')}:${String(displaySecs).padStart(2, '0')}`;
+    const countdownText = `${String(displayMins).padStart(2, '0')}:${String(displaySecs).padStart(2, '0')}`;
+    countdown.textContent = countdownText;
+    setText('hero-next-cycle', countdownText);
   }
 }
 
@@ -221,15 +362,19 @@ async function refreshAll() {
 
 async function refreshOverview() {
   try {
-    const [queueResp, historyResp, pinterestResp, systemStatus] = await Promise.all([
+    const [queueResp, historyResp, pinterestResp, systemStatus, trackerStatusResp] = await Promise.all([
       apiRequest('/api/queue'),
       apiRequest('/api/history'),
       apiRequest('/api/pinterest/status'),
       apiRequest('/api/system/status'),
+      apiRequest('/api/ig-tracker/status').catch(() => null),
     ]);
 
     state.queue = Array.isArray(queueResp.queue) ? queueResp.queue : [];
     state.history = Array.isArray(historyResp.history) ? historyResp.history : [];
+    if (Array.isArray(trackerStatusResp?.status?.channels)) {
+      setText('hero-channel-count', String(trackerStatusResp.status.channels.length));
+    }
 
     updateStats(state.queue, state.history);
     updateConnectionBar(pinterestResp, systemStatus);
@@ -260,10 +405,15 @@ function updateStats(queue, history) {
   setText('stat-queue-pending', String(pendingCount));
   setText('stat-success-rate', `${successRate}%`);
   setText('stat-queue-failed', String(queueFailedCount));
+  setText('hero-total-posts', String(successCount));
+  setText('hero-queue-pending', String(pendingCount));
+  setText('hero-success-rate', `${successRate}%`);
+  setText('hero-queue-failed', String(queueFailedCount));
 }
 
 function updateConnectionBar(pinterestStatus, systemStatus) {
   const connection = byId('connection-status');
+  const heroConnection = byId('hero-connection-status');
   const mode = byId('active-mode');
 
   const apiConnected = !!pinterestStatus.connected;
@@ -275,6 +425,16 @@ function updateConnectionBar(pinterestStatus, systemStatus) {
       setBadge(connection, 'SESSION LINKED', 'warn');
     } else {
       setBadge(connection, 'NOT LINKED', 'error');
+    }
+  }
+
+  if (heroConnection) {
+    if (apiConnected) {
+      setBadge(heroConnection, 'API LINKED', 'success');
+    } else if (sessionLinked) {
+      setBadge(heroConnection, 'SESSION LINKED', 'warn');
+    } else {
+      setBadge(heroConnection, 'NOT LINKED', 'error');
     }
   }
 
@@ -1556,6 +1716,7 @@ function renderChannelsList() {
 
   if (state.channels.length === 0) {
     list.innerHTML = '<div class="pulse-item">No target channels added yet.</div>';
+    setText('hero-channel-count', '0');
     return;
   }
 
@@ -1597,6 +1758,8 @@ function renderChannelsList() {
       </div>
     `;
   }).join('');
+
+  setText('hero-channel-count', String(state.channels.length));
   
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }

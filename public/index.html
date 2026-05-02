@@ -9,6 +9,12 @@
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
 <body>
+    <div class="fx-field" aria-hidden="true">
+        <span class="fx-orb fx-orb-a"></span>
+        <span class="fx-orb fx-orb-b"></span>
+        <span class="fx-orb fx-orb-c"></span>
+        <span class="fx-noise"></span>
+    </div>
     <div class="app-shell">
         <header class="topbar">
             <div class="brand-wrap">
@@ -25,6 +31,9 @@
                     <span>Live Refresh</span>
                 </label>
                 <button id="manual-refresh-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="refresh-cw" class="btn-icon"></i><span>Refresh</span></button>
+                <button id="visual-mode-btn" class="btn btn-secondary compact-btn visual-mode-btn" type="button" title="Switch interface style">
+                    <i data-lucide="sparkles" class="btn-icon"></i><span id="visual-mode-label">Atlas</span>
+                </button>
                 <div id="live-time" class="clock">00:00</div>
             </div>
         </header>
@@ -41,6 +50,66 @@
 
         <main>
             <section id="panel-dashboard" class="panel">
+                <article class="card hero-panel dashboard-op-card">
+                    <div class="hero-shell">
+                        <div class="hero-copy">
+                            <div class="hero-kicker">
+                                <span class="hero-pill hero-pill-primary">Ultimate Launch Deck</span>
+                                <span class="hero-pill hero-pill-secondary">3-mode engine</span>
+                            </div>
+                            <h1 class="hero-title">A cinematic control room for Pinterest automation.</h1>
+                            <p class="hero-description">See publishing pressure, channel activity, and workflow health from a hero banner built to feel loud on desktop and compact on mobile.</p>
+                            <div class="hero-metrics">
+                                <div class="hero-metric">
+                                    <span class="hero-metric-label">Published</span>
+                                    <strong id="hero-total-posts" class="hero-metric-value">0</strong>
+                                </div>
+                                <div class="hero-metric">
+                                    <span class="hero-metric-label">Pending</span>
+                                    <strong id="hero-queue-pending" class="hero-metric-value">0</strong>
+                                </div>
+                                <div class="hero-metric">
+                                    <span class="hero-metric-label">Success</span>
+                                    <strong id="hero-success-rate" class="hero-metric-value">0%</strong>
+                                </div>
+                                <div class="hero-metric">
+                                    <span class="hero-metric-label">Queue failed</span>
+                                    <strong id="hero-queue-failed" class="hero-metric-value">0</strong>
+                                </div>
+                            </div>
+                            <div class="hero-actions">
+                                <button id="hero-open-channels-btn" class="btn btn-primary hero-action" type="button"><i data-lucide="rss" class="btn-icon"></i><span>Open Channels</span></button>
+                                <button id="hero-open-history-btn" class="btn btn-secondary hero-action" type="button"><i data-lucide="history" class="btn-icon"></i><span>View History</span></button>
+                                <button id="hero-refresh-btn" class="btn btn-secondary hero-action" type="button"><i data-lucide="refresh-cw" class="btn-icon"></i><span>Refresh Now</span></button>
+                            </div>
+                        </div>
+
+                        <div class="hero-visual">
+                            <span class="hero-visual-orb hero-visual-orb-a" aria-hidden="true"></span>
+                            <span class="hero-visual-orb hero-visual-orb-b" aria-hidden="true"></span>
+                            <div class="hero-visual-core">
+                                <div class="hero-visual-label">Current Style</div>
+                                <div id="hero-mode-label" class="hero-visual-value">Atlas</div>
+                                <div class="hero-visual-note">Switch the style engine from the top bar. The layout stays sharp on desktop and mobile.</div>
+                            </div>
+                            <div class="hero-visual-grid">
+                                <div class="hero-visual-item">
+                                    <span>Connection</span>
+                                    <strong id="hero-connection-status" class="badge">ONLINE</strong>
+                                </div>
+                                <div class="hero-visual-item">
+                                    <span>Channels</span>
+                                    <strong id="hero-channel-count">0</strong>
+                                </div>
+                                <div class="hero-visual-item">
+                                    <span>Next cycle</span>
+                                    <strong id="hero-next-cycle">--:--</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+
                 <section class="stats-grid" style="margin-bottom: 2rem;">
                     <article class="stat-card">
                         <div class="stat-head">
