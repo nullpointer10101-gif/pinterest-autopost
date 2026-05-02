@@ -1277,7 +1277,9 @@ body.preview-scroll-lock {
     height: 38px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--accent), #ff8e6e);
-    display: flex;
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     color: #fff;
@@ -1285,6 +1287,26 @@ body.preview-scroll-lock {
     font-size: 14px;
     flex-shrink: 0;
     box-shadow: 0 4px 10px rgba(255, 95, 69, 0.2);
+}
+
+.avatar-stack .avatar-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.avatar-stack .avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 .animate-spin {

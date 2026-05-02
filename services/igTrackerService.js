@@ -59,8 +59,16 @@ function normalizeUsername(input) {
   
   // Remove trailing slashes or query params
   clean = clean.split('/')[0].split('?')[0];
-  
+
   return clean;
+}
+
+function extractOgImageFromHtml(html) {
+  if (!html || typeof html !== 'string') return null;
+  const ogImageMatch = html.match(
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i
+  );
+  return ogImageMatch?.[1] || null;
 }
 
 function hasSeen(state, username, shortcode) {
@@ -97,25 +105,23 @@ function igHeaders() {
     'cookie': IG_SESSION_COOKIE,
     'referer': 'https://www.instagram.com/',
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'x-asbd-id': '198387',
+    'x-asbd-id': '129477',
     'x-csrftoken': IG_CSRF,
     'x-ig-app-id': '936619743392459',
-    'x-ig-www-claim': '0',
+    'x-ig-www-claim': 'hmac.AR2H2v8nLh-4kY_XGzT-XpA6x_M0vXpS6f5-MvXpS6f5-MvXpS6f5',
     'x-requested-with': 'XMLHttpRequest',
+    'x-instagram-ajax': '1',
   };
 }
 
 /**
  * Method 0 (PRIMARY): Instagram internal mobile feed API.
- * Step 1: username → user_id via web_profile_info
- * Step 2: /api/v1/feed/user/{user_id}/ → real posts with captions
- * Confirmed working: 6 reels returned with full caption text.
  */
 async function fetchViaSessionApi(username) {
   if (!IG_SESSION_COOKIE || !IG_CSRF) return [];
   try {
     const profileRes = await axios.get(
-      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${username}`,
+      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${username}&__d=dis`,
       { headers: igHeaders(), timeout: 12000 }
     );
     const user = profileRes.data?.data?.user;
@@ -166,7 +172,11 @@ async function fetchViaSessionApi(username) {
       };
     }).filter(r => r.shortcode && r.thumbnailUrl);
   } catch (err) {
-    console.log(`[IG-Tracker] Session API failed for @${username}: ${err.message}`);
+    if (err.response) {
+      console.log(`[IG-Tracker] Session API failed for @${username} (Status ${err.response.status}): ${JSON.stringify(err.response.data)}`);
+    } else {
+      console.log(`[IG-Tracker] Session API failed for @${username}: ${err.message}`);
+    }
     return [];
   }
 }
@@ -315,6 +325,9 @@ async function fetchViaUnofficialApi(username) {
     });
     const user = res.data?.graphql?.user || res.data?.data?.user;
     if (!user) return [];
+    if (user.profile_pic_url) {
+      updateChannelMeta(username, { profilePicUrl: user.profile_pic_url });
+    }
 
     const edges = user?.edge_owner_to_timeline_media?.edges || [];
     return edges.slice(0, 5).map(e => {
@@ -335,6 +348,71 @@ async function fetchViaUnofficialApi(username) {
     console.log(`[IG-Tracker] Unofficial API failed for @${username}: ${err.message}`);
     return [];
   }
+}
+
+async function ensureChannelProfilePic(input) {
+  const username = normalizeUsername(input);
+  if (!username) return null;
+
+  const state = await readState();
+  const cached = state.channelMeta?.[username]?.profilePicUrl;
+  if (cached) return cached;
+
+  const profileInfoEndpoint = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${username}&__d=dis`;
+
+  try {
+    if (IG_SESSION_COOKIE && IG_CSRF) {
+      const profileRes = await axios.get(profileInfoEndpoint, {
+        headers: igHeaders(),
+        timeout: 8000,
+      });
+      const profilePicUrl = profileRes.data?.data?.user?.profile_pic_url || null;
+      if (profilePicUrl) {
+        await updateChannelMeta(username, { profilePicUrl });
+        return profilePicUrl;
+      }
+    }
+  } catch (err) {
+    console.log(`[IG-Tracker] ensureChannelProfilePic session method failed for @${username}: ${err.message}`);
+  }
+
+  try {
+    const res = await axios.get(`https://www.instagram.com/${username}/?__a=1&__d=dis`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+        'Accept': 'application/json',
+        'Referer': 'https://www.instagram.com/',
+        'x-ig-app-id': '936619743392459',
+      },
+      timeout: 8000,
+    });
+    const user = res.data?.graphql?.user || res.data?.data?.user;
+    const profilePicUrl = user?.profile_pic_url || null;
+    if (profilePicUrl) {
+      await updateChannelMeta(username, { profilePicUrl });
+      return profilePicUrl;
+    }
+  } catch (err) {
+    console.log(`[IG-Tracker] ensureChannelProfilePic public API failed for @${username}: ${err.message}`);
+  }
+
+  try {
+    const res = await axios.get(`https://www.instagram.com/${username}/`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      },
+      timeout: 8000,
+    });
+    const profilePicUrl = extractOgImageFromHtml(res.data);
+    if (profilePicUrl) {
+      await updateChannelMeta(username, { profilePicUrl });
+      return profilePicUrl;
+    }
+  } catch (err) {
+    console.log(`[IG-Tracker] ensureChannelProfilePic HTML method failed for @${username}: ${err.message}`);
+  }
+
+  return null;
 }
 
 /**
@@ -615,6 +693,7 @@ module.exports = {
   getChannels,
   addChannel,
   removeChannel,
+  ensureChannelProfilePic,
   getCachedAffiliateLink,
   setCachedAffiliateLink,
   getTrackerStatus,

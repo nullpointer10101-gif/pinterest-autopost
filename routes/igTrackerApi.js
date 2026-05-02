@@ -31,6 +31,17 @@ router.post('/channels', async (req, res) => {
     
     // 1. Normalize and add channel
     const username = await igTrackerService.addChannel(rawInput);
+
+    // 1.5 Try to fetch/store profile pic immediately so UI can display it on first refresh.
+    // Do not fail the add flow if Instagram blocks this request.
+    try {
+      await Promise.race([
+        igTrackerService.ensureChannelProfilePic(username),
+        new Promise(resolve => setTimeout(() => resolve(null), 6500))
+      ]);
+    } catch (metaErr) {
+      console.warn(`[API] Profile pic sync failed for @${username}:`, metaErr.message);
+    }
     
     // 2. Trigger initial processing (top 3 reels) in the background
     // We don't await this as we want to return the response quickly

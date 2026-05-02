@@ -1558,12 +1558,24 @@ function renderChannelsList() {
   }
 
   list.innerHTML = state.channels.map(ch => {
-    const username = typeof ch === 'string' ? ch : ch.username;
-    const pic = typeof ch === 'object' && ch.profilePicUrl ? ch.profilePicUrl : null;
-    
-    const avatarHtml = pic 
-      ? `<img src="${proxyMediaUrl(pic)}" class="avatar-circle" style="object-fit: cover;" onerror="this.src=''; this.classList.add('fallback');">`
-      : `<div class="avatar-circle">@</div>`;
+    const username = String(typeof ch === 'string' ? ch : ch.username || '').trim();
+    if (!username) return '';
+    const pic = typeof ch === 'object' && ch.profilePicUrl ? ch.profilePicUrl : '';
+    const avatarLabel = (username.charAt(0) || '@').toUpperCase();
+    const avatarSource = pic || `https://unavatar.io/instagram/${encodeURIComponent(username)}`;
+    const avatarHtml = `
+      <div class="avatar-circle avatar-stack">
+        <span class="avatar-fallback">${escHtml(avatarLabel)}</span>
+        <img
+          src="${escAttr(proxyMediaUrl(avatarSource))}"
+          class="avatar-img"
+          alt="@${escAttr(username)} profile picture"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          onerror="this.remove()"
+        >
+      </div>
+    `;
 
     return `
       <div class="list-item">
