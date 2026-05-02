@@ -7,7 +7,8 @@ async function main() {
   console.log('====================================================');
 
   try {
-    const result = await xAutomationService.runHourlyAutomation({ force: false });
+    const force = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || process.argv.includes('--force');
+    const result = await xAutomationService.runHourlyAutomation({ force });
 
     console.log('\n--- X AUTOMATION SUMMARY ---');
     console.log(`Success:    ${result.success}`);
