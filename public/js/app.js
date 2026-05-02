@@ -8,6 +8,7 @@ const state = {
   drafts: [],
   refreshTimer: null,
   clockTimer: null,
+  channelAvatarRequests: {},
   preview: {
     isVideo: false,
     muted: true,
@@ -1697,6 +1698,10 @@ function escAttr(value) {
   return escHtml(value).replace(/"/g, '&quot;');
 }
 
+function normalizeUsernameValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 async function refreshChannels() {
   const list = byId('channels-list');
   if (!list) return;
@@ -1725,18 +1730,10 @@ function renderChannelsList() {
     if (!username) return '';
     const pic = typeof ch === 'object' && ch.profilePicUrl ? ch.profilePicUrl : '';
     const avatarLabel = (username.charAt(0) || '@').toUpperCase();
-    const avatarSource = pic || `https://unavatar.io/instagram/${encodeURIComponent(username)}`;
     const avatarHtml = `
-      <div class="avatar-circle avatar-stack">
+      <div class="avatar-circle avatar-stack channel-avatar ${pic ? 'has-avatar' : ''}" data-avatar-username="${escAttr(normalizeUsernameValue(username))}" data-avatar-state="${pic ? 'ready' : 'pending'}">
         <span class="avatar-fallback">${escHtml(avatarLabel)}</span>
-        <img
-          src="${escAttr(proxyMediaUrl(avatarSource))}"
-          class="avatar-img"
-          alt="@${escAttr(username)} profile picture"
-          loading="lazy"
-          referrerpolicy="no-referrer"
-          onerror="this.remove()"
-        >
+        ${pic ? `<img src="${escAttr(proxyMediaUrl(pic))}" class="avatar-img" alt="@${escAttr(username)} profile picture" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.channel-avatar')?.classList.remove('has-avatar'); this.remove();">` : ''}
       </div>
     `;
 
@@ -1760,8 +1757,77 @@ function renderChannelsList() {
   }).join('');
 
   setText('hero-channel-count', String(state.channels.length));
+  void hydrateChannelAvatars();
   
   if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function applyChannelAvatar(username, profilePicUrl) {
+  const cleanUsername = normalizeUsernameValue(username);
+  if (!cleanUsername || !profilePicUrl) return;
+
+  state.channels = state.channels.map((ch) => {
+    if (typeof ch === 'string') {
+      return normalizeUsernameValue(ch) === cleanUsername
+        ? { username: ch, profilePicUrl }
+        : ch;
+    }
+
+    const chUsername = normalizeUsernameValue(ch?.username);
+    return chUsername === cleanUsername
+      ? { ...ch, profilePicUrl }
+      : ch;
+  });
+
+  const avatarEl = Array.from(document.querySelectorAll('.channel-avatar')).find(el => el.dataset.avatarUsername === cleanUsername);
+  if (!avatarEl) return;
+
+  avatarEl.dataset.avatarState = 'ready';
+  avatarEl.classList.add('has-avatar');
+
+  let img = avatarEl.querySelector('.avatar-img');
+  if (!img) {
+    img = document.createElement('img');
+    img.className = 'avatar-img';
+    img.alt = `@${username} profile picture`;
+    img.loading = 'lazy';
+    img.referrerPolicy = 'no-referrer';
+    img.onerror = () => {
+      avatarEl.classList.remove('has-avatar');
+      avatarEl.dataset.avatarState = 'missing';
+      img.remove();
+    };
+    avatarEl.appendChild(img);
+  }
+
+  img.src = proxyMediaUrl(profilePicUrl);
+}
+
+async function hydrateChannelAvatars() {
+  const pendingAvatars = Array.from(document.querySelectorAll('.channel-avatar[data-avatar-state="pending"]'));
+  if (pendingAvatars.length === 0) return;
+
+  await Promise.allSettled(pendingAvatars.map(async (avatarEl) => {
+    const username = String(avatarEl.dataset.avatarUsername || '').trim();
+    if (!username) return;
+
+    const lastRequestAt = Number(state.channelAvatarRequests?.[username] || 0);
+    if (lastRequestAt && (Date.now() - lastRequestAt) < 60000) return;
+
+    state.channelAvatarRequests[username] = Date.now();
+    avatarEl.dataset.avatarState = 'loading';
+
+    try {
+      const res = await apiRequest(`/api/ig-tracker/profile-pic?username=${encodeURIComponent(username)}`);
+      if (res.profilePicUrl) {
+        applyChannelAvatar(res.username || username, res.profilePicUrl);
+      } else {
+        avatarEl.dataset.avatarState = 'missing';
+      }
+    } catch {
+      avatarEl.dataset.avatarState = 'missing';
+    }
+  }));
 }
 
 async function handleAddChannel() {

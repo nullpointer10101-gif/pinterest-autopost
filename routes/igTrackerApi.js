@@ -13,6 +13,25 @@ router.get('/status', async (req, res) => {
   }
 });
 
+// GET /api/ig-tracker/profile-pic?username=lookbyn
+router.get('/profile-pic', async (req, res) => {
+  try {
+    const { username: rawInput } = req.query;
+    if (!rawInput) {
+      return res.status(400).json({ success: false, error: 'username is required' });
+    }
+
+    const profilePicUrl = await igTrackerService.ensureChannelProfilePic(rawInput);
+    res.json({
+      success: true,
+      username: igTrackerService.normalizeUsername(rawInput),
+      profilePicUrl,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /api/ig-tracker/channels
 router.get('/channels', async (req, res) => {
   try {

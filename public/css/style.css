@@ -1300,6 +1300,10 @@ body.preview-scroll-lock {
     font-size: 14px;
 }
 
+.avatar-stack.has-avatar .avatar-fallback {
+    opacity: 0;
+}
+
 .avatar-stack .avatar-img {
     position: absolute;
     inset: 0;
