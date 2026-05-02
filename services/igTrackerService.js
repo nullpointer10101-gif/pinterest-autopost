@@ -42,6 +42,25 @@ function parseShortcode(url) {
   return match ? match[2] : null;
 }
 
+function normalizeUsername(input) {
+  if (!input) return null;
+  let clean = input.trim().toLowerCase();
+  
+  // Handle URL: https://www.instagram.com/techburner/ -> techburner
+  if (clean.includes('instagram.com/')) {
+    const match = clean.match(/instagram\.com\/([A-Za-z0-9._]+)/);
+    if (match) clean = match[1];
+  }
+  
+  // Handle @username -> username
+  clean = clean.replace(/^@/, '');
+  
+  // Remove trailing slashes or query params
+  clean = clean.split('/')[0].split('?')[0];
+  
+  return clean;
+}
+
 function hasSeen(state, username, shortcode) {
   return Array.isArray(state.seen[username]) && state.seen[username].includes(shortcode);
 }
@@ -534,6 +553,31 @@ async function getTrackerStatus() {
   };
 }
 
+async function addChannel(input) {
+  const username = normalizeUsername(input);
+  if (!username) throw new Error('Invalid username or URL');
+
+  const state = await readState();
+  if (!state.channels.includes(username)) {
+    state.channels.push(username);
+    await writeState(state);
+  }
+  return username; // Return normalized username
+}
+
+async function removeChannel(input) {
+  const username = normalizeUsername(input);
+  const state = await readState();
+  state.channels = state.channels.filter(c => c !== username);
+  await writeState(state);
+  return state.channels;
+}
+
+async function getChannels() {
+  const state = await readState();
+  return state.channels;
+}
+
 module.exports = {
   scanForNewReels,
   fetchLatestReels,
@@ -544,4 +588,5 @@ module.exports = {
   setCachedAffiliateLink,
   getTrackerStatus,
   markReelAsSeen,
+  normalizeUsername
 };

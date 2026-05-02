@@ -2,6 +2,7 @@ const state = {
   currentTab: 'dashboard',
   queue: [],
   history: [],
+  channels: [],
   engagements: [],
   lastExtracted: null,
   drafts: [],
@@ -72,6 +73,7 @@ function bindEvents() {
   on('link-session-btn', 'click', linkSessionCookie);
   on('unlink-session-btn', 'click', unlinkSessionCookie);
   on('link-ig-session-btn', 'click', linkIgSession);
+  on('add-channel-btn', 'click', handleAddChannel);
 
   on('auto-refresh-toggle', 'change', (event) => {
     setAutoRefresh(!!event.target.checked);
@@ -107,6 +109,9 @@ function bindEvents() {
   on('reel-url', 'keydown', (event) => {
     if (event.key === 'Enter') handleExtract();
   });
+  on('new-channel-input', 'keydown', (event) => {
+    if (event.key === 'Enter') handleAddChannel();
+  });
 }
 
 function on(id, event, handler) {
@@ -140,6 +145,7 @@ function switchTab(tab) {
   }
 
   if (tab === 'history') renderHistoryList();
+  if (tab === 'channels') refreshChannels();
   if (tab === 'engagements') {
       loadEngagements();
       if (typeof window.refreshXData === 'function') window.refreshXData();
@@ -203,6 +209,7 @@ async function refreshAll() {
 
   if (state.currentTab === 'queue') renderQueueList();
   if (state.currentTab === 'history') renderHistoryList();
+  if (state.currentTab === 'channels') refreshChannels();
   if (state.currentTab === 'pinterest') renderMiniQueue();
   if (state.currentTab === 'engagements') await renderEngagementAuditList();
   if (state.currentTab === 'settings') await loadDiagnostics();
@@ -1514,3 +1521,96 @@ function escHtml(value) {
 function escAttr(value) {
   return escHtml(value).replace(/"/g, '&quot;');
 }
+
+async function refreshChannels() {
+  const list = byId('channels-list');
+  if (!list) return;
+
+  try {
+    const res = await apiRequest('/api/ig-tracker/channels');
+    state.channels = Array.isArray(res.channels) ? res.channels : [];
+    renderChannelsList();
+  } catch (err) {
+    list.innerHTML = `<div class="pulse-item error-text">Failed to load channels: ${err.message}</div>`;
+  }
+}
+
+function renderChannelsList() {
+  const list = byId('channels-list');
+  if (!list) return;
+
+  if (state.channels.length === 0) {
+    list.innerHTML = '<div class="pulse-item">No target channels added yet.</div>';
+    return;
+  }
+
+  list.innerHTML = state.channels.map(username => `
+    <div class="list-item">
+      <div class="list-item-main">
+        <div class="avatar-circle">@</div>
+        <div>
+          <div class="item-title">@${escHtml(username)}</div>
+          <div class="item-meta">Instagram Target Channel</div>
+        </div>
+      </div>
+      <div class="item-actions">
+        <a href="https://www.instagram.com/${escHtml(username)}" target="_blank" class="pill-btn">View Profile</a>
+        <button class="btn btn-danger compact-btn" onclick="handleRemoveChannel('${escAttr(username)}')">
+          <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+        </button>
+      </div>
+    </div>
+  `).join('');
+  
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function handleAddChannel() {
+  const input = byId('new-channel-input');
+  const btn = byId('add-channel-btn');
+  const rawInput = String(input?.value || '').trim();
+
+  if (!rawInput) {
+    showToast('Please enter a username or Instagram URL.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<i data-lucide="loader-2" class="btn-icon animate-spin"></i><span>Adding...</span>';
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  try {
+    const res = await apiRequest('/api/ig-tracker/channels', {
+      method: 'POST',
+      body: { username: rawInput }
+    });
+
+    showToast(res.message || `Channel @${res.username} added. Verification started.`, 'success');
+    input.value = '';
+    await refreshChannels();
+  } catch (err) {
+    showToast(err.message || 'Failed to add channel.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+}
+
+async function handleRemoveChannel(username) {
+  if (!confirm(`Remove @${username} from target channels?`)) return;
+
+  try {
+    await apiRequest('/api/ig-tracker/channels', {
+      method: 'DELETE',
+      body: { username }
+    });
+    showToast(`Channel @${username} removed.`, 'success');
+    await refreshChannels();
+  } catch (err) {
+    showToast(err.message || 'Failed to remove channel.', 'error');
+  }
+}
+
+window.handleRemoveChannel = handleRemoveChannel;

@@ -31,6 +31,7 @@
 
         <nav class="tab-nav" aria-label="Main tabs">
             <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
+            <button class="tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Target Channels</span></button>
             <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
             <button class="tab-btn" data-tab="x-dashboard" type="button"><i data-lucide="twitter" class="tab-icon"></i><span>X (Twitter)</span></button>
             <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="zap" class="tab-icon"></i><span>Engage Log</span></button>
@@ -100,6 +101,28 @@
                                 <div id="status-text-ai" class="input-meta">Ready</div>
                             </div>
                         </div>
+                    </div>
+                </article>
+            </section>
+            
+            <section id="panel-channels" class="panel hidden">
+                <article class="card">
+                    <div class="card-title-wrap">
+                        <h2><i data-lucide="rss" class="heading-icon"></i>Manage Target Channels</h2>
+                        <p class="muted-text">Add Instagram profiles or URLs. New channels will immediately post their top 3 reels to verify connection.</p>
+                    </div>
+
+                    <div class="field-wrap">
+                        <label for="new-channel-input">Add New Channel</label>
+                        <div class="inline-field">
+                            <input type="text" id="new-channel-input" placeholder="@username or https://www.instagram.com/profile">
+                            <button id="add-channel-btn" class="btn btn-primary" type="button"><i data-lucide="plus" class="btn-icon"></i><span>Add Channel</span></button>
+                        </div>
+                    </div>
+
+                    <div class="sub-title" style="margin-top: 2rem;">Active Channels</div>
+                    <div id="channels-list" class="list channel-list-grid">
+                        <div class="pulse-item">Loading channels...</div>
                     </div>
                 </article>
             </section>

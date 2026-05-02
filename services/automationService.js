@@ -8,6 +8,11 @@ try {
   console.warn('[Automation] Puppeteer service unavailable:', err.message);
 }
 
+const igTrackerService = require('./igTrackerService');
+const aiService = require('./aiService');
+const flipkartSearchService = require('./flipkartSearchService');
+const earnKaroService = require('./earnKaroService');
+
 function toInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -214,6 +219,119 @@ async function runHourlyAutomation(options = {}) {
   };
 }
 
+async function processInstagramReels(options = {}) {
+  const username = options.username; // If provided, only process this channel
+  const limit = options.limit || 0; // If provided, limit number of reels processed
+  const force = !!options.force;
+
+  console.log(`[Automation] Processing Instagram reels... (Channel: ${username || 'ALL'}, Limit: ${limit || 'None'})`);
+
+  try {
+    let reels = [];
+    if (username) {
+      // Direct fetch for a single channel (often used when adding a new channel)
+      const allReels = await igTrackerService.fetchLatestReels(username);
+      if (force) {
+        reels = allReels;
+      } else {
+        const state = await igTrackerService.getTrackerStatus(); // We need a better way to check seen for a single channel
+        // Actually, scanForNewReels handles the seen logic, but it's for all channels.
+        // Let's just use scanForNewReels and filter if username is provided.
+        const allNew = await igTrackerService.scanForNewReels();
+        reels = allNew.filter(r => r.username === username);
+      }
+    } else {
+      reels = await igTrackerService.scanForNewReels();
+    }
+
+    if (limit > 0) {
+      reels = reels.slice(0, limit);
+    }
+
+    if (reels.length === 0) {
+      console.log('[Automation] No new reels to process.');
+      return { success: true, count: 0 };
+    }
+
+    console.log(`[Automation] Found ${reels.length} reels to process.`);
+    const results = { success: 0, failed: 0, details: [] };
+
+    for (const reel of reels) {
+      try {
+        console.log(`[Automation] Processing reel ${reel.shortcode} from @${reel.username}...`);
+        
+        // Add a small delay between reels to avoid AI rate limits
+        if (results.success > 0 || results.failed > 0) {
+          console.log('[Automation] Sleeping 15s to respect rate limits...');
+          await sleep(15000);
+        }
+
+        // 1. Identify product
+        const productResult = await aiService.identifyProduct({
+          caption: reel.caption || '',
+          username: reel.username,
+          thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl
+        });
+
+        let affiliateUrl = null;
+        let productName = null;
+
+        if (productResult.found) {
+          productName = productResult.productName;
+          console.log(`[Automation] Product: ${productName}`);
+
+          // 2. Search Flipkart
+          const fp = await flipkartSearchService.findProduct(productResult, productName);
+          if (fp) {
+            // 3. Make affiliate link
+            const ek = await earnKaroService.makeAffiliateLink(fp.url);
+            affiliateUrl = ek.affiliateUrl;
+            console.log(`[Automation] Affiliate Link: ${affiliateUrl}`);
+          }
+        }
+
+        // 4. Generate Pinterest Content
+        const pinContent = await aiService.generatePinterestContent({
+          caption: reel.caption,
+          username: reel.username,
+          productName: productName
+        });
+
+        const finalDescription = affiliateUrl 
+          ? `${pinContent.description}\n\n🛒 Buy it here → ${affiliateUrl}`.substring(0, 800)
+          : pinContent.description;
+
+        // 5. Post DIRECTLY to Pinterest
+        const pinData = {
+          title: pinContent.title,
+          description: finalDescription,
+          link: affiliateUrl || '',
+          media_source: { url: reel.mediaUrl },
+        };
+
+        const postResult = await puppeteerService.createPinWithBot(pinData);
+        console.log(`[Automation] ✅ Posted successfully!`);
+
+        // 6. Mark seen
+        await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
+        
+        results.success++;
+        results.details.push({ shortcode: reel.shortcode, status: 'posted', url: postResult.url });
+      } catch (err) {
+        console.error(`[Automation] ❌ Failed to process reel ${reel.shortcode}:`, err.message);
+        results.failed++;
+        results.details.push({ shortcode: reel.shortcode, status: 'failed', error: err.message });
+      }
+    }
+
+    return { success: true, ...results };
+  } catch (err) {
+    console.error('[Automation] Fatal error in processInstagramReels:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
   runHourlyAutomation,
+  processInstagramReels,
 };

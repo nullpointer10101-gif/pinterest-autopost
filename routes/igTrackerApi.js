@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const igTrackerService = require('../services/igTrackerService');
+const automationService = require('../services/automationService');
 
 // GET /api/ig-tracker/status
 router.get('/status', async (req, res) => {
@@ -25,10 +26,22 @@ router.get('/channels', async (req, res) => {
 // POST /api/ig-tracker/channels  { username: "techburner" }
 router.post('/channels', async (req, res) => {
   try {
-    const { username } = req.body;
-    if (!username) return res.status(400).json({ success: false, error: 'username is required' });
-    const channels = await igTrackerService.addChannel(username);
-    res.json({ success: true, channels });
+    const { username: rawInput } = req.body;
+    if (!rawInput) return res.status(400).json({ success: false, error: 'username or URL is required' });
+    
+    // 1. Normalize and add channel
+    const username = await igTrackerService.addChannel(rawInput);
+    
+    // 2. Trigger initial processing (top 3 reels) in the background
+    // We don't await this as we want to return the response quickly
+    automationService.processInstagramReels({
+      username: username,
+      limit: 3,
+      force: true // Force it to process even if they've been seen before (unlikely for new channel but good for verification)
+    }).catch(err => console.error(`[API] Initial processing failed for @${username}:`, err.message));
+
+    const channels = await igTrackerService.getChannels();
+    res.json({ success: true, username, channels, message: `Channel @${username} added. Initial processing of top 3 reels started in background.` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
