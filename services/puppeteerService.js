@@ -586,16 +586,27 @@ function isPinRelevant(title, description, niche) {
   const text = (title + ' ' + description).toLowerCase();
   
   if (niche === 'fashion') {
-    // Whitelist: Must have at least one of these
-    const mustHave = ['men', 'man', 'menswear', 'fashion', 'style', 'outfit', 'clothes', 'trouser', 'pants', 'shirt', 'jacket', 'streetwear', 'suit', 'sneaker', 'denim', 'blazer', 'hoodie'];
-    // Blacklist: Must NOT have any of these
-    const blacklisted = ['decor', 'home', 'furniture', 'interior', 'kitchen', 'light', 'architecture', 'garden', 'recipe', 'food', 'art', 'drawing', 'diy', 'craft', 'room', 'apartment'];
+    // Strict Blacklist: Block completely unrelated stuff
+    const blacklisted = [
+      'decor', 'home', 'furniture', 'interior', 'kitchen', 'architecture', 'recipe', 'food', 
+      'art', 'diy', 'craft', 'room', 'apartment', 'women', 'woman', 'girl', 'ladies', 'female',
+      'makeup', 'beauty', 'skincare', 'hair', 'nails', 'dog', 'cat', 'pet', 'car', 'vehicle', 'wedding'
+    ];
     
-    const hasBlacklisted = blacklisted.some(word => text.includes(word));
-    if (hasBlacklisted) return false;
+    if (blacklisted.some(word => text.includes(word))) return false;
     
-    const hasRequired = mustHave.some(word => text.includes(word));
-    return hasRequired;
+    // Explicit whitelists (if it matches any of these exact phrases, pass immediately)
+    const exactPhrases = ['menswear', 'mens fashion', 'men fashion', 'mens style', 'men style', 'mens outfit', 'men outfit'];
+    if (exactPhrases.some(phrase => text.includes(phrase))) return true;
+
+    // Matrix Matching: Must have at least one male identifier AND one apparel identifier
+    const maleIdentifiers = ['men', 'man', 'mens', 'boy', 'boys', 'male', 'gentleman'];
+    const apparelIdentifiers = ['fashion', 'style', 'outfit', 'clothes', 'trouser', 'pants', 'shirt', 'jacket', 'streetwear', 'suit', 'sneaker', 'denim', 'blazer', 'hoodie', 'apparel', 'wear', 'tshirt', 'polo', 'footwear', 'shoes'];
+
+    const hasMale = maleIdentifiers.some(word => text.split(/[^a-z]+/).includes(word));
+    const hasApparel = apparelIdentifiers.some(word => text.includes(word));
+
+    return hasMale && hasApparel;
   }
 
   if (niche === 'home') {
@@ -667,8 +678,12 @@ async function runAutoEngagerSafe(options = {}) {
     await page.goto(feedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
 
     let completed = 0;
+    let commentsMade = 0;
     let cycle = 0;
-    const maxCycles = Math.max(6, targetCount * 4);
+    const maxCycles = Math.max(10, targetCount * 5); // Increased max cycles to find relevant pins
+    
+    // Determine minimum guaranteed comments
+    const minRequiredComments = Math.min(3, targetCount); // At least 3 if targetCount >= 3
 
     while (completed < targetCount && cycle < maxCycles) {
       cycle += 1;
@@ -791,7 +806,16 @@ async function runAutoEngagerSafe(options = {}) {
       await page.evaluate(() => window.scrollBy(0, Math.floor(450 + Math.random() * 700)));
       await sleep(randomInt(1800, 4200));
 
-      const shouldComment = Math.random() < commentChance;
+      const remainingTarget = targetCount - completed;
+      const remainingCommentsNeeded = minRequiredComments - commentsMade;
+      
+      // Force comment if we are running out of loops and haven't met the minimum
+      let shouldComment = Math.random() < commentChance;
+      if (remainingCommentsNeeded > 0 && remainingTarget <= remainingCommentsNeeded) {
+        shouldComment = true;
+        console.log(`[Bot] Forcing comment to meet minimum quota (${commentsMade}/${minRequiredComments})...`);
+      }
+
       let commentLeft = false;
       let theComment = '';
 
@@ -816,6 +840,7 @@ async function runAutoEngagerSafe(options = {}) {
             // Wait for post to register
             await sleep(randomInt(4000, 7000));
             commentLeft = true;
+            commentsMade++;
             actionTaken = actionTaken === 'Liked' ? 'Liked & Commented' : 'Commented';
             console.log(`[Bot] ✅ AI Comment posted: "${theComment}"`);
           }
