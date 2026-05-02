@@ -376,6 +376,31 @@ async function ensureChannelProfilePic(input) {
     console.log(`[IG-Tracker] ensureChannelProfilePic session method failed for @${username}: ${err.message}`);
   }
 
+  // Public web_profile_info endpoint works for many accounts without login cookie.
+  // This is more reliable than the legacy ?__a endpoint for profile picture lookup.
+  try {
+    const profileRes = await axios.get(
+      `https://i.instagram.com/api/v1/users/web_profile_info/?username=${username}`,
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': '*/*',
+          'Referer': 'https://www.instagram.com/',
+          'x-ig-app-id': '936619743392459',
+        },
+        timeout: 8000,
+      }
+    );
+    const user = profileRes.data?.data?.user;
+    const profilePicUrl = user?.profile_pic_url_hd || user?.profile_pic_url || null;
+    if (profilePicUrl) {
+      await updateChannelMeta(username, { profilePicUrl });
+      return profilePicUrl;
+    }
+  } catch (err) {
+    console.log(`[IG-Tracker] ensureChannelProfilePic i.instagram method failed for @${username}: ${err.message}`);
+  }
+
   try {
     const res = await axios.get(`https://www.instagram.com/${username}/?__a=1&__d=dis`, {
       headers: {

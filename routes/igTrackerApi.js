@@ -16,7 +16,27 @@ router.get('/status', async (req, res) => {
 // GET /api/ig-tracker/channels
 router.get('/channels', async (req, res) => {
   try {
-    const channels = await igTrackerService.getChannels();
+    let channels = await igTrackerService.getChannels();
+
+    // Backfill missing profile pics for existing channels so avatar UI self-heals.
+    const missingUsers = channels
+      .filter(ch => !ch?.profilePicUrl && ch?.username)
+      .map(ch => ch.username);
+
+    if (missingUsers.length > 0) {
+      try {
+        await Promise.race([
+          Promise.allSettled(
+            missingUsers.slice(0, 6).map(username => igTrackerService.ensureChannelProfilePic(username))
+          ),
+          new Promise(resolve => setTimeout(resolve, 6500))
+        ]);
+        channels = await igTrackerService.getChannels();
+      } catch (metaErr) {
+        console.warn('[API] Channel profile pic backfill failed:', metaErr.message);
+      }
+    }
+
     res.json({ success: true, channels });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
