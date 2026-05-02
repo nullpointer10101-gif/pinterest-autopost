@@ -178,4 +178,25 @@ router.post('/process', async (req, res) => {
   }
 });
 
+router.delete('/:id', async (req, res) => {
+  try {
+    await queueService.removeItem(req.params.id);
+    res.json({ success: true, message: 'Item removed from queue' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/promote/:id', async (req, res) => {
+  try {
+    await queueService.promoteToFront(req.params.id);
+    // Fire GitHub bot for the now-first item
+    githubService.triggerInstantMission().catch(() => {});
+    res.json({ success: true, message: 'Item promoted to front and bot fired!' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
+

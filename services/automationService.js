@@ -285,8 +285,9 @@ async function processInstagramReels(options = {}) {
         
         // Add a small delay between reels to avoid AI rate limits
         if (results.success > 0 || results.failed > 0) {
-          console.log('[Automation] Sleeping 15s to respect rate limits...');
-          await sleep(15000);
+          const waitMs = force ? 2000 : 15000;
+          console.log(`[Automation] Sleeping ${waitMs / 1000}s to respect rate limits...`);
+          await sleep(waitMs);
         }
 
         // 1. Identify product
@@ -324,27 +325,44 @@ async function processInstagramReels(options = {}) {
           ? `${pinContent.description}\n\n🛒 Buy it here → ${affiliateUrl}`.substring(0, 800)
           : pinContent.description;
 
-        // 5. Post DIRECTLY to Pinterest
-        const pinData = {
+        // 5. Add to QUEUE instead of direct posting (more reliable for background tasks)
+        const queueItem = {
           title: pinContent.title,
           description: finalDescription,
-          link: affiliateUrl || '',
-          media_source: { url: reel.mediaUrl },
+          altText: '',
+          mediaUrl: reel.mediaUrl,
+          sourceUrl: reel.url,
+          destinationLink: affiliateUrl || '',
+          originalSourceUrl: reel.url,
+          username: reel.username,
+          caption: reel.caption || '',
+          thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl,
+          aiContent: {
+            title: pinContent.title,
+            description: finalDescription,
+            hashtags: pinContent.hashtags || [],
+          },
         };
 
-        const postResult = await puppeteerService.createPinWithBot(pinData);
-        console.log(`[Automation] ✅ Posted successfully!`);
+        await queueService.addToQueue([queueItem], true);
+        console.log(`[Automation] ✅ Added to queue (prepended): ${reel.shortcode}`);
 
         // 6. Mark seen
         await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
         
         results.success++;
-        results.details.push({ shortcode: reel.shortcode, status: 'posted', url: postResult.url });
+        results.details.push({ shortcode: reel.shortcode, status: 'queued' });
       } catch (err) {
         console.error(`[Automation] ❌ Failed to process reel ${reel.shortcode}:`, err.message);
         results.failed++;
         results.details.push({ shortcode: reel.shortcode, status: 'failed', error: err.message });
       }
+    }
+
+    // 7. Trigger GitHub Action to process the new queue items
+    if (results.success > 0) {
+      const githubService = require('./githubService');
+      githubService.triggerInstantMission().catch(() => {});
     }
 
     return { success: true, ...results };

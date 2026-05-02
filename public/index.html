@@ -41,6 +41,7 @@
         <nav class="tab-nav" aria-label="Main tabs">
             <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
             <button class="tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Target Channels</span></button>
+            <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
             <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
             <button class="tab-btn" data-tab="x-dashboard" type="button"><i data-lucide="twitter" class="tab-icon"></i><span>X (Twitter)</span></button>
             <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="zap" class="tab-icon"></i><span>Engage Log</span></button>
@@ -207,6 +208,32 @@
                 </article>
 
                 <article class="card dashboard-op-card">
+                    <div class="card-title-wrap">
+                        <h2><i data-lucide="layers" class="heading-icon"></i>Live Mission Queue</h2>
+                        <p class="muted-text">Real-time view of upcoming Pinterest posts. Switch to the Queue tab for full management.</p>
+                    </div>
+                    <div id="dashboard-queue-list" class="list">
+                        <div class="pulse-item">Loading missions...</div>
+                    </div>
+                    <div class="card-footer" style="margin-top: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; display: flex; justify-content: flex-end;">
+                        <button class="pill-btn" onclick="switchTab('queue')">Manage Full Queue →</button>
+                    </div>
+                </article>
+                <article class="card dashboard-op-card">
+                    <div class="card-title-wrap">
+                        <h2><i data-lucide="history" class="heading-icon"></i>Recent History</h2>
+                        <p class="muted-text">The last few missions that were completed or failed. Detailed logs are in the History tab.</p>
+                    </div>
+                    <div id="dashboard-history-list" class="list">
+                        <div class="pulse-item">Loading history...</div>
+                    </div>
+                    <div class="card-footer" style="margin-top: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; display: flex; justify-content: flex-end;">
+                        <button class="pill-btn" onclick="switchTab('history')">View Full History →</button>
+                    </div>
+                </article>
+
+
+                <article class="card dashboard-op-card">
                     <div class="countdown-wrap">
                         <div class="countdown-label">Next Automation Cycle</div>
                         <div id="countdown-clock" class="countdown-timer">--:--</div>
@@ -260,6 +287,32 @@
                     </div>
                 </article>
             </section>
+
+
+            <section id="panel-queue" class="panel hidden">
+
+                <article class="card">
+                    <div class="card-header-row">
+                        <h2><i data-lucide="layers" class="heading-icon"></i>Mission Queue</h2>
+                        <div class="button-row">
+                            <button id="run-bot-btn" class="btn btn-primary compact-btn" type="button"><i data-lucide="zap" class="btn-icon"></i><span>Run Queue Bot</span></button>
+                            <button id="retry-failed-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="refresh-cw" class="btn-icon"></i><span>Retry Failed</span></button>
+                            <button id="clear-queue-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear Queue</span></button>
+                        </div>
+                    </div>
+                    <div class="control-row">
+                        <input type="text" id="queue-search" placeholder="Search queue by title or source...">
+                        <select id="queue-status-filter">
+                            <option value="all">All statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="processing">Processing</option>
+                            <option value="failed">Failed</option>
+                        </select>
+                    </div>
+                    <div id="queue-list" class="list"></div>
+                </article>
+            </section>
+
 
             <section id="panel-pinterest" class="panel hidden">
                 <div class="panel-grid panel-grid-main">

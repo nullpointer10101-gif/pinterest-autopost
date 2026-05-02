@@ -376,6 +376,8 @@ async function refreshOverview() {
     updateStats(state.queue, state.history);
     updateConnectionBar(pinterestResp, systemStatus);
     updateHealthDashboard(pinterestResp, systemStatus);
+    renderMiniQueue();
+    renderDashboardHistory();
     
     // Sync workflow toggles
     if (systemStatus.workflows) {
@@ -771,6 +773,13 @@ function renderQueueList() {
       const addedAt = item.addedAt ? formatDateTime12h(item.addedAt) : '';
       const dateText = addedAt ? `<div class="item-meta">${escHtml(addedAt)}</div>` : '';
 
+      const actionBtns = status === 'pending' || status === 'failed'
+        ? `
+          <button class="pill-btn" onclick="handlePromoteQueueItem('${escAttr(item.id)}')">Post Now</button>
+          <button class="pill-btn btn-danger-text" onclick="handleRemoveQueueItem('${escAttr(item.id)}')">Remove</button>
+        `
+        : '';
+
       return `
         <div class="list-item">
           <div class="list-item-main">
@@ -784,6 +793,7 @@ function renderQueueList() {
           </div>
           <div class="item-actions">
             <span class="badge status-${escHtml(status)}">${statusText}</span>
+            ${actionBtns}
           </div>
         </div>
       `;
@@ -792,25 +802,53 @@ function renderQueueList() {
 }
 
 function renderMiniQueue() {
-  const list = byId('pin-queue-list-mini');
-  if (!list) return;
+  const lists = [byId('pin-queue-list-mini'), byId('dashboard-queue-list')].filter(Boolean);
+  if (lists.length === 0) return;
 
   const pending = state.queue.filter(item => item.status === 'pending' || item.status === 'processing');
   
-  if (!pending.length) {
-    list.innerHTML = '<div class="pulse-item">No pending Pinterest missions.</div>';
+  lists.forEach(list => {
+    if (!pending.length) {
+      list.innerHTML = '<div class="pulse-item">No pending Pinterest missions.</div>';
+      return;
+    }
+
+    list.innerHTML = pending.slice(0, 5).map(item => `
+      <div class="list-item" style="padding: 8px;">
+        <div class="list-item-main">
+          <div style="font-size: 13px; font-weight: 600;">${escHtml(item.title || 'Untitled')}</div>
+        </div>
+        <span class="badge status-${escHtml(item.status || 'pending')}" style="font-size: 10px;">${String(item.status || 'PENDING').toUpperCase()}</span>
+      </div>
+    `).join('');
+  });
+}
+
+function renderDashboardHistory() {
+  const list = byId('dashboard-history-list');
+  if (!list) return;
+
+  if (!state.history.length) {
+    list.innerHTML = '<div class="pulse-item">No recent history available.</div>';
     return;
   }
 
-  list.innerHTML = pending.slice(0, 5).map(item => `
-    <div class="list-item" style="padding: 8px;">
-      <div class="list-item-main">
-        <div style="font-size: 13px; font-weight: 600;">${escHtml(item.title || 'Untitled')}</div>
+  list.innerHTML = state.history.slice(0, 5).map(item => {
+    const title = escHtml(item.aiContent?.title || 'Untitled');
+    const status = item.status || 'success';
+    const badgeClass = status === 'success' ? 'badge-success' : 'badge-error';
+    return `
+      <div class="list-item" style="padding: 8px;">
+        <div class="list-item-main">
+          <div style="font-size: 13px; font-weight: 600;">${title}</div>
+        </div>
+        <span class="badge ${badgeClass}" style="font-size: 10px;">${status.toUpperCase()}</span>
       </div>
-      <span class="badge status-${escHtml(item.status || 'pending')}" style="font-size: 10px;">${String(item.status || 'PENDING').toUpperCase()}</span>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
+
+
 
 function renderHistoryList() {
   const list = byId('history-list');
@@ -1170,6 +1208,31 @@ async function clearHistory() {
     showToast(error.message || 'Could not clear history.', 'error');
   }
 }
+
+
+async function handleRemoveQueueItem(id) {
+  if (!confirm('Remove this item from queue?')) return;
+  try {
+    const res = await apiRequest(`/api/queue/${id}`, { method: 'DELETE' });
+    showToast(res.message || 'Item removed.', 'success');
+    await refreshAll();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function handlePromoteQueueItem(id) {
+  try {
+    const res = await apiRequest(`/api/queue/promote/${id}`, { method: 'POST' });
+    showToast(res.message || 'Item promoted and bot fired!', 'success');
+    await refreshAll();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+window.handleRemoveQueueItem = handleRemoveQueueItem;
+window.handlePromoteQueueItem = handlePromoteQueueItem;
 
 function exportHistoryJson() {
   const data = JSON.stringify(state.history || [], null, 2);

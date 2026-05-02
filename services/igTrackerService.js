@@ -597,26 +597,33 @@ async function fetchLatestReels(username) {
 
 async function getChannels() {
   const state = await readState();
-  return state.channels;
+  return state.channels.map(username => ({
+    username,
+    profilePicUrl: state.channelMeta[username]?.profilePicUrl || null
+  }));
 }
 
-async function addChannel(username) {
-  const clean = username.replace(/^@/, '').trim().toLowerCase();
+async function addChannel(input) {
+  const username = normalizeUsername(input);
+  if (!username) throw new Error('Invalid username or URL');
+
   const state = await readState();
-  if (!state.channels.includes(clean)) {
-    state.channels.push(clean);
+  if (!state.channels.includes(username)) {
+    state.channels.push(username);
     await writeState(state);
   }
-  return state.channels;
+  return username; // Return normalized username
 }
 
-async function removeChannel(username) {
-  const clean = username.replace(/^@/, '').trim().toLowerCase();
+async function removeChannel(input) {
+  const username = normalizeUsername(input);
   const state = await readState();
-  state.channels = state.channels.filter(c => c !== clean);
+  state.channels = state.channels.filter(c => c !== username);
   await writeState(state);
   return state.channels;
 }
+
+
 
 // ─── Affiliate Cache ───────────────────────────────────────────────────────────
 
@@ -682,34 +689,6 @@ async function getTrackerStatus() {
     lastRunAt: state.lastRunAt,
     storage: igStorageService.getStorageInfo(),
   };
-}
-
-async function addChannel(input) {
-  const username = normalizeUsername(input);
-  if (!username) throw new Error('Invalid username or URL');
-
-  const state = await readState();
-  if (!state.channels.includes(username)) {
-    state.channels.push(username);
-    await writeState(state);
-  }
-  return username; // Return normalized username
-}
-
-async function removeChannel(input) {
-  const username = normalizeUsername(input);
-  const state = await readState();
-  state.channels = state.channels.filter(c => c !== username);
-  await writeState(state);
-  return state.channels;
-}
-
-async function getChannels() {
-  const state = await readState();
-  return state.channels.map(username => ({
-    username,
-    profilePicUrl: state.channelMeta[username]?.profilePicUrl || null
-  }));
 }
 
 module.exports = {

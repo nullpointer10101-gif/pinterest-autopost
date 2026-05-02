@@ -117,6 +117,28 @@ async function retryFailedItems() {
   return changed;
 }
 
+async function removeItem(id) {
+  const queue = await getQueue();
+  const updated = queue.filter(item => item.id !== id);
+  await saveQueue(updated);
+  return updated;
+}
+
+async function promoteToFront(id) {
+  const queue = await getQueue();
+  const index = queue.findIndex(item => item.id === id);
+  if (index === -1) return queue;
+
+  const item = queue[index];
+  if (item.status !== 'pending') return queue;
+
+  queue.splice(index, 1);
+  const updated = [item, ...queue];
+  await saveQueue(updated);
+  return updated;
+}
+
+
 let isProcessing = false;
 
 async function processNextInQueue() {
@@ -240,6 +262,8 @@ module.exports = {
   clearPending,
   saveQueue,
   retryFailedItems,
+  removeItem,
+  promoteToFront,
   processNextInQueue,
   getQueueStats,
   shouldUseBrowserBot,
