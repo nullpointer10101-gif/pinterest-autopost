@@ -1,5 +1,6 @@
 const xQueueService = require('./xQueueService');
 const xHistoryService = require('./xHistoryService');
+const historyService = require('./historyService');
 
 let xPuppeteerService = null;
 try {
@@ -62,6 +63,12 @@ async function runHourlyAutomation(options = {}) {
 
   const dateKey = getDateKey(timeZone);
   const automation = await xHistoryService.getAutomationState();
+  const config = await historyService.getWorkflowConfig();
+
+  if (config.xEngagement === false && config.xPosting === false && !options.force) {
+    console.log('[X-Automation] All X workflows are DISABLED. Skipping.');
+    return { success: true, message: 'All X workflows disabled' };
+  }
 
   if (!options.force && automation.lastRunAt) {
     const lastRunTime = new Date(automation.lastRunAt).getTime();
@@ -90,7 +97,10 @@ async function runHourlyAutomation(options = {}) {
   const processedItems = [];
 
   if (targetPostsThisRun > 0) {
-    const queue = await xQueueService.getQueue();
+    if (config.xPosting === false && !options.force) {
+       console.log('[X-Automation] X Posting is DISABLED. Skipping queue.');
+    } else {
+      const queue = await xQueueService.getQueue();
     const pending = queue.filter(item => item.status === 'pending').length;
     console.log(`[X-Automation] Found ${pending} pending items in queue.`);
 
@@ -113,6 +123,7 @@ async function runHourlyAutomation(options = {}) {
         postsProcessed += 1;
       } else {
         console.log(`[X-Automation] ❌ Failed to post: ${processed.error || 'Unknown error'}`);
+      }
       }
     }
   } else {
@@ -137,7 +148,9 @@ async function runHourlyAutomation(options = {}) {
   };
 
   if (engagementCount > 0) {
-    if (xPuppeteerService && typeof xPuppeteerService.runAutoEngagerSafe === 'function') {
+    if (config.xEngagement === false && !options.force) {
+      console.log('[X-Automation] X Engagement is DISABLED. Skipping.');
+    } else if (xPuppeteerService && typeof xPuppeteerService.runAutoEngagerSafe === 'function') {
       try {
         const startDelayMs = randomInt(engagementStartJitterMinMs, engagementStartJitterMaxMs);
         if (startDelayMs > 0) {
