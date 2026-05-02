@@ -106,28 +106,29 @@ async function runHourlyAutomation(options = {}) {
       console.log('[Automation] Pinterest Posting is DISABLED. Skipping queue processing.');
     } else {
       const queue = await queueService.getQueue();
-    const pending = queue.filter(item => item.status === 'pending').length;
-    console.log(`[Automation] Found ${pending} pending items in queue.`);
+      const pending = queue.filter(item => item.status === 'pending').length;
+      console.log(`[Automation] Found ${pending} pending items in queue.`);
 
-    while (postsProcessed < targetPostsThisRun && attempts < maxAttempts) {
-      attempts += 1;
-      console.log(`[Automation] Processing post attempt ${attempts}...`);
-      const processed = await queueService.processNextInQueue();
-      if (!processed) {
-        console.log('[Automation] No more items to process in queue.');
-        break;
-      }
-      processedItems.push({
-        id: processed.id,
-        status: processed.status,
-        method: processed.method || null,
-        error: processed.error || null,
-      });
-      if (processed.status === 'completed') {
-        console.log(`[Automation] ✅ Successfully posted: ${processed.title}`);
-        postsProcessed += 1;
-      } else {
-        console.log(`[Automation] ❌ Failed to post: ${processed.error || 'Unknown error'}`);
+      while (postsProcessed < targetPostsThisRun && attempts < maxAttempts) {
+        attempts += 1;
+        console.log(`[Automation] Processing post attempt ${attempts}...`);
+        const processed = await queueService.processNextInQueue();
+        if (!processed) {
+          console.log('[Automation] No more items to process in queue.');
+          break;
+        }
+        processedItems.push({
+          id: processed.id,
+          status: processed.status,
+          method: processed.method || null,
+          error: processed.error || null,
+        });
+        if (processed.status === 'completed') {
+          console.log(`[Automation] ✅ Successfully posted: ${processed.title}`);
+          postsProcessed += 1;
+        } else {
+          console.log(`[Automation] ❌ Failed to post: ${processed.error || 'Unknown error'}`);
+        }
       }
     }
   } else {

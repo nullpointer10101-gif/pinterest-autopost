@@ -193,6 +193,7 @@ async function fetchViaPuppeteer(username) {
       if (!title.toLowerCase().includes('moment') && !title.toLowerCase().includes('cloudflare')) {
         const results = await page.evaluate((user) => {
           const posts = [];
+          const profilePic = document.querySelector('.img-profile')?.src || '';
           const links = Array.from(document.querySelectorAll('a[href]'))
             .filter(a => /\/(p|reel|media)\//.test(a.href)).slice(0, 5);
           links.forEach((link, i) => {
@@ -203,12 +204,15 @@ async function fetchViaPuppeteer(username) {
             const thumbnailUrl = img?.src || img?.dataset?.src || '';
             const isVideo = !!(container?.querySelector('[class*="play"],[class*="video"],svg'));
             if (shortcode) {
-              posts.push({ shortcode, username: user, url: `https://www.instagram.com/reel/${shortcode}/`, mediaUrl: thumbnailUrl, thumbnailUrl, caption: '', mediaType: isVideo ? 'video' : 'image' });
+              posts.push({ shortcode, username: user, url: `https://www.instagram.com/reel/${shortcode}/`, mediaUrl: thumbnailUrl, thumbnailUrl, caption: '', mediaType: isVideo ? 'video' : 'image', profilePic });
             }
           });
           return posts;
         }, username);
-        if (results.length > 0) return results;
+        if (results.length > 0) {
+           if (results[0].profilePic) updateChannelMeta(username, { profilePicUrl: results[0].profilePic });
+           return results;
+        }
       }
     } catch (e) { console.log(`[IG-Tracker] imginn stealth: ${e.message}`); }
 
@@ -220,6 +224,7 @@ async function fetchViaPuppeteer(username) {
       if (!title.toLowerCase().includes('moment') && !title.toLowerCase().includes('cloudflare')) {
         const results = await page.evaluate((user) => {
           const posts = [];
+          const profilePic = document.querySelector('.profile-avatar img')?.src || '';
           const items = document.querySelectorAll('.box-photo, .photo, [class*="photo-item"]');
           items.forEach((item, i) => {
             if (i >= 5) return;
@@ -230,12 +235,15 @@ async function fetchViaPuppeteer(username) {
             const thumbnailUrl = img?.src || '';
             const isVideo = !!(item.querySelector('[class*="play"],[class*="video"]'));
             if (shortcode && thumbnailUrl) {
-              posts.push({ shortcode, username: user, url: `https://www.instagram.com/reel/${shortcode}/`, mediaUrl: thumbnailUrl, thumbnailUrl, caption: '', mediaType: isVideo ? 'video' : 'image' });
+              posts.push({ shortcode, username: user, url: `https://www.instagram.com/reel/${shortcode}/`, mediaUrl: thumbnailUrl, thumbnailUrl, caption: '', mediaType: isVideo ? 'video' : 'image', profilePic });
             }
           });
           return posts;
         }, username);
-        if (results.length > 0) return results;
+        if (results.length > 0) {
+           if (results[0].profilePic) updateChannelMeta(username, { profilePicUrl: results[0].profilePic });
+           return results;
+        }
       }
     } catch (e) { console.log(`[IG-Tracker] picuki stealth: ${e.message}`); }
 
@@ -266,6 +274,7 @@ async function fetchViaPuppeteer(username) {
 
       const user = apiData?.graphql?.user || apiData?.data?.user;
       if (user) {
+        if (user.profile_pic_url) updateChannelMeta(username, { profilePicUrl: user.profile_pic_url });
         const edges = user?.edge_owner_to_timeline_media?.edges || [];
         const results = edges.slice(0, 5).map(e => {
           const node = e.node;
