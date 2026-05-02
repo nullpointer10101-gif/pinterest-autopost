@@ -603,6 +603,7 @@ function renderQueueList() {
   }
 
   list.innerHTML = rows
+    .slice(0, 15)
     .map((item) => {
       const thumb = `/api/queue/thumb/${encodeURIComponent(item.id)}`;
       const title = escHtml(item.title || 'Untitled mission');
@@ -679,6 +680,7 @@ function renderHistoryList() {
   }
 
   list.innerHTML = rows
+    .slice(0, 10)
     .map((item) => {
       const status = item.status || 'preview';
       const title = escHtml(item.aiContent?.title || 'Untitled post');
