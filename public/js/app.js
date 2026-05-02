@@ -1544,23 +1544,32 @@ function renderChannelsList() {
     return;
   }
 
-  list.innerHTML = state.channels.map(username => `
-    <div class="list-item">
-      <div class="list-item-main">
-        <div class="avatar-circle">@</div>
-        <div>
-          <div class="item-title">@${escHtml(username)}</div>
-          <div class="item-meta">Instagram Target Channel</div>
+  list.innerHTML = state.channels.map(ch => {
+    const username = typeof ch === 'string' ? ch : ch.username;
+    const pic = typeof ch === 'object' && ch.profilePicUrl ? ch.profilePicUrl : null;
+    
+    const avatarHtml = pic 
+      ? `<img src="${proxyMediaUrl(pic)}" class="avatar-circle" style="object-fit: cover;" onerror="this.src=''; this.classList.add('fallback');">`
+      : `<div class="avatar-circle">@</div>`;
+
+    return `
+      <div class="list-item">
+        <div class="list-item-main">
+          ${avatarHtml}
+          <div>
+            <div class="item-title">@${escHtml(username)}</div>
+            <div class="item-meta">Instagram Target Channel</div>
+          </div>
+        </div>
+        <div class="item-actions">
+          <a href="https://www.instagram.com/${escHtml(username)}" target="_blank" class="pill-btn">View Profile</a>
+          <button class="btn btn-danger compact-btn" onclick="handleRemoveChannel('${escAttr(username)}')">
+            <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+          </button>
         </div>
       </div>
-      <div class="item-actions">
-        <a href="https://www.instagram.com/${escHtml(username)}" target="_blank" class="pill-btn">View Profile</a>
-        <button class="btn btn-danger compact-btn" onclick="handleRemoveChannel('${escAttr(username)}')">
-          <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
-        </button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
   
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }

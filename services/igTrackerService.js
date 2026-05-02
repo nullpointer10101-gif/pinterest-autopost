@@ -14,6 +14,7 @@ const MAX_SEEN_PER_CHANNEL = 50;
 const DEFAULT_STATE = {
   channels: [],
   seen: {},         // { username: [shortcode, ...] }
+  channelMeta: {},  // { username: { profilePicUrl, lastFetchedAt } }
   affiliateCache: {}, // { shortcode: earnkaro_url }
   lastRunAt: null,
 };
@@ -27,6 +28,7 @@ async function readState() {
     ...state,
     channels: Array.isArray(state?.channels) ? state.channels : [],
     seen: state?.seen || {},
+    channelMeta: state?.channelMeta || {},
     affiliateCache: state?.affiliateCache || {},
   };
 }
@@ -72,6 +74,17 @@ function markSeen(state, username, shortcode) {
   state.seen[username] = state.seen[username].slice(0, MAX_SEEN_PER_CHANNEL);
 }
 
+async function updateChannelMeta(username, meta) {
+  const state = await readState();
+  if (!state.channelMeta[username]) state.channelMeta[username] = {};
+  state.channelMeta[username] = {
+    ...state.channelMeta[username],
+    ...meta,
+    lastFetchedAt: new Date().toISOString()
+  };
+  await writeState(state);
+}
+
 // ─── IG Fetching Methods ──────────────────────────────────────────────────────
 
 /**
@@ -101,12 +114,18 @@ function igHeaders() {
 async function fetchViaSessionApi(username) {
   if (!IG_SESSION_COOKIE || !IG_CSRF) return [];
   try {
-    // Step 1: resolve user ID
     const profileRes = await axios.get(
       `https://www.instagram.com/api/v1/users/web_profile_info/?username=${username}`,
       { headers: igHeaders(), timeout: 12000 }
     );
-    const userId = profileRes.data?.data?.user?.id;
+    const user = profileRes.data?.data?.user;
+    const userId = user?.id;
+    const profilePicUrl = user?.profile_pic_url;
+
+    if (profilePicUrl) {
+      updateChannelMeta(username, { profilePicUrl });
+    }
+
     if (!userId) {
       console.log(`[IG-Tracker] Session API: no user ID for @${username}`);
       return [];
@@ -575,7 +594,10 @@ async function removeChannel(input) {
 
 async function getChannels() {
   const state = await readState();
-  return state.channels;
+  return state.channels.map(username => ({
+    username,
+    profilePicUrl: state.channelMeta[username]?.profilePicUrl || null
+  }));
 }
 
 module.exports = {
