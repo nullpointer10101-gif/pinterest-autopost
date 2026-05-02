@@ -66,13 +66,13 @@ async function runIgPinterestPipeline() {
             results.withProduct++;
             productName = productResult.productName;
             console.log(`  [AI] Product identified: "${productName}" (${productResult.category})`);
-            console.log(`  [AI] Flipkart query: "${productResult.flipkartQuery}"`);
+            console.log(`  [AI] Exact Query: "${productResult.exactMatchQuery}"`);
 
             // Step 4: Find on Flipkart using precise visual query, falling back to generalized query
             console.log('\n[2] Searching Flipkart...');
             const flipkartProduct = await flipkartSearchService.findProduct(
-              productResult.flipkartQuery,
-              productResult.fallbackQuery
+              productResult,
+              productResult.productName
             );
 
             if (flipkartProduct) {

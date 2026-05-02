@@ -35,13 +35,13 @@ async function processReel(reel) {
   if (productResult.found) {
     productName = productResult.productName;
     console.log('    ✅ Product: "' + productName + '" (' + productResult.category + ')');
-    console.log('    Flipkart query: "' + productResult.flipkartQuery + '"');
+    console.log('    Exact query: "' + productResult.exactMatchQuery + '"');
 
     // Step 2: Search on Flipkart
     console.log('\n[2] Searching Flipkart...');
     const fp = await flipkartSearchService.findProduct(
-      productResult.flipkartQuery || productName,
-      productResult.fallbackQuery
+      productResult,
+      productResult.productName
     );
     if (fp) {
       flipkartUrl = fp.url;

@@ -180,8 +180,9 @@ function heuristicIdentifyProduct(caption) {
   return { 
     found: true, 
     productName, 
-    flipkartQuery: productName, 
-    fallbackQuery: productName.split(' ').slice(0, 2).join(' '),
+    exactMatchQuery: productName, 
+    similarMatchQuery: productName.split(' ').slice(0, 4).join(' '),
+    broadMatchQuery: productName.split(' ').slice(0, 2).join(' '),
     category: 'other' 
   };
 }
@@ -200,7 +201,15 @@ Task: Identify the primary product being promoted.
 - Look for keywords like "shop", "link", "available", "buy", or specific product names (sneakers, watch, dress, etc.).
 - Even if it's a general fashion reel, try to identify the main item (e.g., "Casual White Sneakers" or "Men's Leather Watch").
 
-If a product is found → Return: { "found": true, "productName": "specific product name", "flipkartQuery": "detailed search query for Flipkart", "fallbackQuery": "generic search query", "category": "fashion|electronics|home|beauty|other" }
+If a product is found → Return: 
+{
+  "found": true,
+  "productName": "specific product name",
+  "exactMatchQuery": "brand + specific model + color + type",
+  "similarMatchQuery": "brand + color + type",
+  "broadMatchQuery": "color + type",
+  "category": "fashion|electronics|home|beauty|other"
+}
 If absolutely no product → Return: { "found": false }
 
 Return ONLY the JSON object.`;
@@ -245,8 +254,9 @@ Return ONLY the JSON object.`;
     return {
       found: true,
       productName: parsed.productName,
-      flipkartQuery: parsed.flipkartQuery || parsed.productName,
-      fallbackQuery: parsed.fallbackQuery || parsed.category || 'other',
+      exactMatchQuery: parsed.exactMatchQuery || parsed.productName,
+      similarMatchQuery: parsed.similarMatchQuery || parsed.productName,
+      broadMatchQuery: parsed.broadMatchQuery || parsed.category || 'other',
       category: parsed.category || 'other',
     };
   }
