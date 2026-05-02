@@ -279,17 +279,11 @@ async function processInstagramReels(options = {}) {
     console.log(`[Automation] Found ${reels.length} reels to process.`);
     const results = { success: 0, failed: 0, details: [] };
 
+    let reelIdx = 0;
     for (const reel of reels) {
       try {
-        console.log(`[Automation] Processing reel ${reel.shortcode} from @${reel.username}...`);
+        console.log(`[Automation] Processing reel ${reelIdx + 1}/${reels.length}: ${reel.shortcode}`);
         
-        // Add a small delay between reels to avoid AI rate limits
-        if (results.success > 0 || results.failed > 0) {
-          const waitMs = force ? 2000 : 15000;
-          console.log(`[Automation] Sleeping ${waitMs / 1000}s to respect rate limits...`);
-          await sleep(waitMs);
-        }
-
         // 1. Identify product
         const productResult = await aiService.identifyProduct({
           caption: reel.caption || '',
@@ -302,19 +296,14 @@ async function processInstagramReels(options = {}) {
 
         if (productResult.found) {
           productName = productResult.productName;
-          console.log(`[Automation] Product: ${productName}`);
-
-          // 2. Search Flipkart
           const fp = await flipkartSearchService.findProduct(productResult, productName);
           if (fp) {
-            // 3. Make affiliate link
             const ek = await earnKaroService.makeAffiliateLink(fp.url);
             affiliateUrl = ek.affiliateUrl;
-            console.log(`[Automation] Affiliate Link: ${affiliateUrl}`);
           }
         }
 
-        // 4. Generate Pinterest Content
+        // 2. Generate Pinterest Content
         const pinContent = await aiService.generatePinterestContent({
           caption: reel.caption,
           username: reel.username,
@@ -325,7 +314,7 @@ async function processInstagramReels(options = {}) {
           ? `${pinContent.description}\n\n🛒 Buy it here → ${affiliateUrl}`.substring(0, 800)
           : pinContent.description;
 
-        // 5. Add to QUEUE instead of direct posting (more reliable for background tasks)
+        // 3. Queue Logic (1st is instant/prepend, rest are normal/append)
         const queueItem = {
           title: pinContent.title,
           description: finalDescription,
@@ -344,20 +333,29 @@ async function processInstagramReels(options = {}) {
           },
         };
 
-        await queueService.addToQueue([queueItem], true);
-        console.log(`[Automation] ✅ Added to queue (prepended): ${reel.shortcode}`);
+        const isFirst = reelIdx === 0;
+        await queueService.addToQueue([queueItem], isFirst);
+        console.log(`[Automation] ✅ Added to queue (${isFirst ? 'PREPENDED/INSTANT' : 'APPENDED/QUEUE'}): ${reel.shortcode}`);
 
-        // 6. Mark seen
+        // 4. Mark seen
         await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
         
         results.success++;
         results.details.push({ shortcode: reel.shortcode, status: 'queued' });
+        reelIdx++;
+
+        // Add a small delay between reels to avoid AI rate limits
+        if (reelIdx < reels.length) {
+          const waitMs = force ? 2000 : 10000;
+          await sleep(waitMs);
+        }
       } catch (err) {
         console.error(`[Automation] ❌ Failed to process reel ${reel.shortcode}:`, err.message);
         results.failed++;
         results.details.push({ shortcode: reel.shortcode, status: 'failed', error: err.message });
       }
     }
+
 
     // 7. Trigger GitHub Action to process the new queue items
     if (results.success > 0) {
