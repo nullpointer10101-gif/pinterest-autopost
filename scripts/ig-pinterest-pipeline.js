@@ -130,63 +130,17 @@ async function runIgPinterestPipeline() {
           const postResult = await puppeteerService.createPinWithBot(pinData);
           console.log(`  ✅ [Instant] Posted successfully: ${postResult.url || 'Live'}`);
           
-          // Still add to queue/history but marked as COMPLETED
-          await queueService.addToQueue([{
-            ...pinData,
-            status: 'completed',
-            username: reel.username,
-            thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl,
-            mediaUrl: reel.mediaUrl,
-            aiContent: {
-              title: pinContent.title,
-              description: finalDescription,
-              hashtags: pinContent.hashtags || [],
-            },
-            sourceUrl: reel.url, // Original IG URL
-            link: affiliateUrl || '', // Affiliate link
-            tags: {
-              channel: reel.username,
-              shortcode: reel.shortcode,
-              hasAffiliate: !!affiliateUrl,
-              product: productName || null,
-              flipkartUrl: flipkartUrl || null,
-              isInstant: true,
-              publishUrl: postResult.url || null
-            },
-          }]);
+          // Step 8: Mark as seen because it is now posted
+          await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
+          console.log(`  ✅ Successfully processed and marked seen! Affiliate: ${affiliateUrl ? 'YES' : 'NO'}`);
           results.queued++;
         } catch (postErr) {
-          console.error(`  ⚠️ [Instant] Direct posting failed, falling back to Queue: ${postErr.message}`);
-          // If posting fails, add to queue as PENDING so it can be retried later by fire-post
-          await queueService.addToQueue([{
-            ...pinData,
-            status: 'pending',
-            username: reel.username,
-            thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl,
-            mediaUrl: reel.mediaUrl,
-            aiContent: {
-              title: pinContent.title,
-              description: finalDescription,
-              hashtags: pinContent.hashtags || [],
-            },
-            sourceUrl: reel.url, // Original IG URL
-            link: affiliateUrl || '', // Affiliate link
-            tags: {
-              channel: reel.username,
-              shortcode: reel.shortcode,
-              hasAffiliate: !!affiliateUrl,
-              product: productName || null,
-              flipkartUrl: flipkartUrl || null,
-              isInstant: true,
-              error: postErr.message
-            },
-          }]);
+          console.error(`  ❌ [Instant] Direct posting failed: ${postErr.message}`);
+          results.errors.push({ shortcode: reel.shortcode, error: postErr.message });
           results.skipped++;
         }
         
-        // Step 8: Mark as seen because it is now securely in the queue or posted
-        await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
-        console.log(`  ✅ Successfully processed and marked seen! Affiliate: ${affiliateUrl ? 'YES' : 'NO'}`);
+
       } catch (reelErr) {
         console.error(`  ❌ Failed to process reel ${reel.shortcode}: ${reelErr.message}`);
         results.errors.push({ shortcode: reel.shortcode, error: reelErr.message });
