@@ -10,7 +10,7 @@ async function main() {
     engagementCount: process.env.AUTOMATION_ENGAGEMENTS_PER_HOUR,
     engagementNiche: process.env.AUTOMATION_ENGAGEMENT_NICHE || 'all',
     timeZone: process.env.AUTOMATION_TIMEZONE || 'Asia/Calcutta',
-    force: process.env.GITHUB_EVENT_NAME === 'workflow_dispatch',
+    force: process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || process.argv.includes('--force'),
   });
 
   console.log('[Automation] Hourly run result:');
