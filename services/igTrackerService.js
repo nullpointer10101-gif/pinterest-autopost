@@ -139,7 +139,7 @@ async function fetchViaSessionApi(username) {
 
     // Step 2: get actual feed
     const feedRes = await axios.get(
-      `https://www.instagram.com/api/v1/feed/user/${userId}/?count=6`,
+      `https://www.instagram.com/api/v1/feed/user/${userId}/?count=12`,
       { headers: igHeaders(), timeout: 12000 }
     );
     const items = feedRes.data?.items || [];

@@ -266,6 +266,9 @@ async function processInstagramReels(options = {}) {
 
     if (limit > 0) {
       reels = reels.slice(0, limit);
+    } else if (username && force) {
+      // User specifically requested TOP 3 for newly added channels
+      reels = reels.slice(0, 3);
     }
 
     if (reels.length === 0) {
