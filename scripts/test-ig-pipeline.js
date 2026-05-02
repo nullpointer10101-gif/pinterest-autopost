@@ -29,9 +29,6 @@ async function processReel(reel) {
   let productResult = await aiService.identifyProduct({
     caption: reel.caption || '',
     username: reel.username,
-    thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl
-  });
-
   if (productResult.found) {
     productName = productResult.productName;
     console.log('    ✅ Product: "' + productName + '" (' + productResult.category + ')');
@@ -99,7 +96,7 @@ async function processReel(reel) {
     },
     tags: {
       channel: reel.username,
-      shortcode: reel.shortcode,
+      shortcode: reel.shortcode + '_retry', // Bypass deduplicator to forcefully republish
       hasAffiliate: !!affiliateUrl,
       product: productName || null,
       flipkartUrl: flipkartUrl || null,
@@ -120,21 +117,25 @@ async function main() {
     console.log('\n📥 Fetching reels for @' + username + '...');
     const reels = await igTrackerService.fetchLatestReels(username);
 
-    // Pick the first non-pinned reel
-    const reel = reels.find(r => !r.isPinned);
-    if (!reel) {
+    // Pick the first 2 non-pinned reels
+    const targetReels = reels.filter(r => !r.isPinned).slice(0, 2);
+    if (targetReels.length === 0) {
       console.log('⚠️  No non-pinned reels found for @' + username);
       continue;
     }
 
-    try {
-      await processReel(reel);
-    } catch (err) {
-      console.error('❌ Failed for @' + username + ':', err.message);
+    for (const reel of targetReels) {
+      try {
+        // Sleep to avoid AI rate limits
+        await new Promise(r => setTimeout(r, 10000));
+        await processReel(reel);
+      } catch (err) {
+        console.error('❌ Failed for @' + username + ':', err.message);
+      }
     }
   }
 
-  console.log('\n\n🎉 Test run complete! Check your Pinterest queue to see the 2 new pins.');
+  console.log('\n\n🎉 Test run complete! Check your Pinterest queue to see the new pins.');
   console.log('Dashboard: http://localhost:3000\n');
 }
 
