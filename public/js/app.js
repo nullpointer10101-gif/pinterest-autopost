@@ -232,12 +232,6 @@ function bindPointerGlow() {
     if (event.pointerType === 'touch') return;
     queuePointerGlowUpdate(event.clientX, event.clientY);
   }, { passive: true });
-
-  window.addEventListener('touchmove', (event) => {
-    const touch = event.touches && event.touches[0];
-    if (!touch) return;
-    queuePointerGlowUpdate(touch.clientX, touch.clientY);
-  }, { passive: true });
 }
 
 function initVisualSystem() {
@@ -252,8 +246,10 @@ function initVisualSystem() {
 
   const prefersReducedMotion = typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hasCoarsePointer = typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches;
 
-  if (!prefersReducedMotion) {
+  if (!prefersReducedMotion && !hasCoarsePointer) {
     bindPointerGlow();
   } else {
     document.documentElement.style.setProperty('--cursor-x', '50vw');
