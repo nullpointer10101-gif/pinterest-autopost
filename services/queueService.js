@@ -226,7 +226,7 @@ async function processNextInQueue() {
       postedAt: new Date().toISOString(),
     });
   } finally {
-    await saveQueue(queue);
+    await saveQueue(freshQueue);
     isProcessing = false;
   }
 

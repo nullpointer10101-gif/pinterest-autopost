@@ -77,7 +77,7 @@ function bindEvents() {
     setAutoRefresh(!!event.target.checked);
   });
 
-  on('engage-count', 'input', (event) => {
+  on('engage-count-manual', 'input', (event) => {
     const valueEl = byId('engage-count-value');
     if (valueEl) valueEl.textContent = String(event.target.value || '');
   });
@@ -192,7 +192,9 @@ function setAutoRefresh(enabled) {
 
   if (!enabled) return;
   state.refreshTimer = setInterval(() => {
-    refreshAll();
+    // Use window.refreshAll so x-app.js override is honored
+    if (typeof window.refreshAll === 'function') window.refreshAll();
+    else refreshAll();
   }, REFRESH_INTERVAL_MS);
 }
 
@@ -971,7 +973,6 @@ async function clearQueue() {
     state.queue = [];
     renderQueueList();
     renderMiniQueue();
-    renderMissionPulse();
     await refreshOverview();
   } catch (error) {
     showToast(error.message || 'Could not clear queue.', 'error');

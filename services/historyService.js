@@ -288,6 +288,7 @@ module.exports = {
   deletePkce,
   saveTokens,
   getTokens,
+  clearTokens,
   setSessionCookie,
   getSessionCookie,
   clearSessionCookie,

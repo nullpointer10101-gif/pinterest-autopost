@@ -143,14 +143,16 @@ a {
 
 .tab-nav {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(6, minmax(72px, 1fr));
+    gap: 6px;
     margin: 12px 0 14px;
     padding: 8px;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-sm);
     background: var(--panel-soft);
     box-shadow: var(--shadow-soft);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .tab-btn {

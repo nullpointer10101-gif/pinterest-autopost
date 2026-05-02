@@ -105,6 +105,24 @@ router.post('/session', async (req, res) => {
   }
 });
 
+router.get('/session/status', async (req, res) => {
+  try {
+    const session = await xHistoryService.getSessionCookie();
+    res.json({ success: true, session });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/session', async (req, res) => {
+  try {
+    const result = await xHistoryService.clearSessionCookie();
+    res.json({ success: true, session: result, message: 'X session unlinked.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // === X ENGAGE ROUTE ===
 router.post('/engage', async (req, res) => {
   try {

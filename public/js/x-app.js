@@ -3,6 +3,7 @@ const xState = {
   history: [],
   engagements: [],
   lastLoaded: null,
+  connected: false,
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -52,14 +53,16 @@ function updateXTextMeta() {
 
 async function refreshXData() {
   try {
-    const [qRes, hRes, eRes] = await Promise.all([
+    const [qRes, hRes, eRes, sRes] = await Promise.all([
       fetch('/api/x/queue').then(r => r.json()),
       fetch('/api/x/history').then(r => r.json()),
       fetch('/api/x/engagements').then(r => r.json()),
+      fetch('/api/x/session/status').then(r => r.json()).catch(() => ({ success: false })),
     ]);
     if (qRes.success) xState.queue = qRes.queue || [];
     if (hRes.success) xState.history = hRes.history || [];
     if (eRes.success) xState.engagements = eRes.engagements || [];
+    xState.connected = !!(sRes.success && sRes.session && sRes.session.hasSession);
 
     renderXQueueMini();
     renderXHistory();

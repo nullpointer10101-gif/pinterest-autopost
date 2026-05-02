@@ -269,10 +269,11 @@ async function createPinWithBot(pinData) {
     ]
   });
 
+  let page;
   try {
-    const page = await browser.newPage();
+    page = await browser.newPage();
     page.on('console', msg => console.log(`[Bot-Browser] ${msg.text()}`));
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
     
     // Set the Pinterest session cookie
     await page.setCookie({
@@ -289,9 +290,10 @@ async function createPinWithBot(pinData) {
 
     // 3. Upload Media
     console.log('[Bot] Uploading media file...');
-    const fileInputSelector = 'input[type="file"], #storyboard-upload-input';
-    await page.waitForSelector(fileInputSelector, { timeout: 15000 });
-    const fileInput = await page.$(fileInputSelector);
+    const fileInputSelector = 'input[type="file"]';
+    await page.waitForSelector(fileInputSelector, { timeout: 20000 });
+    const fileInputs = await page.$$(fileInputSelector);
+    const fileInput = fileInputs[fileInputs.length - 1]; // Use last file input (most likely the upload one)
     await fileInput.uploadFile(mediaPath);
 
     console.log('[Bot] Waiting for media upload and processing...');
@@ -308,35 +310,92 @@ async function createPinWithBot(pinData) {
 
     // 4. Fill in Details
     console.log('[Bot] Filling details...');
-    const titleSelector = 'textarea#storyboard-selector-title, [placeholder*="title"], [aria-label*="title"]';
+    // Title - try multiple selectors
+    const titleSelectors = [
+      'textarea#storyboard-selector-title',
+      'input[id*="pin-draft-title"]',
+      'textarea[id*="pin-draft-title"]',
+      '[data-test-id="pin-draft-title"] textarea',
+      '[data-test-id="pin-draft-title"] input',
+      '[placeholder*="title" i]',
+      '[aria-label*="title" i]',
+      'textarea[id*="title"]',
+      'input[id*="title"]'
+    ];
+    let titleField = null;
+    for (const sel of titleSelectors) {
+      try {
+        titleField = await page.$(sel);
+        if (titleField) break;
+      } catch {}
+    }
     try {
-      await page.waitForSelector(titleSelector, { timeout: 10000 });
-      await page.click(titleSelector);
-      await page.keyboard.down('Control');
-      await page.keyboard.press('A');
-      await page.keyboard.up('Control');
-      await page.keyboard.press('Backspace');
-      await page.type(titleSelector, title, { delay: 30 });
+      if (titleField) {
+        await titleField.click();
+        await page.keyboard.down('Control');
+        await page.keyboard.press('A');
+        await page.keyboard.up('Control');
+        await page.keyboard.press('Backspace');
+        await page.keyboard.type(title, { delay: 30 });
+      } else {
+        console.log('[Bot] Title field not found, trying tab-based approach...');
+        await page.keyboard.press('Tab');
+        await page.keyboard.type(title, { delay: 30 });
+      }
     } catch (e) { console.log('[Bot] Title error:', e.message); }
 
-    const descSelector = 'div#storyboard-selector-description, [placeholder*="description"], [aria-label*="description"]';
+    // Description
+    const descSelectors = [
+      'div#storyboard-selector-description',
+      '[data-test-id="pin-draft-description"] div[contenteditable]',
+      '[data-test-id="pin-draft-description"] textarea',
+      'div[contenteditable][aria-label*="description" i]',
+      'textarea[aria-label*="description" i]',
+      '[placeholder*="description" i]',
+      'div[contenteditable][id*="description"]'
+    ];
     try {
-      await page.waitForSelector(descSelector, { timeout: 5000 });
-      await page.click(descSelector);
-      await page.type(descSelector, description, { delay: 10 });
-    } catch (e) {}
+      let descField = null;
+      for (const sel of descSelectors) {
+        descField = await page.$(sel);
+        if (descField) break;
+      }
+      if (descField) {
+        await descField.click();
+        await page.keyboard.type(description, { delay: 10 });
+      }
+    } catch (e) { console.log('[Bot] Description error:', e.message); }
 
-    const linkSelector = 'textarea#storyboard-selector-link, [placeholder*="link"], [aria-label*="link"]';
+    // Destination link
+    const linkSelectors = [
+      'textarea#storyboard-selector-link',
+      'input[id*="pin-draft-link"]',
+      '[data-test-id="pin-draft-link"] input',
+      '[data-test-id="pin-draft-link"] textarea',
+      'input[placeholder*="link" i]',
+      'input[aria-label*="link" i]',
+      'input[placeholder*="url" i]',
+      'input[placeholder*="destination" i]',
+      'input[id*="link"]'
+    ];
     try {
-      await page.waitForSelector(linkSelector, { timeout: 5000 });
-      await page.click(linkSelector);
-      await page.keyboard.down('Control');
-      await page.keyboard.press('A');
-      await page.keyboard.up('Control');
-      await page.keyboard.press('Backspace');
-      
-      console.log(`[Bot] Typing link: ${link}`);
-      await page.type(linkSelector, link, { delay: 20 });
+      let linkField = null;
+      for (const sel of linkSelectors) {
+        linkField = await page.$(sel);
+        if (linkField) break;
+      }
+      if (linkField) {
+        await linkField.click();
+        await page.keyboard.down('Control');
+        await page.keyboard.press('A');
+        await page.keyboard.up('Control');
+        await page.keyboard.press('Backspace');
+        
+        console.log(`[Bot] Typing link: ${link}`);
+        await page.keyboard.type(link, { delay: 20 });
+      } else {
+        console.log('[Bot] Link field not found');
+      }
     } catch (e) {
       console.log('[Bot] Link field warning:', e.message);
     }
@@ -344,30 +403,48 @@ async function createPinWithBot(pinData) {
     // 5. Select Board
     console.log('[Bot] Selecting board...');
     try {
-      const boardMenuSelector = '[data-test-id="board-dropdown-select-button"], .board-dropdown button, [aria-label*="board"]';
-      await page.waitForSelector(boardMenuSelector, { timeout: 15000 });
-      await page.click(boardMenuSelector);
-      console.log('[Bot] Opened board menu.');
-      await new Promise(r => setTimeout(r, 4000));
+      const boardMenuSelectors = [
+        '[data-test-id="board-dropdown-select-button"]',
+        'button[aria-label*="board" i]',
+        'button[aria-label*="Board" i]',
+        '[data-test-id="board-dropdown"] button',
+        '.board-dropdown button',
+        'button[data-test-id="storyboard-selector-board"]'
+      ];
+      let boardMenu = null;
+      for (const sel of boardMenuSelectors) {
+        boardMenu = await page.$(sel);
+        if (boardMenu) {
+          console.log(`[Bot] Board button found: ${sel}`);
+          break;
+        }
+      }
+      if (boardMenu) {
+        await boardMenu.click();
+        console.log('[Bot] Opened board menu.');
+        await new Promise(r => setTimeout(r, 4000));
 
-      const boardSelected = await page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('[role="listitem"], [data-test-id="board-row"], div[role="button"]'));
-        const boardItem = items.find(el => {
-            const text = (el.innerText || '').toLowerCase();
-            return el.offsetParent !== null && text.length > 1 && !text.includes('choose') && !text.includes('search');
+        const boardSelected = await page.evaluate(() => {
+          const items = Array.from(document.querySelectorAll('[role="listitem"], [data-test-id="board-row"], div[role="button"], [role="option"], li[role="menuitem"]'));
+          const boardItem = items.find(el => {
+              const text = (el.innerText || '').toLowerCase();
+              return el.offsetParent !== null && text.length > 1 && !text.includes('choose') && !text.includes('search') && !text.includes('create');
+          });
+
+          if (boardItem) {
+            boardItem.scrollIntoView();
+            boardItem.click();
+            return true;
+          }
+          return false;
         });
 
-        if (boardItem) {
-          boardItem.scrollIntoView();
-          boardItem.click();
-          return true;
+        if (boardSelected) {
+          console.log('[Bot] Board item clicked.');
+          await new Promise(r => setTimeout(r, 3000));
         }
-        return false;
-      });
-
-      if (boardSelected) {
-        console.log('[Bot] Board item clicked.');
-        await new Promise(r => setTimeout(r, 3000));
+      } else {
+        console.log('[Bot] Board menu not found — using default board.');
       }
     } catch (e) {
       console.log('[Bot] Board selection error:', e.message);
@@ -488,9 +565,11 @@ async function createPinWithBot(pinData) {
     console.error('[Bot] ❌ Error during automation:', error);
     // Take a screenshot on failure to debug if needed
     try {
-      const screenshotPath = path.join(os.tmpdir(), 'error_screenshot.png');
-      await page.screenshot({ path: screenshotPath });
-      console.log(`[Bot] Saved error screenshot to ${screenshotPath}`);
+      if (page) {
+        const screenshotPath = path.join(os.tmpdir(), 'error_screenshot.png');
+        await page.screenshot({ path: screenshotPath });
+        console.log(`[Bot] Saved error screenshot to ${screenshotPath}`);
+      }
     } catch (e) {}
     throw new Error(`Browser Bot failed: ${error.message}`);
   } finally {
@@ -666,28 +745,41 @@ async function runAutoEngagerSafe(options = {}) {
 
       let actionTaken = 'Viewed';
       try {
-        // Try multiple reaction button selectors
+        // Try multiple reaction button selectors (Pinterest changes these frequently)
         const reactionSelectors = [
           'button[aria-label="React"]',
+          'button[aria-label="react"]',
           'button[data-test-id="pin-rep-reaction-button"]',
+          'button[aria-label*="Love"]',
+          'button[aria-label*="Like"]',
+          'button[aria-label*="Heart"]',
+          'button[aria-label*="love"]',
+          'button[aria-label*="like"]',
+          'button[aria-label*="heart"]',
+          'button[aria-label="Add reaction"]',
+          'button[aria-label*="reaction"]',
+          '[data-test-id="reaction-button"]',
+          '.reaction-button',
           '.heart-icon-container',
-          '[aria-label="Love"]',
-          '[aria-label="Like"]',
-          '[aria-label="Heart"]',
-          '[aria-label="Add reaction"]',
-          '.reaction-button'
+          // Save/Pin button as fallback engagement
+          'button[aria-label*="Save"]',
+          'button[aria-label*="save"]',
+          'button[data-test-id="pin-save-button"]',
         ];
         
         let reactionBtn = null;
         for (const sel of reactionSelectors) {
           reactionBtn = await page.$(sel);
-          if (reactionBtn) break;
+          if (reactionBtn) {
+            console.log(`[Bot] Found reaction button: ${sel}`);
+            break;
+          }
         }
 
         if (reactionBtn) {
           await reactionBtn.click();
           actionTaken = 'Liked';
-          console.log('[Bot] ✅ Liked pin successfully');
+          console.log('[Bot] ✅ Liked/Reacted to pin successfully');
           await sleep(randomInt(1200, 2500));
         } else {
           console.log('[Bot] ⚠️ Reaction button not found, viewing only');
