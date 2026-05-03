@@ -1,4 +1,11 @@
-const puppeteer = require('puppeteer');
+// Puppeteer is only available in GitHub Actions — not on Vercel serverless.
+// Wrap the require so this module loads cleanly even when Chrome is absent.
+let puppeteer = null;
+try {
+  puppeteer = require('puppeteer');
+} catch (e) {
+  console.warn('[PuppeteerService] puppeteer not available (expected on Vercel):', e.message);
+}
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -273,6 +280,7 @@ async function createPinWithBot(pinData) {
   console.log('[Bot] Media downloaded successfully.');
 
   // 2. Launch Puppeteer (Headless mode for server deployment)
+  if (!puppeteer) throw new Error('Puppeteer not available in this environment (Vercel/serverless). Bot runs on GitHub Actions only.');
   const browser = await puppeteer.launch({
     headless: 'new',
     defaultViewport: { width: 1920, height: 1080 },

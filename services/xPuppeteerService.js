@@ -1,4 +1,10 @@
-const puppeteer = require('puppeteer');
+// Puppeteer is only available in GitHub Actions — not on Vercel serverless.
+let puppeteer = null;
+try {
+  puppeteer = require('puppeteer');
+} catch (e) {
+  console.warn('[X-PuppeteerService] puppeteer not available (expected on Vercel):', e.message);
+}
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
