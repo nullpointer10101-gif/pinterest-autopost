@@ -327,6 +327,10 @@ async function generateEngagementComment({ title, description }) {
       }
     }
     return 'This looks absolutely incredible! ✨';
+  } catch (err) {
+    console.error('[AI] generateEngagementComment outer error:', err.message);
+    return 'This looks absolutely incredible! ✨';
+  }
 }
 
 module.exports = { generatePinterestContent, identifyProduct, generateEngagementComment };
