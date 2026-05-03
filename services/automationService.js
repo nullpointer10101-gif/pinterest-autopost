@@ -12,7 +12,20 @@ const igTrackerService = require('./igTrackerService');
 const aiService = require('./aiService');
 const flipkartSearchService = require('./flipkartSearchService');
 const earnKaroService = require('./earnKaroService');
-const { selectBestThumbnailSafe } = require('./thumbnailService');
+
+// Lazy-loaded — only available in GitHub Actions (Node env with ffmpeg)
+// NEVER imported at module level to avoid crashing Vercel serverless cold start
+let _thumbnailService = null;
+function getThumbnailService() {
+  if (_thumbnailService) return _thumbnailService;
+  try {
+    _thumbnailService = require('./thumbnailService');
+  } catch (e) {
+    console.warn('[Automation] thumbnailService not available:', e.message);
+    _thumbnailService = { selectBestThumbnailSafe: async (reel) => reel.thumbnailUrl || reel.mediaUrl || '' };
+  }
+  return _thumbnailService;
+}
 
 function toInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -420,6 +433,7 @@ async function processInstagramReels(options = {}) {
         // STEP 2b: Smart Thumbnail Selection (AI picks best product frame)
         // ═══════════════════════════════════════════════════════════════
         console.log(`[Automation] 🖼️ Step 2b: Selecting best product thumbnail...`);
+        const { selectBestThumbnailSafe } = getThumbnailService();
         const bestThumbnailUrl = await selectBestThumbnailSafe(reel, productName || '');
         const thumbnailChanged = bestThumbnailUrl !== (reel.thumbnailUrl || reel.mediaUrl);
         if (thumbnailChanged) {

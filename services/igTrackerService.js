@@ -1,8 +1,16 @@
 const axios = require('axios');
-const puppeteerExtra = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-puppeteerExtra.use(StealthPlugin());
 const igStorageService = require('./igStorageService');
+
+// puppeteer-extra is only available in GitHub Actions (not on Vercel serverless)
+// Guard the import so the module loads cleanly in all environments
+let puppeteerExtra = null;
+try {
+  puppeteerExtra = require('puppeteer-extra');
+  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+  puppeteerExtra.use(StealthPlugin());
+} catch (e) {
+  console.warn('[IG-Tracker] puppeteer-extra not available (expected on Vercel):', e.message);
+}
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 const IG_SESSION_COOKIE = process.env.INSTAGRAM_SESSION_COOKIE || '';
@@ -186,6 +194,10 @@ async function fetchViaSessionApi(username) {
  * Tries imginn → picuki → Instagram ?__a=1 as stealth browser requests.
  */
 async function fetchViaPuppeteer(username) {
+  if (!puppeteerExtra) {
+    console.log(`[IG-Tracker] Puppeteer not available on this platform — skipping stealth fetch.`);
+    return [];
+  }
   const browser = await puppeteerExtra.launch({
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
