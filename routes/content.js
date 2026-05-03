@@ -40,18 +40,26 @@ router.get('/proxy', async (req, res) => {
   if (!encodedUrl) return res.status(400).send('URL required');
   
   try {
-    // Decode Base64 safely (supports url-encoded Base64 and legacy payloads)
+    // Decode base64: try UTF-8 first (new frontend uses TextEncoder),
+    // then fall back to treating query param as a raw URL directly.
     const normalized = decodeURIComponent(String(encodedUrl)).replace(/ /g, '+');
-    const raw = Buffer.from(normalized, 'base64').toString('utf8');
-    let url = raw;
-    if (!/^https?:\/\//i.test(url)) {
-      try {
-        url = decodeURIComponent(raw);
-      } catch {
-        return res.status(400).send('Invalid media URL');
+    let url = '';
+    try {
+      // Buffer.from handles both ASCII and UTF-8 base64
+      const decoded = Buffer.from(normalized, 'base64').toString('utf8');
+      // Validate it looks like a URL (base64 decode succeeded)
+      if (/^https?:\/\//i.test(decoded)) {
+        url = decoded;
+      } else {
+        // Maybe it was sent as raw URL (not base64)
+        const rawDecoded = decodeURIComponent(normalized);
+        if (/^https?:\/\//i.test(rawDecoded)) url = rawDecoded;
       }
+    } catch {
+      // Last resort: treat as raw URL
+      if (/^https?:\/\//i.test(normalized)) url = normalized;
     }
-    if (!/^https?:\/\//i.test(url)) {
+    if (!url || !/^https?:\/\//i.test(url)) {
       return res.status(400).send('Invalid media URL');
     }
     

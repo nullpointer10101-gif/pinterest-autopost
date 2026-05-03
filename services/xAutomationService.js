@@ -65,9 +65,24 @@ async function runHourlyAutomation(options = {}) {
   const automation = await xHistoryService.getAutomationState();
   const config = await historyService.getWorkflowConfig();
 
-  if (config.xEngagement === false && config.xPosting === false && !options.force) {
-    console.log('[X-Automation] All X workflows are DISABLED. Skipping.');
-    return { success: true, message: 'All X workflows disabled' };
+  // ═══════════════════════════════════════════════════════════════════════
+  // TOGGLE CHECK: Respect dashboard workflow toggles
+  // If EITHER toggle is off, skip that section. If BOTH are off, exit now.
+  // ═══════════════════════════════════════════════════════════════════════
+  const xPostingEnabled = config.xPosting !== false;
+  const xEngagementEnabled = config.xEngagement !== false;
+  
+  console.log(`[X-Automation] Dashboard Toggles → Posting: ${xPostingEnabled ? 'ON ✅' : 'OFF ❌'} | Engagement: ${xEngagementEnabled ? 'ON ✅' : 'OFF ❌'}`);
+
+  if (!xPostingEnabled && !xEngagementEnabled && !options.force) {
+    console.log('[X-Automation] ⛔ BOTH X Posting and X Engagement are DISABLED in dashboard. Exiting immediately.');
+    return { 
+      success: true, 
+      skipped: true,
+      message: 'All X workflows disabled via dashboard toggles',
+      timeZone,
+      dateKey,
+    };
   }
 
   if (!options.force && automation.lastRunAt) {
@@ -97,8 +112,8 @@ async function runHourlyAutomation(options = {}) {
   const processedItems = [];
 
   if (targetPostsThisRun > 0) {
-    if (config.xPosting === false && !options.force) {
-       console.log('[X-Automation] X Posting is DISABLED. Skipping queue.');
+    if (!xPostingEnabled && !options.force) {
+       console.log('[X-Automation] ⛔ X Posting is DISABLED via dashboard. Skipping queue.');
     } else {
       const queue = await xQueueService.getQueue();
     const pending = queue.filter(item => item.status === 'pending').length;
@@ -148,8 +163,8 @@ async function runHourlyAutomation(options = {}) {
   };
 
   if (engagementCount > 0) {
-    if (config.xEngagement === false && !options.force) {
-      console.log('[X-Automation] X Engagement is DISABLED. Skipping.');
+    if (!xEngagementEnabled && !options.force) {
+      console.log('[X-Automation] ⛔ X Engagement is DISABLED via dashboard. Skipping.');
     } else if (xPuppeteerService && typeof xPuppeteerService.runAutoEngagerSafe === 'function') {
       try {
         const startDelayMs = randomInt(engagementStartJitterMinMs, engagementStartJitterMaxMs);

@@ -35,6 +35,9 @@ jobs:
         if: steps.cache-puppeteer.outputs.cache-hit != 'true'
         run: npx puppeteer browsers install chrome
 
+      - name: 🎞️ Install ffmpeg (for smart thumbnail extraction)
+        run: sudo apt-get install -y ffmpeg
+
       - name: 🎬 Run Full Pipeline (Instant Post)
         run: node scripts/ig-pinterest-pipeline.js
         env:
@@ -53,3 +56,5 @@ jobs:
           APP_STATE_KEY: ${{ secrets.APP_STATE_KEY || 'pinterest_autopost_state_v1' }}
           APP_IG_TRACKER_STATE_KEY: ${{ secrets.APP_IG_TRACKER_STATE_KEY || 'ig_tracker_state_v1' }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          # Gemini Vision key for smart thumbnail selection
+          GEMINI_API_KEY: ${{ secrets.AI_API_KEY }}

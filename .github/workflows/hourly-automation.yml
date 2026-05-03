@@ -38,6 +38,9 @@ jobs:
         if: steps.cache-puppeteer.outputs.cache-hit != 'true'
         run: npx puppeteer browsers install chrome
 
+      - name: Install ffmpeg (smart thumbnail extraction)
+        run: sudo apt-get install -y ffmpeg
+
       - name: Run automation mission
         run: node scripts/run-hourly-automation.js
         env:
@@ -64,3 +67,4 @@ jobs:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           APP_STATE_KEY: ${{ secrets.APP_STATE_KEY || 'pinterest_autopost_state_v1' }}
+          GEMINI_API_KEY: ${{ secrets.AI_API_KEY }}

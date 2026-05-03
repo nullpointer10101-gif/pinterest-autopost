@@ -358,37 +358,48 @@ async function refreshAll() {
 }
 
 async function refreshOverview() {
-  try {
-    const [queueResp, historyResp, pinterestResp, systemStatus, trackerStatusResp] = await Promise.all([
-      apiRequest('/api/queue'),
-      apiRequest('/api/history'),
-      apiRequest('/api/pinterest/status'),
-      apiRequest('/api/system/status'),
+  // ── Each fetch is isolated so one failure cannot blank the whole dashboard ──
+  const [queueResp, historyResp, pinterestResp, systemStatus, trackerStatusResp] =
+    await Promise.all([
+      apiRequest('/api/queue').catch(err => { console.warn('[Dashboard] Queue fetch failed:', err.message); return null; }),
+      apiRequest('/api/history').catch(err => { console.warn('[Dashboard] History fetch failed:', err.message); return null; }),
+      apiRequest('/api/pinterest/status').catch(err => { console.warn('[Dashboard] Pinterest status failed:', err.message); return {}; }),
+      apiRequest('/api/system/status').catch(err => { console.warn('[Dashboard] System status failed:', err.message); return {}; }),
       apiRequest('/api/ig-tracker/status').catch(() => null),
     ]);
 
+  // Only update state if the fetch succeeded (non-null response)
+  if (queueResp !== null) {
     state.queue = Array.isArray(queueResp.queue) ? queueResp.queue : [];
+  }
+  if (historyResp !== null) {
     state.history = Array.isArray(historyResp.history) ? historyResp.history : [];
-    if (Array.isArray(trackerStatusResp?.status?.channels)) {
-      setText('hero-channel-count', String(trackerStatusResp.status.channels.length));
-    }
+  }
 
-    updateStats(state.queue, state.history);
-    updateConnectionBar(pinterestResp, systemStatus);
-    updateHealthDashboard(pinterestResp, systemStatus);
-    renderMiniQueue();
-    renderDashboardHistory();
-    
-    // Sync workflow toggles
-    if (systemStatus.workflows) {
+  if (Array.isArray(trackerStatusResp?.status?.channels)) {
+    setText('hero-channel-count', String(trackerStatusResp.status.channels.length));
+  }
+
+  updateStats(state.queue, state.history);
+  updateConnectionBar(pinterestResp || {}, systemStatus || {});
+  updateHealthDashboard(pinterestResp || {}, systemStatus || {});
+  renderMiniQueue();
+  renderDashboardHistory();
+
+  // Always re-render current tab lists with fresh data
+  if (state.currentTab === 'history') renderHistoryList();
+  if (state.currentTab === 'queue') renderQueueList();
+
+  // Sync workflow toggles
+  try {
+    if (systemStatus && systemStatus.workflows) {
       updateWorkflowUI(systemStatus.workflows);
     } else {
-      // Fallback: fetch directly
-      const wfResp = await apiRequest('/api/system/workflows');
-      if (wfResp.success) updateWorkflowUI(wfResp.config);
+      const wfResp = await apiRequest('/api/system/workflows').catch(() => null);
+      if (wfResp && wfResp.success) updateWorkflowUI(wfResp.config);
     }
-  } catch (error) {
-    console.error('Refresh error:', error);
+  } catch (e) {
+    console.warn('[Dashboard] Workflow sync failed:', e.message);
   }
 }
 
@@ -829,18 +840,26 @@ function renderDashboardHistory() {
   if (!list) return;
 
   if (!state.history.length) {
-    list.innerHTML = '<div class="pulse-item">No recent history available.</div>';
+    list.innerHTML = '<div class="pulse-item">No recent post history yet. Posts will appear here after the bot runs.</div>';
     return;
   }
 
   list.innerHTML = state.history.slice(0, 5).map(item => {
-    const title = escHtml(item.aiContent?.title || 'Untitled');
+    const title = escHtml(item.aiContent?.title || item.title || 'Untitled');
     const status = item.status || 'success';
     const badgeClass = status === 'success' ? 'badge-success' : 'badge-error';
+    const username = item.reelData?.username ? `@${escHtml(item.reelData.username)}` : '';
+    const hasLink = !!(item.affiliateLink);
+    const linkBadge = hasLink ? `<span class="badge badge-success" style="font-size:9px;margin-left:4px;">🔗 Link</span>` : '';
+    const postedAt = item.postedAt || item.createdAt;
+    const when = postedAt ? formatTimeAgo(postedAt) : '';
     return `
       <div class="list-item" style="padding: 8px;">
         <div class="list-item-main">
-          <div style="font-size: 13px; font-weight: 600;">${title}</div>
+          <div>
+            <div style="font-size: 13px; font-weight: 600;">${title}${linkBadge}</div>
+            ${username || when ? `<div style="font-size:11px;opacity:0.6;">${username}${username && when ? ' · ' : ''}${escHtml(when)}</div>` : ''}
+          </div>
         </div>
         <span class="badge ${badgeClass}" style="font-size: 10px;">${status.toUpperCase()}</span>
       </div>
@@ -1740,10 +1759,16 @@ function proxyMediaUrl(url) {
   const clean = String(url || '').trim();
   if (!clean) return '';
   try {
-    const encoded = btoa(clean);
+    // Use encodeURIComponent-safe base64 encoding to avoid btoa() crashes
+    // on Instagram CDN URLs that contain non-Latin-1 characters.
+    const bytes = new TextEncoder().encode(clean);
+    let binary = '';
+    bytes.forEach(b => { binary += String.fromCharCode(b); });
+    const encoded = btoa(binary);
     return `/api/proxy?url=${encodeURIComponent(encoded)}`;
   } catch {
-    return clean;
+    // Final fallback: send raw URL directly (server will validate)
+    return `/api/proxy?url=${encodeURIComponent(clean)}`;
   }
 }
 

@@ -245,15 +245,31 @@ async function createPinWithBot(pinData) {
   }
 
   console.log('[Bot] Starting Pinterest Browser Bot...');
-  
-  // 1. Download the media to a temp file
+
+  // 1. Prepare media file(s)
   const tempDir = os.tmpdir();
-  const isImage = media_source.url.match(/\.(jpeg|jpg|png|webp)(\?.*)?$/i) || media_source.url.includes('dst-jpg');
+  const mediaUrl = media_source.url;
+  const isImage = mediaUrl.match(/\.(jpeg|jpg|png|webp)(\?.*)?$/i) || mediaUrl.includes('dst-jpg');
   const ext = isImage ? '.jpg' : '.mp4';
   const mediaPath = path.join(tempDir, `pin_${Date.now()}${ext}`);
-  
+
+  // Smart thumbnail: base64 data URI → temp JPEG file
+  let coverPath = null;
+  const thumbnailSrc = media_source.thumbnailUrl || '';
+  if (thumbnailSrc.startsWith('data:image/')) {
+    try {
+      const base64Data = thumbnailSrc.replace(/^data:image\/\w+;base64,/, '');
+      coverPath = path.join(tempDir, `pin_cover_${Date.now()}.jpg`);
+      fs.writeFileSync(coverPath, Buffer.from(base64Data, 'base64'));
+      console.log('[Bot] Smart cover thumbnail written to temp file.');
+    } catch (e) {
+      console.warn('[Bot] Could not write cover thumbnail:', e.message);
+      coverPath = null;
+    }
+  }
+
   console.log(`[Bot] Downloading media (${ext}) to temp storage...`);
-  await downloadVideo(media_source.url, mediaPath);
+  await downloadVideo(mediaUrl, mediaPath);
   console.log('[Bot] Media downloaded successfully.');
 
   // 2. Launch Puppeteer (Headless mode for server deployment)
@@ -366,39 +382,9 @@ async function createPinWithBot(pinData) {
       }
     } catch (e) { console.log('[Bot] Description error:', e.message); }
 
-    // Destination link
-    const linkSelectors = [
-      'textarea#storyboard-selector-link',
-      'input[id*="pin-draft-link"]',
-      '[data-test-id="pin-draft-link"] input',
-      '[data-test-id="pin-draft-link"] textarea',
-      'input[placeholder*="link" i]',
-      'input[aria-label*="link" i]',
-      'input[placeholder*="url" i]',
-      'input[placeholder*="destination" i]',
-      'input[id*="link"]'
-    ];
-    try {
-      let linkField = null;
-      for (const sel of linkSelectors) {
-        linkField = await page.$(sel);
-        if (linkField) break;
-      }
-      if (linkField) {
-        await linkField.click();
-        await page.keyboard.down('Control');
-        await page.keyboard.press('A');
-        await page.keyboard.up('Control');
-        await page.keyboard.press('Backspace');
-        
-        console.log(`[Bot] Typing link: ${link}`);
-        await page.keyboard.type(link, { delay: 20 });
-      } else {
-        console.log('[Bot] Link field not found');
-      }
-    } catch (e) {
-      console.log('[Bot] Link field warning:', e.message);
-    }
+    // NOTE: Destination link is filled AFTER board selection (see below).
+    // Pinterest resets the link field when the board dropdown is opened,
+    // so we must fill it last to guarantee it survives to publish.
 
     // 5. Select Board
     console.log('[Bot] Selecting board...');
@@ -448,6 +434,127 @@ async function createPinWithBot(pinData) {
       }
     } catch (e) {
       console.log('[Bot] Board selection error:', e.message);
+    }
+
+    // ─── 5b. Fill Destination Link (AFTER board selection) ─────────────────
+    // CRITICAL: This MUST happen after the board dropdown is closed.
+    // Pinterest resets the destination link field when the board picker is opened.
+    const linkSelectors = [
+      'textarea#storyboard-selector-link',
+      'input[id*="pin-draft-link"]',
+      '[data-test-id="pin-draft-link"] input',
+      '[data-test-id="pin-draft-link"] textarea',
+      'input[placeholder*="link" i]',
+      'input[aria-label*="link" i]',
+      'input[placeholder*="url" i]',
+      'input[placeholder*="destination" i]',
+      'input[id*="link"]'
+    ];
+
+    const fillLinkField = async () => {
+      let linkField = null;
+      for (const sel of linkSelectors) {
+        try {
+          linkField = await page.$(sel);
+          if (linkField) break;
+        } catch {}
+      }
+      if (!linkField) {
+        console.log('[Bot] ⚠️ Destination link field not found.');
+        return false;
+      }
+      await linkField.click();
+      // Select all + delete any existing content
+      await page.keyboard.down('Control');
+      await page.keyboard.press('A');
+      await page.keyboard.up('Control');
+      await page.keyboard.press('Backspace');
+      await page.keyboard.type(link, { delay: 20 });
+      await page.keyboard.press('Tab'); // Commit the value
+      return true;
+    };
+
+    if (link) {
+      console.log(`[Bot] Filling destination link: ${link}`);
+      try {
+        const filled = await fillLinkField();
+        if (filled) {
+          // Verify the value actually got in
+          await new Promise(r => setTimeout(r, 800));
+          let linkField2 = null;
+          for (const sel of linkSelectors) {
+            try { linkField2 = await page.$(sel); if (linkField2) break; } catch {}
+          }
+          if (linkField2) {
+            const currentVal = await page.evaluate(el => el.value || el.innerText || '', linkField2);
+            if (!currentVal || !currentVal.includes('http')) {
+              console.log('[Bot] ⚠️ Link value missing after first attempt — retrying...');
+              await fillLinkField();
+              await new Promise(r => setTimeout(r, 500));
+            } else {
+              console.log(`[Bot] ✅ Destination link confirmed: ${currentVal.substring(0, 80)}...`);
+            }
+          }
+        }
+      } catch (e) {
+        console.log('[Bot] Link field error:', e.message);
+      }
+    } else {
+      console.log('[Bot] ℹ️ No destination link provided — posting without link.');
+    }
+
+    // ─── 5c. Upload Smart Cover Thumbnail (if AI selected a better frame) ───────
+    if (coverPath && fs.existsSync(coverPath)) {
+      console.log('[Bot] 🖼️ Uploading AI-selected cover thumbnail...');
+      try {
+        // Pinterest shows a "Change cover" button on video pins after upload
+        const coverBtnSelectors = [
+          'button[data-test-id="pin-draft-cover-image-button"]',
+          'button[aria-label*="cover" i]',
+          'button[aria-label*="Cover" i]',
+          '[data-test-id="cover-image-selector"] button',
+          'button[data-test-id="change-cover-btn"]',
+        ];
+        let coverBtn = null;
+        for (const sel of coverBtnSelectors) {
+          try { coverBtn = await page.$(sel); if (coverBtn) { console.log(`[Bot] Cover button found: ${sel}`); break; } } catch {}
+        }
+
+        if (coverBtn) {
+          await coverBtn.click();
+          await new Promise(r => setTimeout(r, 2000));
+
+          // Find the file input that appeared for cover upload
+          const coverInputs = await page.$$('input[type="file"]');
+          if (coverInputs.length > 0) {
+            await coverInputs[coverInputs.length - 1].uploadFile(coverPath);
+            await new Promise(r => setTimeout(r, 3000));
+
+            // Confirm/apply the cover if there's an apply button
+            const applyResult = await page.evaluate(() => {
+              const btns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+              const apply = btns.find(b => {
+                const t = (b.innerText || '').toLowerCase();
+                return b.offsetParent !== null && (t === 'apply' || t === 'set cover' || t === 'use this' || t === 'select' || t === 'done');
+              });
+              if (apply) { apply.click(); return true; }
+              return false;
+            });
+            if (applyResult) {
+              await new Promise(r => setTimeout(r, 2000));
+              console.log('[Bot] ✅ Smart cover image applied.');
+            } else {
+              console.log('[Bot] Cover input uploaded (no apply button found — auto-applied).');
+            }
+          } else {
+            console.log('[Bot] ⚠️ No file input found after clicking cover button.');
+          }
+        } else {
+          console.log('[Bot] ℹ️ No cover change button found — Pinterest will use auto-selected frame.');
+        }
+      } catch (e) {
+        console.log('[Bot] Cover upload warning (non-fatal):', e.message);
+      }
     }
 
     // 6. Final Publish
@@ -573,9 +680,10 @@ async function createPinWithBot(pinData) {
     } catch (e) {}
     throw new Error(`Browser Bot failed: ${error.message}`);
   } finally {
-    // Cleanup
+    // Cleanup temp files
     await browser.close();
     try { fs.unlinkSync(mediaPath); } catch (e) {}
+    if (coverPath) { try { fs.unlinkSync(coverPath); } catch (e) {} }
   }
 }
 
@@ -827,13 +935,32 @@ async function runAutoEngagerSafe(options = {}) {
             description: pinData.desc || 'Men fashion inspiration'
           });
 
+          // First try to open the comments section if it's collapsed
+          const openCommentsSelectors = [
+            'button[aria-label="Comments"]',
+            'button[aria-label="comments"]',
+            'button[aria-label*="comment"]',
+            '[data-test-id="community-comment-button"]',
+            'button[aria-label="Toggle comments"]'
+          ];
+          for (const oSel of openCommentsSelectors) {
+            const openBtn = await page.$(oSel);
+            if (openBtn) {
+              await openBtn.click();
+              await sleep(1500);
+              break;
+            }
+          }
+
           const commentSelectors = [
             'div[aria-label="Add a comment"]',
             'div[data-test-id="comment-composer"]',
             'input[placeholder="Add a comment"]',
             'textarea[placeholder="Add a comment"]',
             '[data-test-id="comment-input-box"]',
-            '.addCommentInput'
+            '.addCommentInput',
+            'div[contenteditable="true"][aria-label="Add a comment"]',
+            'div[data-test-id="comment-box-input"]'
           ];
 
           let commentBox = null;

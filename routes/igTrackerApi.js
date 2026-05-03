@@ -62,7 +62,22 @@ router.get('/channels', async (req, res) => {
   }
 });
 
-// POST /api/ig-tracker/channels  { username: "techburner" }
+/**
+ * POST /api/ig-tracker/channels  { username: "techburner" }
+ * 
+ * ═══════════════════════════════════════════════════════════════════════════
+ * NEW CHANNEL FLOW (v2):
+ * 1. Normalize and add channel to tracker
+ * 2. Fetch profile pic for UI
+ * 3. Start background pipeline:
+ *    - Fetch latest 3 video reels
+ *    - Triple-layer dedup (queue + history + seen)
+ *    - AI product identification → Flipkart → EarnKaro affiliate link
+ *    - AI Pinterest content generation
+ *    - Queue with schedule: Reel 0 = instant, Reel 1 = +60min, Reel 2 = +120min
+ *    - Trigger fire-post.yml for instant reel
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
 router.post('/channels', async (req, res) => {
   try {
     const { username: rawInput } = req.body;
@@ -82,16 +97,37 @@ router.post('/channels', async (req, res) => {
       console.warn(`[API] Profile pic sync failed for @${username}:`, metaErr.message);
     }
     
-    // 2. Trigger initial processing (top 3 reels) in the background
-    // We don't await this as we want to return the response quickly
+    // 2. Trigger the FULL pipeline in background
+    // This will:
+    //   - Fetch top 3 reels
+    //   - Run triple-layer dedup
+    //   - AI identify products + generate affiliate links
+    //   - AI generate Pinterest content
+    //   - Queue: reel 0 = instant, reel 1 = +60min, reel 2 = +120min
+    //   - Trigger fire-post.yml for the instant reel
+    console.log(`[API] 🚀 Starting full pipeline for @${username} (top 3 reels, scheduled)...`);
     automationService.processInstagramReels({
       username: username,
       limit: 3,
-      force: true // Force it to process even if they've been seen before (unlikely for new channel but good for verification)
-    }).catch(err => console.error(`[API] Initial processing failed for @${username}:`, err.message));
+      force: true
+    }).then(result => {
+      console.log(`[API] ✅ Pipeline complete for @${username}:`, JSON.stringify({
+        success: result.success,
+        queued: result.success,
+        skipped: result.skipped || 0,
+        failed: result.failed || 0,
+      }));
+    }).catch(err => {
+      console.error(`[API] ❌ Pipeline failed for @${username}:`, err.message);
+    });
 
     const channels = await igTrackerService.getChannels();
-    res.json({ success: true, username, channels, message: `Channel @${username} added. Initial processing of top 3 reels started in background.` });
+    res.json({ 
+      success: true, 
+      username, 
+      channels, 
+      message: `Channel @${username} added. Processing top 3 reels: 1 instant + 2 scheduled (1hr apart). Affiliate links will be generated automatically.` 
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

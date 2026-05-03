@@ -12,6 +12,7 @@ const igTrackerService = require('./igTrackerService');
 const aiService = require('./aiService');
 const flipkartSearchService = require('./flipkartSearchService');
 const earnKaroService = require('./earnKaroService');
+const { selectBestThumbnailSafe } = require('./thumbnailService');
 
 function toInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -107,7 +108,13 @@ async function runHourlyAutomation(options = {}) {
     } else {
       const queue = await queueService.getQueue();
       const pending = queue.filter(item => item.status === 'pending').length;
-      console.log(`[Automation] Found ${pending} pending items in queue.`);
+      const now = new Date();
+      const ready = queue.filter(item => {
+        if (item.status !== 'pending') return false;
+        if (item.scheduledAfter && new Date(item.scheduledAfter) > now) return false;
+        return true;
+      }).length;
+      console.log(`[Automation] Found ${pending} pending items in queue (${ready} ready now, ${pending - ready} scheduled for later).`);
 
       while (postsProcessed < targetPostsThisRun && attempts < maxAttempts) {
         attempts += 1;
@@ -233,6 +240,28 @@ async function runHourlyAutomation(options = {}) {
   };
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * processInstagramReels — CORE PIPELINE (Redesigned v2)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 
+ * When a new channel is added:
+ *   1. Fetch latest 3 video reels from the Instagram account
+ *   2. For EACH reel, run triple-layer dedup:
+ *      - Queue check (shortcode in any queue item)
+ *      - History check (shortcode in completed posts)
+ *      - Seen list check (shortcode already processed)
+ *   3. For EACH passing reel:
+ *      - AI identifies product from caption + thumbnail
+ *      - Flipkart search finds matching product
+ *      - EarnKaro generates affiliate link
+ *      - AI generates Pinterest SEO title/description
+ *   4. Schedule: Reel 0 = instant, Reel 1 = +60min, Reel 2 = +120min
+ *   5. Trigger fire-post.yml (processes only Reel 0)
+ *   6. Reels 1 & 2 are picked up by hourly automation when their time comes
+ * 
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
 async function processInstagramReels(options = {}) {
   const config = await historyService.getWorkflowConfig();
   if (config.pinterestPosting === false && !options.force) {
@@ -243,20 +272,23 @@ async function processInstagramReels(options = {}) {
   const username = options.username; // If provided, only process this channel
   const limit = options.limit || 0; // If provided, limit number of reels processed
   const force = !!options.force;
+  
+  // Schedule gap in minutes between each queued reel
+  const SCHEDULE_GAP_MINUTES = toInt(process.env.REEL_SCHEDULE_GAP_MINUTES, 60);
 
+  console.log(`[Automation] ═══════════════════════════════════════════════════`);
   console.log(`[Automation] Processing Instagram reels... (Channel: ${username || 'ALL'}, Limit: ${limit || 'None'})`);
+  console.log(`[Automation] Schedule gap: ${SCHEDULE_GAP_MINUTES} minutes between posts`);
+  console.log(`[Automation] ═══════════════════════════════════════════════════`);
 
   try {
     let reels = [];
     if (username) {
-      // Direct fetch for a single channel (often used when adding a new channel)
+      // Direct fetch for a single channel (used when adding a new channel)
       const allReels = await igTrackerService.fetchLatestReels(username);
       if (force) {
         reels = allReels;
       } else {
-        const state = await igTrackerService.getTrackerStatus(); // We need a better way to check seen for a single channel
-        // Actually, scanForNewReels handles the seen logic, but it's for all channels.
-        // Let's just use scanForNewReels and filter if username is provided.
         const allNew = await igTrackerService.scanForNewReels();
         reels = allNew.filter(r => r.username === username);
       }
@@ -277,14 +309,79 @@ async function processInstagramReels(options = {}) {
     }
 
     console.log(`[Automation] Found ${reels.length} reels to process.`);
-    const results = { success: 0, failed: 0, details: [] };
+    const results = { success: 0, failed: 0, skipped: 0, details: [] };
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // PRE-FLIGHT: Load existing queue and history for dedup
+    // ═══════════════════════════════════════════════════════════════════
+    const existingQueue = await queueService.getQueue();
+    const postHistory = await historyService.getAll();
+    
+    // Build dedup sets for O(1) lookup
+    const queueShortcodes = new Set();
+    const queueMediaUrls = new Set();
+    for (const item of existingQueue) {
+      const sc = queueService.extractShortcode(item);
+      if (sc) queueShortcodes.add(sc);
+      if (item.mediaUrl) queueMediaUrls.add(item.mediaUrl);
+    }
+    
+    const postedShortcodes = new Set();
+    for (const post of postHistory) {
+      if (post.reelData?.shortcode) postedShortcodes.add(post.reelData.shortcode);
+      if (post.url) {
+        const match = post.url.match(/\/(reel|p|tv)\/([A-Za-z0-9_-]+)/);
+        if (match) postedShortcodes.add(match[2]);
+      }
+    }
+    
+    console.log(`[Automation] Dedup sets loaded: ${queueShortcodes.size} in queue, ${postedShortcodes.size} in history`);
 
-    let reelIdx = 0;
-    for (const reel of reels) {
+    let queuedIndex = 0; // Tracks how many reels actually passed dedup and got queued
+
+    for (let reelIdx = 0; reelIdx < reels.length; reelIdx++) {
+      const reel = reels[reelIdx];
+      
       try {
-        console.log(`[Automation] Processing reel ${reelIdx + 1}/${reels.length}: ${reel.shortcode}`);
+        console.log(`\n[Automation] ─── Reel ${reelIdx + 1}/${reels.length}: ${reel.shortcode} from @${reel.username} ───`);
         
-        // 1. Identify product
+        // ═══════════════════════════════════════════════════════════════
+        // TRIPLE-LAYER DEDUP CHECK
+        // ═══════════════════════════════════════════════════════════════
+        
+        // Layer 1: Queue dedup
+        if (reel.shortcode && queueShortcodes.has(reel.shortcode)) {
+          console.log(`[Automation] ⛔ SKIP: ${reel.shortcode} already in queue`);
+          await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
+          results.skipped++;
+          results.details.push({ shortcode: reel.shortcode, status: 'skipped', reason: 'in_queue' });
+          continue;
+        }
+        
+        // Layer 2: History dedup
+        if (reel.shortcode && postedShortcodes.has(reel.shortcode)) {
+          console.log(`[Automation] ⛔ SKIP: ${reel.shortcode} already posted to Pinterest`);
+          await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
+          results.skipped++;
+          results.details.push({ shortcode: reel.shortcode, status: 'skipped', reason: 'already_posted' });
+          continue;
+        }
+        
+        // Layer 3: Media URL dedup (same video = same content)
+        if (reel.mediaUrl && queueMediaUrls.has(reel.mediaUrl)) {
+          console.log(`[Automation] ⛔ SKIP: ${reel.shortcode} media URL already in queue`);
+          await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
+          results.skipped++;
+          results.details.push({ shortcode: reel.shortcode, status: 'skipped', reason: 'media_in_queue' });
+          continue;
+        }
+
+        console.log(`[Automation] ✅ Passed dedup. Processing reel ${reel.shortcode}...`);
+        
+        // ═══════════════════════════════════════════════════════════════
+        // STEP 1: AI Product Identification
+        // ═══════════════════════════════════════════════════════════════
+        console.log(`[Automation] 🤖 Step 1: Identifying product...`);
         const productResult = await aiService.identifyProduct({
           caption: reel.caption || '',
           username: reel.username,
@@ -296,56 +393,134 @@ async function processInstagramReels(options = {}) {
 
         if (productResult.found) {
           productName = productResult.productName;
+          console.log(`[Automation] 🎯 Product found: "${productName}" (${productResult.category})`);
+          
+          // ═══════════════════════════════════════════════════════════════
+          // STEP 2: Flipkart Search → EarnKaro Affiliate Link
+          // ═══════════════════════════════════════════════════════════════
+          console.log(`[Automation] 🔍 Step 2: Searching Flipkart...`);
           const fp = await flipkartSearchService.findProduct(productResult, productName);
           if (fp) {
+            console.log(`[Automation] 🛒 Flipkart match: "${fp.title}"`);
+            console.log(`[Automation] 🔗 Step 3: Generating EarnKaro affiliate link...`);
             const ek = await earnKaroService.makeAffiliateLink(fp.url);
             affiliateUrl = ek.affiliateUrl;
+            console.log(`[Automation] ✅ Affiliate link: ${affiliateUrl} (source: ${ek.source})`);
+            
+            // Cache the affiliate link
+            await igTrackerService.setCachedAffiliateLink(reel.shortcode, affiliateUrl);
+          } else {
+            console.log(`[Automation] ⚠️ No Flipkart match. Will post without affiliate link.`);
           }
+        } else {
+          console.log(`[Automation] ℹ️ No shoppable product detected. Posting as standard Pin.`);
         }
 
-        // 2. Generate Pinterest Content
+        // ═══════════════════════════════════════════════════════════════
+        // STEP 2b: Smart Thumbnail Selection (AI picks best product frame)
+        // ═══════════════════════════════════════════════════════════════
+        console.log(`[Automation] 🖼️ Step 2b: Selecting best product thumbnail...`);
+        const bestThumbnailUrl = await selectBestThumbnailSafe(reel, productName || '');
+        const thumbnailChanged = bestThumbnailUrl !== (reel.thumbnailUrl || reel.mediaUrl);
+        if (thumbnailChanged) {
+          console.log(`[Automation] ✅ Smart thumbnail selected (frame extraction succeeded).`);
+        } else {
+          console.log(`[Automation] ℹ️ Using original thumbnail (frame extraction skipped or fallback).`);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // STEP 3: Generate Pinterest Content
+        // ═══════════════════════════════════════════════════════════════
+        console.log(`[Automation] ✍️ Step 4: Generating Pinterest content...`);
         const pinContent = await aiService.generatePinterestContent({
           caption: reel.caption,
           username: reel.username,
           productName: productName
         });
 
-        const finalDescription = affiliateUrl 
-          ? `${pinContent.description}\n\n🛒 Buy it here → ${affiliateUrl}`.substring(0, 800)
-          : pinContent.description;
+        // Build description with affiliate CTA
+        let finalDescription = pinContent.description;
+        if (affiliateUrl) {
+          finalDescription = `${pinContent.description}\n\n🛒 Shop this look → ${affiliateUrl}`.substring(0, 800);
+        }
 
-        // 3. Queue Logic (1st is instant/prepend, rest are normal/append)
+        // ═══════════════════════════════════════════════════════════════
+        // STEP 4: Calculate schedule time
+        // Reel 0 = NOW (instant), Reel 1 = +60min, Reel 2 = +120min
+        // ═══════════════════════════════════════════════════════════════
+        let scheduledAfter = null;
+        if (queuedIndex > 0) {
+          const delayMs = queuedIndex * SCHEDULE_GAP_MINUTES * 60 * 1000;
+          scheduledAfter = new Date(Date.now() + delayMs).toISOString();
+          console.log(`[Automation] ⏰ Scheduled for: ${scheduledAfter} (${SCHEDULE_GAP_MINUTES * queuedIndex}min from now)`);
+        } else {
+          console.log(`[Automation] 🚀 Reel 0: Will be posted INSTANTLY`);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // STEP 5: Build queue item with ALL correct fields
+        // ═══════════════════════════════════════════════════════════════
         const queueItem = {
           title: pinContent.title,
           description: finalDescription,
-          altText: '',
+          altText: `${productName ? `Product: ${productName}` : 'Showcased item'} from @${reel.username}`,
           mediaUrl: reel.mediaUrl,
           sourceUrl: reel.url,
+          // CRITICAL: destinationLink is the affiliate/product link
           destinationLink: affiliateUrl || '',
+          link: affiliateUrl || '',
           originalSourceUrl: reel.url,
           username: reel.username,
           caption: reel.caption || '',
-          thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl,
+          // Use AI-selected best thumbnail (base64 data URI or original URL)
+          thumbnailUrl: bestThumbnailUrl || reel.thumbnailUrl || reel.mediaUrl,
+          // CRITICAL: Store shortcode as top-level field for dedup
+          shortcode: reel.shortcode,
+          // Schedule
+          scheduledAfter: scheduledAfter,
+          // AI Content blob
           aiContent: {
             title: pinContent.title,
             description: finalDescription,
             hashtags: pinContent.hashtags || [],
           },
+          // Metadata
+          productInfo: productResult.found ? {
+            name: productName,
+            category: productResult.category,
+            affiliateUrl: affiliateUrl,
+          } : null,
+          // Thumbnail metadata for debugging
+          thumbnailMeta: {
+            source: thumbnailChanged ? 'ai_frame_selection' : 'original',
+            productName: productName || null,
+          },
         };
 
-        const isFirst = reelIdx === 0;
+        const isFirst = queuedIndex === 0;
         await queueService.addToQueue([queueItem], isFirst);
-        console.log(`[Automation] ✅ Added to queue (${isFirst ? 'PREPENDED/INSTANT' : 'APPENDED/QUEUE'}): ${reel.shortcode}`);
+        console.log(`[Automation] ✅ Added to queue: ${reel.shortcode} (${isFirst ? '🚀 INSTANT' : `⏰ SCHEDULED +${SCHEDULE_GAP_MINUTES * queuedIndex}min`})`);
+        console.log(`[Automation]    Title: "${pinContent.title}"`);
+        console.log(`[Automation]    Affiliate: ${affiliateUrl || 'NONE'}`);
 
-        // 4. Mark seen
+        // Mark seen AFTER successful queue add
         await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);
         
+        // Update dedup sets for remaining reels in this batch
+        queueShortcodes.add(reel.shortcode);
+        if (reel.mediaUrl) queueMediaUrls.add(reel.mediaUrl);
+        
         results.success++;
-        results.details.push({ shortcode: reel.shortcode, status: 'queued' });
-        reelIdx++;
+        results.details.push({ 
+          shortcode: reel.shortcode, 
+          status: 'queued',
+          scheduledAfter: scheduledAfter || 'instant',
+          affiliateUrl: affiliateUrl || 'none',
+        });
+        queuedIndex++;
 
         // Add a small delay between reels to avoid AI rate limits
-        if (reelIdx < reels.length) {
+        if (reelIdx < reels.length - 1) {
           const waitMs = force ? 2000 : 10000;
           await sleep(waitMs);
         }
@@ -357,11 +532,19 @@ async function processInstagramReels(options = {}) {
     }
 
 
-    // 7. Trigger GitHub Action to process the new queue items
+    // Trigger GitHub Action to process the first queued item (instant post)
     if (results.success > 0) {
+      console.log(`\n[Automation] 🚀 Triggering fire-post for instant item...`);
       const githubService = require('./githubService');
       githubService.triggerInstantMission().catch(() => {});
     }
+
+    console.log(`\n[Automation] ═══════════════════════════════════════════════════`);
+    console.log(`[Automation] PIPELINE COMPLETE`);
+    console.log(`[Automation]   ✅ Queued: ${results.success}`);
+    console.log(`[Automation]   ⛔ Skipped (dedup): ${results.skipped}`);
+    console.log(`[Automation]   ❌ Failed: ${results.failed}`);
+    console.log(`[Automation] ═══════════════════════════════════════════════════`);
 
     return { success: true, ...results };
   } catch (err) {

@@ -39,12 +39,16 @@ async function getQueue() {
 async function getQueueStats() {
   const { queue, storageInfo } = await loadState();
   const pending = queue.filter(item => item.status === 'pending').length;
+  const scheduled = queue.filter(item => item.status === 'pending' && item.scheduledAfter && new Date(item.scheduledAfter) > new Date()).length;
+  const ready = pending - scheduled;
   const processing = queue.filter(item => item.status === 'processing').length;
   const completed = queue.filter(item => item.status === 'completed').length;
   const failed = queue.filter(item => item.status === 'failed').length;
   return {
     total: queue.length,
     pending,
+    scheduled,
+    ready,
     processing,
     completed,
     failed,
@@ -52,40 +56,118 @@ async function getQueueStats() {
   };
 }
 
+/**
+ * Extract shortcode from a queue item using all possible fields.
+ * This is the SINGLE SOURCE OF TRUTH for shortcode extraction.
+ */
+function extractShortcode(item) {
+  // Direct shortcode field (preferred — new format)
+  if (item.shortcode) return item.shortcode;
+  // Legacy tags.shortcode
+  if (item.tags?.shortcode) return item.tags.shortcode;
+  // Extract from sourceUrl
+  if (item.sourceUrl) {
+    const match = item.sourceUrl.match(/\/(reel|p|tv)\/([A-Za-z0-9_-]+)/);
+    if (match) return match[2];
+  }
+  // Extract from originalSourceUrl
+  if (item.originalSourceUrl) {
+    const match = item.originalSourceUrl.match(/\/(reel|p|tv)\/([A-Za-z0-9_-]+)/);
+    if (match) return match[2];
+  }
+  return null;
+}
+
+/**
+ * Check if a shortcode already exists in post history (already published).
+ */
+async function isAlreadyPosted(shortcode) {
+  if (!shortcode) return false;
+  const posts = await historyService.getAll();
+  return posts.some(post => {
+    // Check post URL for shortcode
+    if (post.url && post.url.includes(shortcode)) return true;
+    // Check reel data
+    if (post.reelData?.shortcode === shortcode) return true;
+    // Check source URL in the post
+    const postUrl = post.url || '';
+    const match = postUrl.match(/\/(reel|p|tv)\/([A-Za-z0-9_-]+)/);
+    if (match && match[2] === shortcode) return true;
+    return false;
+  });
+}
+
 async function addToQueue(items, prepend = false) {
   const queue = await getQueue();
   const now = new Date().toISOString();
   
-  // Filter out items that already exist in the queue (by sourceUrl or shortcode tag)
-  const filteredItems = items.filter(newItem => {
-    const newShortcode = newItem.tags?.shortcode;
+  // ═══════════════════════════════════════════════════════════════════════
+  // TRIPLE-LAYER DEDUPLICATION
+  // Layer 1: Check against existing queue (by shortcode OR sourceUrl)
+  // Layer 2: Check against post history (already published pins)
+  // Layer 3: Caller is responsible for IG tracker seen list
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  const filteredItems = [];
+  
+  for (const newItem of items) {
+    const newShortcode = extractShortcode(newItem);
     const newUrl = newItem.sourceUrl;
     
-    const exists = queue.some(existing => {
-      const sameUrl = newUrl && existing.sourceUrl === newUrl;
-      const sameShortcode = newShortcode && existing.tags?.shortcode === newShortcode;
-      const isActive = existing.status === 'pending' || existing.status === 'completed' || existing.status === 'processing';
-      return (sameUrl || sameShortcode) && isActive;
+    // Layer 1: Queue dedup — check ALL statuses (pending, completed, processing, failed)
+    const existsInQueue = queue.some(existing => {
+      const existingShortcode = extractShortcode(existing);
+      
+      // Match by shortcode (strongest signal)
+      if (newShortcode && existingShortcode && newShortcode === existingShortcode) {
+        return true;
+      }
+      // Match by sourceUrl
+      if (newUrl && existing.sourceUrl && newUrl === existing.sourceUrl) {
+        return true;
+      }
+      // Match by mediaUrl (same video file = same content)
+      if (newItem.mediaUrl && existing.mediaUrl && newItem.mediaUrl === existing.mediaUrl) {
+        return true;
+      }
+      return false;
     });
 
-    if (exists) {
-      console.log(`[Queue] Skipping duplicate: ${newUrl || newShortcode}`);
-      return false;
+    if (existsInQueue) {
+      console.log(`[Queue] ⛔ BLOCKED duplicate (in queue): shortcode=${newShortcode || 'N/A'}, url=${newUrl || 'N/A'}`);
+      continue;
     }
-    return true;
-  });
 
-  if (filteredItems.length === 0) return queue;
+    // Layer 2: History dedup — check if this was already posted to Pinterest
+    if (newShortcode) {
+      const alreadyPosted = await isAlreadyPosted(newShortcode);
+      if (alreadyPosted) {
+        console.log(`[Queue] ⛔ BLOCKED duplicate (already posted): shortcode=${newShortcode}`);
+        continue;
+      }
+    }
+
+    filteredItems.push(newItem);
+  }
+
+  if (filteredItems.length === 0) {
+    console.log('[Queue] All items were duplicates. Nothing added.');
+    return queue;
+  }
 
   const newItems = filteredItems.map(item => ({
     id: item.id || `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     ...item,
+    // Ensure shortcode is always a top-level field for future dedup
+    shortcode: extractShortcode(item) || null,
     status: 'pending',
     addedAt: now,
   }));
 
   const updated = prepend ? [...newItems, ...queue] : [...queue, ...newItems];
   await saveQueue(updated);
+  
+  console.log(`[Queue] ✅ Added ${newItems.length} new item(s) (${filteredItems.length} passed dedup, ${items.length - filteredItems.length} blocked)`);
   return newItems;
 }
 
@@ -145,8 +227,36 @@ async function processNextInQueue() {
   if (isProcessing) return null;
 
   const queue = await getQueue();
-  const nextItemIndex = queue.findIndex(item => item.status === 'pending');
-  if (nextItemIndex === -1) return null;
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // SCHEDULE-AWARE QUEUE PROCESSING
+  // Only pick items where scheduledAfter is null/undefined OR in the past
+  // ═══════════════════════════════════════════════════════════════════════
+  const now = new Date();
+  const nextItemIndex = queue.findIndex(item => {
+    if (item.status !== 'pending') return false;
+    
+    // Check schedule — skip items that are scheduled for the future
+    if (item.scheduledAfter) {
+      const scheduledTime = new Date(item.scheduledAfter);
+      if (scheduledTime > now) {
+        return false; // Not ready yet
+      }
+    }
+    
+    return true;
+  });
+  
+  if (nextItemIndex === -1) {
+    // Log how many are scheduled for later
+    const scheduledCount = queue.filter(item => 
+      item.status === 'pending' && item.scheduledAfter && new Date(item.scheduledAfter) > now
+    ).length;
+    if (scheduledCount > 0) {
+      console.log(`[Queue] No ready items. ${scheduledCount} item(s) scheduled for later.`);
+    }
+    return null;
+  }
 
   isProcessing = true;
   
@@ -158,6 +268,24 @@ async function processNextInQueue() {
     console.log('[Queue] Item was already picked up or changed status. Skipping.');
     isProcessing = false;
     return null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // FINAL DEDUP CHECK: Right before processing, verify this shortcode
+  // hasn't been posted while it was waiting in the queue
+  // ═══════════════════════════════════════════════════════════════════════
+  const itemShortcode = extractShortcode(item);
+  if (itemShortcode) {
+    const alreadyPosted = await isAlreadyPosted(itemShortcode);
+    if (alreadyPosted) {
+      console.log(`[Queue] ⛔ BLOCKED at processing: shortcode=${itemShortcode} was already posted. Removing from queue.`);
+      item.status = 'failed';
+      item.error = 'Duplicate: Already posted to Pinterest';
+      item.failedAt = new Date().toISOString();
+      await saveQueue(freshQueue);
+      isProcessing = false;
+      return item;
+    }
   }
 
   item.status = 'processing';
@@ -177,8 +305,21 @@ async function processNextInQueue() {
     const title = (aiContent?.title || item.title || 'Pinterest Post').substring(0, 100);
     const description = (aiContent?.description || item.description || '').substring(0, 800);
     const altText = (item.altText || '').substring(0, 500);
-    const link = item.link || item.sourceUrl || '';
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // FIX: Correct field mapping for destination link
+    // Priority: destinationLink (affiliate) → link → sourceUrl (fallback)
+    // ═══════════════════════════════════════════════════════════════════════
+    const link = item.destinationLink || item.link || item.sourceUrl || '';
     const mediaUrl = item.mediaUrl;
+
+    if (item.destinationLink) {
+      console.log(`[Queue] 🔗 Using affiliate link: ${item.destinationLink}`);
+    } else if (item.link) {
+      console.log(`[Queue] 🔗 Using link field: ${item.link}`);
+    } else {
+      console.log(`[Queue] ⚠️ No affiliate/product link found. Using source URL as fallback.`);
+    }
 
     let result;
     const method = 'browser_bot';
@@ -193,7 +334,11 @@ async function processNextInQueue() {
       description,
       alt_text: altText,
       link,
-      media_source: { url: mediaUrl },
+      media_source: {
+        url: mediaUrl,
+        // Pass smart thumbnail so the bot can upload it as the pin cover image
+        thumbnailUrl: item.thumbnailUrl || '',
+      },
     });
 
     item.status = 'completed';
@@ -208,12 +353,14 @@ async function processNextInQueue() {
         caption: item.caption || '',
         thumbnailUrl: item.thumbnailUrl || mediaUrl,
         mediaType: 'video',
+        shortcode: itemShortcode || null,
       },
       aiContent: {
         title,
         description,
         hashtags: aiContent?.hashtags || [],
       },
+      affiliateLink: item.destinationLink || null,
       pinterestPin: {
         id: item.id || result?.pin?.id || `pin_${Date.now()}`,
         url: result?.pin?.url || '#',
@@ -234,6 +381,7 @@ async function processNextInQueue() {
         caption: item.caption || '',
         thumbnailUrl: item.thumbnailUrl || item.mediaUrl || '',
         mediaType: 'video',
+        shortcode: itemShortcode || null,
       },
       aiContent: {
         title: item.title || 'Queued post failed',
@@ -268,4 +416,6 @@ module.exports = {
   getQueueStats,
   shouldUseBrowserBot,
   getPostingMode,
+  extractShortcode,
+  isAlreadyPosted,
 };

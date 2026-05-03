@@ -296,21 +296,37 @@ async function generateEngagementComment({ title, description }) {
   Comment:`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: aiConfig.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.85,
-      max_tokens: 100,
-    });
-
-    return response.choices[0].message.content.trim().replace(/^"/, '').replace(/"$/, '');
-  } catch (err) {
-    console.error('[AI] Comment generation failed:', err.message);
+    let retries = 2;
+    while (retries >= 0) {
+      try {
+        const response = await openai.chat.completions.create({
+          model: aiConfig.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.85,
+          max_tokens: 100,
+        });
+        return response.choices[0].message.content.trim().replace(/^"/, '').replace(/"$/, '');
+      } catch (err) {
+        if (err.message.includes('429') && retries > 0) {
+          console.warn(`[AI] Rate limited (429). Retrying in 5s... (${retries} left)`);
+          await new Promise(r => setTimeout(r, 5000));
+          retries--;
+          continue;
+        }
+        if (err.message.includes('400') && retries > 0) {
+          console.warn(`[AI] Bad request (400). Retrying... (${retries} left)`);
+          await new Promise(r => setTimeout(r, 2000));
+          retries--;
+          continue;
+        }
+        console.error('[AI] Comment generation failed:', err.message);
+        break;
+      }
+    }
     return 'This looks absolutely incredible! ✨';
-  }
 }
 
 module.exports = { generatePinterestContent, identifyProduct, generateEngagementComment };

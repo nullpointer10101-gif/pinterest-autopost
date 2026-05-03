@@ -50,3 +50,5 @@ jobs:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           APP_STATE_KEY: ${{ secrets.APP_STATE_KEY || 'pinterest_autopost_state_v1' }}
+          # IG Tracker state (needed for dedup shortcode lookups)
+          APP_IG_TRACKER_STATE_KEY: ${{ secrets.APP_IG_TRACKER_STATE_KEY || 'ig_tracker_state_v1' }}
