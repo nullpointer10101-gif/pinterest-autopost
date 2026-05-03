@@ -376,8 +376,16 @@ async function refreshOverview() {
     state.history = Array.isArray(historyResp.history) ? historyResp.history : [];
   }
 
-  if (Array.isArray(trackerStatusResp?.status?.channels)) {
-    setText('hero-channel-count', String(trackerStatusResp.status.channels.length));
+  // Always update channel count from tracker status (not tab-dependent)
+  if (trackerStatusResp?.status) {
+    const chCount = Array.isArray(trackerStatusResp.status.channels)
+      ? trackerStatusResp.status.channels.length
+      : (trackerStatusResp.status.channelCount ?? 0);
+    setText('hero-channel-count', String(chCount));
+    // Sync state.channels so channel tab is pre-populated
+    if (Array.isArray(trackerStatusResp.status.channels) && trackerStatusResp.status.channels.length > 0) {
+      state.channels = trackerStatusResp.status.channels;
+    }
   }
 
   updateStats(state.queue, state.history);
@@ -389,6 +397,7 @@ async function refreshOverview() {
   // Always re-render current tab lists with fresh data
   if (state.currentTab === 'history') renderHistoryList();
   if (state.currentTab === 'queue') renderQueueList();
+  if (state.currentTab === 'channels') renderChannelsList();
 
   // Sync workflow toggles
   try {
@@ -404,10 +413,11 @@ async function refreshOverview() {
 }
 
 function updateStats(queue, history) {
-  const successCount = history.filter((item) => item.status === 'success').length;
-  const failedCount = history.filter((item) => item.status === 'error').length;
+  // Count both 'success' and 'completed' as successfully published pins
+  const successCount = history.filter((item) => item.status === 'success' || item.status === 'completed').length;
+  const failedCount = history.filter((item) => item.status === 'error' || item.status === 'failed').length;
   const pendingCount = queue.filter((item) => item.status === 'pending' || item.status === 'processing').length;
-  const queueFailedCount = queue.filter((item) => item.status === 'failed').length;
+  const queueFailedCount = queue.filter((item) => item.status === 'failed' || item.status === 'error').length;
   const successRateBase = successCount + failedCount;
   const successRate = successRateBase > 0 ? Math.round((successCount / successRateBase) * 100) : 0;
 
