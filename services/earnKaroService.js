@@ -1,4 +1,10 @@
-const puppeteer = require('puppeteer');
+// Puppeteer only available in GitHub Actions — guard for Vercel
+let puppeteer = null;
+try {
+  puppeteer = require('puppeteer');
+} catch (e) {
+  console.warn('[EarnKaro] puppeteer not available (expected on Vercel):', e.message);
+}
 
 const EK_BASE = 'https://earnkaro.com';
 const EK_COOKIE = process.env.EARNKARO_SESSION_COOKIE || '';
@@ -22,6 +28,11 @@ function parseCookies(cookieString) {
 async function makeAffiliateLink(productUrl) {
   if (!EK_COOKIE) {
     console.warn('[EarnKaro] No EARNKARO_SESSION_COOKIE set. Using raw product URL as fallback.');
+    return { affiliateUrl: productUrl, source: 'raw_fallback' };
+  }
+
+  if (!puppeteer) {
+    console.warn('[EarnKaro] Puppeteer unavailable — returning raw URL as affiliate fallback.');
     return { affiliateUrl: productUrl, source: 'raw_fallback' };
   }
 

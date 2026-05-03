@@ -1,5 +1,12 @@
 const axios = require('axios');
-const ig = require('instagram-url-direct').instagramGetUrl;
+
+// instagram-url-direct may have optional native deps — guard for Vercel
+let ig = null;
+try {
+  ig = require('instagram-url-direct').instagramGetUrl;
+} catch (e) {
+  console.warn('[Instagram] instagram-url-direct not available:', e.message);
+}
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 
@@ -20,6 +27,7 @@ function cleanInstagramUrl(url) {
 
 // ─── 1. Instagram URL Direct (local NPM) ──────────────────────────────────────
 async function extractViaIGDirect(url) {
+  if (!ig) return null;
   try {
     const cleaned = cleanInstagramUrl(url);
     const result = await ig(cleaned);
