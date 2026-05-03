@@ -2472,9 +2472,9 @@ body {
     grid-column: 1 / -1;
 }
 
-#panel-dashboard > article.dashboard-op-card:nth-of-type(2),
-#panel-dashboard > article.dashboard-op-card:nth-of-type(3) {
+#panel-dashboard > article.dashboard-op-card {
     min-height: 100%;
+    min-width: 0;
 }
 
 .panel-grid-main,
@@ -2564,12 +2564,17 @@ body {
         grid-column: 1 / -1;
     }
 
-    #panel-dashboard > article.dashboard-op-card:nth-of-type(2) {
+    #panel-dashboard > article.dashboard-card-workflow {
         grid-column: span 7;
     }
 
-    #panel-dashboard > article.dashboard-op-card:nth-of-type(3) {
+    #panel-dashboard > article.dashboard-card-queue {
         grid-column: span 5;
+    }
+
+    #panel-dashboard > article.dashboard-card-history,
+    #panel-dashboard > article.dashboard-card-cycle {
+        grid-column: span 6;
     }
 
     #panel-pinterest .panel-grid-main,
