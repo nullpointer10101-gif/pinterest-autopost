@@ -9,6 +9,13 @@ try {
 }
 
 const IS_SERVERLESS = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
+const PRIORITY_LEVELS = ['low', 'normal', 'high', 'urgent'];
+const PRIORITY_WEIGHT = {
+  low: 1,
+  normal: 2,
+  high: 3,
+  urgent: 4,
+};
 
 async function loadState() {
   const posts = await historyService.getAll();
@@ -19,6 +26,25 @@ async function loadState() {
 
 async function saveQueue(queue) {
   await historyService.setQueueData(queue);
+}
+
+function normalizePriority(priority) {
+  const value = String(priority || '').trim().toLowerCase();
+  return PRIORITY_LEVELS.includes(value) ? value : 'normal';
+}
+
+function normalizeScheduledAfter(value) {
+  if (!value) return null;
+  const timestamp = new Date(value);
+  if (!Number.isFinite(timestamp.getTime())) return null;
+  return timestamp.toISOString();
+}
+
+function isScheduledForFuture(item, referenceTime = Date.now()) {
+  if (!item?.scheduledAfter) return false;
+  const ts = new Date(item.scheduledAfter).getTime();
+  if (!Number.isFinite(ts)) return false;
+  return ts > referenceTime;
 }
 
 function getPostingMode() {
@@ -152,7 +178,7 @@ async function addToQueue(items, prepend = false) {
 
   if (filteredItems.length === 0) {
     console.log('[Queue] All items were duplicates. Nothing added.');
-    return queue;
+    return [];
   }
 
   const newItems = filteredItems.map(item => ({
@@ -160,6 +186,8 @@ async function addToQueue(items, prepend = false) {
     ...item,
     // Ensure shortcode is always a top-level field for future dedup
     shortcode: extractShortcode(item) || null,
+    priority: normalizePriority(item.priority),
+    scheduledAfter: normalizeScheduledAfter(item.scheduledAfter),
     status: 'pending',
     addedAt: now,
   }));
@@ -220,6 +248,91 @@ async function promoteToFront(id) {
   return updated;
 }
 
+async function reorderQueue(orderedIds = []) {
+  const queue = await getQueue();
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) return queue;
+
+  const knownIds = new Set(queue.map((item) => item.id));
+  const cleanIds = orderedIds.filter((id) => knownIds.has(id));
+  if (cleanIds.length === 0) return queue;
+
+  const orderedSet = new Set(cleanIds);
+  const idToItem = new Map(queue.map((item) => [item.id, item]));
+  const ordered = cleanIds.map((id) => idToItem.get(id)).filter(Boolean);
+  const untouched = queue.filter((item) => !orderedSet.has(item.id));
+  const merged = [...ordered, ...untouched];
+  await saveQueue(merged);
+  return merged;
+}
+
+async function updateQueueItem(id, patch = {}) {
+  const queue = await getQueue();
+  const index = queue.findIndex((item) => item.id === id);
+  if (index === -1) throw new Error('Queue item not found');
+
+  const current = queue[index];
+  const next = { ...current };
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'priority')) {
+    next.priority = normalizePriority(patch.priority);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'scheduledAfter')) {
+    next.scheduledAfter = normalizeScheduledAfter(patch.scheduledAfter);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
+    const status = String(patch.status || '').trim().toLowerCase();
+    if (status) next.status = status;
+  }
+
+  next.updatedAt = new Date().toISOString();
+  queue[index] = next;
+  await saveQueue(queue);
+  return next;
+}
+
+async function bulkUpdateQueue(ids = [], patch = {}) {
+  const queue = await getQueue();
+  const selected = new Set(Array.isArray(ids) ? ids.filter(Boolean) : []);
+  if (selected.size === 0) return { changed: 0, queue };
+
+  let changed = 0;
+  const now = new Date().toISOString();
+  const nextQueue = queue.map((item) => {
+    if (!selected.has(item.id)) return item;
+    const next = { ...item };
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'priority')) {
+      next.priority = normalizePriority(patch.priority);
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'scheduledAfter')) {
+      next.scheduledAfter = normalizeScheduledAfter(patch.scheduledAfter);
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
+      const status = String(patch.status || '').trim().toLowerCase();
+      if (status) next.status = status;
+    }
+    next.updatedAt = now;
+    changed += 1;
+    return next;
+  });
+
+  await saveQueue(nextQueue);
+  return { changed, queue: nextQueue };
+}
+
+async function bulkRemoveQueue(ids = []) {
+  const queue = await getQueue();
+  const selected = new Set(Array.isArray(ids) ? ids.filter(Boolean) : []);
+  if (selected.size === 0) return { removed: 0, queue };
+
+  const nextQueue = queue.filter((item) => !selected.has(item.id));
+  const removed = queue.length - nextQueue.length;
+  await saveQueue(nextQueue);
+  return { removed, queue: nextQueue };
+}
+
 
 let isProcessing = false;
 
@@ -232,26 +345,29 @@ async function processNextInQueue() {
   // SCHEDULE-AWARE QUEUE PROCESSING
   // Only pick items where scheduledAfter is null/undefined OR in the past
   // ═══════════════════════════════════════════════════════════════════════
-  const now = new Date();
-  const nextItemIndex = queue.findIndex(item => {
-    if (item.status !== 'pending') return false;
-    
-    // Check schedule — skip items that are scheduled for the future
-    if (item.scheduledAfter) {
-      const scheduledTime = new Date(item.scheduledAfter);
-      if (scheduledTime > now) {
-        return false; // Not ready yet
-      }
+  const now = Date.now();
+  let nextItemIndex = -1;
+  let bestWeight = -Infinity;
+
+  queue.forEach((item, index) => {
+    if (item.status !== 'pending') return;
+    if (isScheduledForFuture(item, now)) return;
+
+    const weight = PRIORITY_WEIGHT[normalizePriority(item.priority)] || PRIORITY_WEIGHT.normal;
+    if (weight > bestWeight) {
+      bestWeight = weight;
+      nextItemIndex = index;
+      return;
     }
-    
-    return true;
+
+    if (weight === bestWeight && nextItemIndex === -1) {
+      nextItemIndex = index;
+    }
   });
   
   if (nextItemIndex === -1) {
     // Log how many are scheduled for later
-    const scheduledCount = queue.filter(item => 
-      item.status === 'pending' && item.scheduledAfter && new Date(item.scheduledAfter) > now
-    ).length;
+    const scheduledCount = queue.filter((item) => item.status === 'pending' && isScheduledForFuture(item, now)).length;
     if (scheduledCount > 0) {
       console.log(`[Queue] No ready items. ${scheduledCount} item(s) scheduled for later.`);
     }
@@ -412,10 +528,16 @@ module.exports = {
   retryFailedItems,
   removeItem,
   promoteToFront,
+  reorderQueue,
+  updateQueueItem,
+  bulkUpdateQueue,
+  bulkRemoveQueue,
   processNextInQueue,
   getQueueStats,
   shouldUseBrowserBot,
   getPostingMode,
   extractShortcode,
   isAlreadyPosted,
+  normalizePriority,
+  normalizeScheduledAfter,
 };

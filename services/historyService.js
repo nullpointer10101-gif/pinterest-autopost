@@ -5,6 +5,10 @@ const DEFAULT_STATE = {
   posts: [],
   engagements: [],
   queue: [],
+  snapshots: {
+    queue: [],
+    history: [],
+  },
   pkce: {},
   tokens: {},
   session: {
@@ -37,6 +41,10 @@ async function readState() {
     posts: Array.isArray(state?.posts) ? state.posts : [],
     engagements: Array.isArray(state?.engagements) ? state.engagements : [],
     queue: Array.isArray(state?.queue) ? state.queue : [],
+    snapshots: {
+      queue: Array.isArray(state?.snapshots?.queue) ? state.snapshots.queue : [],
+      history: Array.isArray(state?.snapshots?.history) ? state.snapshots.history : [],
+    },
     pkce: state?.pkce || {},
     tokens: state?.tokens || {},
     session: {
@@ -266,15 +274,99 @@ async function setQueueData(queue) {
   return state.queue;
 }
 
+async function setPostsData(posts) {
+  const state = await readState();
+  state.posts = Array.isArray(posts) ? posts : [];
+  await writeState(state);
+  return state.posts;
+}
+
+function normalizeSnapshotType(type) {
+  const normalized = String(type || '').trim().toLowerCase();
+  if (normalized === 'queue' || normalized === 'history') return normalized;
+  throw new Error('Snapshot type must be "queue" or "history".');
+}
+
+function normalizeSnapshotPayload(type, payload) {
+  if (!payload || typeof payload !== 'object') return [];
+  if (type === 'queue') return Array.isArray(payload.items) ? payload.items : [];
+  return Array.isArray(payload.items) ? payload.items : [];
+}
+
+async function createSnapshot(type, payload, meta = {}) {
+  const snapshotType = normalizeSnapshotType(type);
+  const state = await readState();
+  const items = normalizeSnapshotPayload(snapshotType, payload);
+  const createdAt = new Date().toISOString();
+
+  const snapshot = {
+    id: uuidv4(),
+    type: snapshotType,
+    label: String(meta.label || '').trim() || `${snapshotType.toUpperCase()} Snapshot`,
+    reason: String(meta.reason || '').trim() || 'manual',
+    createdAt,
+    count: items.length,
+    items,
+  };
+
+  const existing = Array.isArray(state.snapshots?.[snapshotType]) ? state.snapshots[snapshotType] : [];
+  state.snapshots = state.snapshots || {};
+  state.snapshots[snapshotType] = [snapshot, ...existing].slice(0, 25);
+  await writeState(state);
+  return snapshot;
+}
+
+async function listSnapshots(type) {
+  const snapshotType = normalizeSnapshotType(type);
+  const state = await readState();
+  const list = Array.isArray(state.snapshots?.[snapshotType]) ? state.snapshots[snapshotType] : [];
+  return list;
+}
+
+async function getSnapshot(type, snapshotId) {
+  const snapshotType = normalizeSnapshotType(type);
+  const snapshots = await listSnapshots(snapshotType);
+  return snapshots.find((entry) => entry.id === snapshotId) || null;
+}
+
+async function removeSnapshot(type, snapshotId) {
+  const snapshotType = normalizeSnapshotType(type);
+  const state = await readState();
+  const snapshots = Array.isArray(state.snapshots?.[snapshotType]) ? state.snapshots[snapshotType] : [];
+  state.snapshots[snapshotType] = snapshots.filter((entry) => entry.id !== snapshotId);
+  await writeState(state);
+  return state.snapshots[snapshotType];
+}
+
 async function getAutomationState() {
   const state = await readState();
-  return state.automation || { ...DEFAULT_STATE.automation };
+  return {
+    dateKey: '',
+    postsToday: 0,
+    likesToday: 0,
+    commentsToday: 0,
+    savesToday: 0,
+    lastRunAt: null,
+    circuitBreaker: null,
+    engagedUrls: [],
+    ...DEFAULT_STATE.automation,
+    ...(state.automation || {})
+  };
 }
 
 async function setAutomationState(automation) {
   const state = await readState();
   state.automation = {
+    dateKey: '',
+    postsToday: 0,
+    likesToday: 0,
+    commentsToday: 0,
+    savesToday: 0,
+    lastRunAt: null,
+    circuitBreaker: null,
+    engagedUrls: [],
     ...DEFAULT_STATE.automation,
+    ...(state.automation || {}),
     ...automation,
   };
   await writeState(state);
@@ -323,6 +415,11 @@ module.exports = {
   clearEngagements,
   getQueueData,
   setQueueData,
+  setPostsData,
+  createSnapshot,
+  listSnapshots,
+  getSnapshot,
+  removeSnapshot,
   getAutomationState,
   setAutomationState,
   getWorkflowConfig,

@@ -35,6 +35,10 @@
                     <input id="auto-refresh-toggle" type="checkbox" checked>
                     <span>Auto Refresh</span>
                 </label>
+                <label class="switch-wrap" for="performance-mode-toggle">
+                    <input id="performance-mode-toggle" type="checkbox">
+                    <span>Performance Mode</span>
+                </label>
                 <button id="manual-refresh-btn" class="btn btn-secondary compact-btn" type="button">
                     <i data-lucide="refresh-cw" class="btn-icon"></i>
                     <span>Refresh</span>
@@ -46,6 +50,16 @@
                 <div id="live-time" class="clock">00:00</div>
             </div>
         </header>
+
+        <section id="alert-center" class="alert-center card">
+            <div class="alert-center-head">
+                <h2><i data-lucide="siren" class="heading-icon"></i>Health & Alert Center</h2>
+                <span id="alert-center-count" class="badge">0 ALERTS</span>
+            </div>
+            <div id="alert-center-list" class="alert-list">
+                <div class="pulse-item">System checks in progress...</div>
+            </div>
+        </section>
 
         <nav class="tab-nav" aria-label="Main tabs">
             <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
@@ -333,6 +347,31 @@
                         </div>
                     </div>
 
+                    <div class="queue-planner-toolbar">
+                        <div class="queue-planner-group">
+                            <button id="snapshot-queue-btn" class="pill-btn" type="button">Save Snapshot</button>
+                            <button id="restore-queue-snapshot-btn" class="pill-btn" type="button">Restore Latest</button>
+                        </div>
+                        <div class="queue-planner-group">
+                            <select id="queue-priority-filter">
+                                <option value="all">All priorities</option>
+                                <option value="urgent">Urgent</option>
+                                <option value="high">High</option>
+                                <option value="normal">Normal</option>
+                                <option value="low">Low</option>
+                            </select>
+                            <select id="queue-sort-mode">
+                                <option value="manual">Manual Order</option>
+                                <option value="priority_desc">Priority High to Low</option>
+                                <option value="priority_asc">Priority Low to High</option>
+                                <option value="scheduled_soon">Schedule Soonest</option>
+                                <option value="scheduled_late">Schedule Latest</option>
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="control-row">
                         <input type="text" id="queue-search" placeholder="Search queue by title, source, or username">
                         <select id="queue-status-filter">
@@ -341,6 +380,28 @@
                             <option value="processing">Processing</option>
                             <option value="failed">Failed</option>
                         </select>
+                    </div>
+
+                    <div class="queue-bulk-toolbar">
+                        <label class="switch-wrap queue-select-all-wrap" for="queue-select-all">
+                            <input id="queue-select-all" type="checkbox">
+                            <span>Select All</span>
+                        </label>
+                        <select id="queue-bulk-action">
+                            <option value="priority">Set Priority</option>
+                            <option value="schedule">Set Schedule</option>
+                            <option value="clear_schedule">Clear Schedule</option>
+                            <option value="remove">Remove Selected</option>
+                        </select>
+                        <select id="queue-bulk-priority">
+                            <option value="urgent">Urgent</option>
+                            <option value="high">High</option>
+                            <option value="normal">Normal</option>
+                            <option value="low">Low</option>
+                        </select>
+                        <input id="queue-bulk-schedule" type="datetime-local">
+                        <button id="queue-bulk-apply-btn" class="btn btn-secondary compact-btn" type="button">Apply Bulk Action</button>
+                        <button id="queue-bulk-clear-btn" class="pill-btn" type="button">Clear Selection</button>
                     </div>
 
                     <div id="queue-list" class="list"></div>
@@ -396,6 +457,14 @@
                                     <label for="field-alt">Alt Text</label>
                                     <input type="text" id="field-alt" maxlength="500" placeholder="Optional alt text">
                                     <div id="field-alt-meta" class="input-meta">0/500 chars</div>
+                                </div>
+
+                                <div class="autosave-bar">
+                                    <div id="autosave-status" class="input-meta">Autosave idle</div>
+                                    <div class="autosave-actions">
+                                        <button id="autosave-undo-btn" class="pill-btn" type="button">Undo</button>
+                                        <button id="autosave-redo-btn" class="pill-btn" type="button">Redo</button>
+                                    </div>
                                 </div>
 
                                 <div class="button-row">
@@ -545,6 +614,8 @@
                         <h2><i data-lucide="history" class="heading-icon"></i>History</h2>
                         <div class="button-row">
                             <button id="export-history-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="download" class="btn-icon"></i><span>Export JSON</span></button>
+                            <button id="snapshot-history-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="save" class="btn-icon"></i><span>Save Snapshot</span></button>
+                            <button id="restore-history-snapshot-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="history" class="btn-icon"></i><span>Restore Latest</span></button>
                             <button id="clear-history-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear History</span></button>
                         </div>
                     </div>
@@ -669,9 +740,36 @@
                 </div>
             </section>
         </main>
+
+        <div id="action-dock" class="action-dock">
+            <button id="dock-command-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="command" class="btn-icon"></i><span>Commands</span></button>
+            <button id="dock-refresh-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="refresh-cw" class="btn-icon"></i><span>Refresh</span></button>
+            <button id="dock-run-queue-btn" class="btn btn-primary compact-btn" type="button"><i data-lucide="zap" class="btn-icon"></i><span>Run Bot</span></button>
+            <button id="dock-queue-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="layers" class="btn-icon"></i><span>Queue</span></button>
+            <button id="dock-post-btn" class="btn btn-primary compact-btn" type="button"><i data-lucide="send" class="btn-icon"></i><span>Post Now</span></button>
+        </div>
+
+        <nav id="mobile-tab-nav" class="mobile-tab-nav" aria-label="Mobile tab navigation">
+            <button class="mobile-tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Home</span></button>
+            <button class="mobile-tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
+            <button class="mobile-tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Create</span></button>
+            <button class="mobile-tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
+            <button class="mobile-tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
+        </nav>
     </div>
 
     <div id="toast-container"></div>
+    <div id="command-palette" class="command-palette hidden" role="dialog" aria-modal="true" aria-label="Command palette">
+        <div class="command-palette-backdrop" data-command-close="true"></div>
+        <div class="command-palette-panel">
+            <div class="command-palette-input-wrap">
+                <i data-lucide="search" class="btn-icon"></i>
+                <input id="command-input" type="text" placeholder="Type a command or search..." autocomplete="off" spellcheck="false">
+                <button id="command-close-btn" class="pill-btn" type="button">Close</button>
+            </div>
+            <div id="command-results" class="command-results"></div>
+        </div>
+    </div>
 
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
     <script src="/js/app.js"></script>

@@ -21,11 +21,38 @@ const state = {
     pointerRaf: null,
     pointerBound: false,
   },
+  performance: {
+    enabled: false,
+    lastRefreshAt: 0,
+  },
+  queuePlanner: {
+    selectedIds: new Set(),
+    draggingId: '',
+  },
+  commandPalette: {
+    open: false,
+    activeIndex: 0,
+    results: [],
+  },
+  autosave: {
+    timer: null,
+    undoStack: [],
+    redoStack: [],
+    applying: false,
+  },
+  alerts: [],
 };
 
 const REFRESH_INTERVAL_MS = 30000;
+const PERFORMANCE_REFRESH_INTERVAL_MS = 60000;
+const PERFORMANCE_REFRESH_THROTTLE_MS = 8000;
+const DEFAULT_REFRESH_THROTTLE_MS = 2500;
 const DRAFTS_STORAGE_KEY = 'pmc_drafts_v1';
 const VISUAL_MODE_STORAGE_KEY = 'pmc_visual_mode_v1';
+const PERFORMANCE_MODE_STORAGE_KEY = 'pmc_performance_mode_v1';
+const AUTOSAVE_STORAGE_KEY = 'pmc_autosave_v1';
+const AUTOSAVE_MAX_STACK = 40;
+const QUEUE_PRIORITY_ORDER = ['low', 'normal', 'high', 'urgent'];
 const VISUAL_MODES = {
   dark: {
     label: 'Dark',
@@ -63,13 +90,17 @@ const PINTEREST_LIMITS = {
 
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
+  initPerformanceMode();
   initVisualSystem();
+  initAutosaveSystem();
+  initCommandPalette();
   loadDrafts();
   switchTab('dashboard');
   startClock();
-  refreshAll();
+  refreshAll({ force: true });
   setAutoRefresh(true);
   updateComposerMeta();
+  renderActionDockState();
   hydrateIcons();
   window.addEventListener('beforeunload', () => {
     setPreviewScrollLock(false);
@@ -106,15 +137,36 @@ function bindEvents() {
   on('clear-history-btn', 'click', clearHistory);
   on('engage-btn', 'click', startEngager);
   on('clear-engagements-btn', 'click', clearEngagements);
-  on('manual-refresh-btn', 'click', refreshAll);
+  on('manual-refresh-btn', 'click', () => refreshAll({ force: true }));
   on('visual-mode-btn', 'click', handleVisualModeToggle);
+  on('performance-mode-toggle', 'change', handlePerformanceToggle);
   on('hero-open-channels-btn', 'click', () => switchTab('channels'));
   on('hero-open-history-btn', 'click', () => switchTab('history'));
-  on('hero-refresh-btn', 'click', refreshAll);
+  on('hero-refresh-btn', 'click', () => refreshAll({ force: true }));
   on('link-session-btn', 'click', linkSessionCookie);
   on('unlink-session-btn', 'click', unlinkSessionCookie);
   on('link-ig-session-btn', 'click', linkIgSession);
   on('add-channel-btn', 'click', handleAddChannel);
+  on('dock-refresh-btn', 'click', () => refreshAll({ force: true }));
+  on('dock-run-queue-btn', 'click', processQueueNow);
+  on('dock-queue-btn', 'click', handleQueue);
+  on('dock-post-btn', 'click', handlePostNow);
+  on('dock-command-btn', 'click', openCommandPalette);
+  on('command-close-btn', 'click', closeCommandPalette);
+
+  on('snapshot-queue-btn', 'click', createQueueSnapshot);
+  on('restore-queue-snapshot-btn', 'click', restoreLatestQueueSnapshot);
+  on('snapshot-history-btn', 'click', createHistorySnapshot);
+  on('restore-history-snapshot-btn', 'click', restoreLatestHistorySnapshot);
+
+  on('queue-priority-filter', 'change', renderQueueList);
+  on('queue-sort-mode', 'change', renderQueueList);
+  on('queue-select-all', 'change', handleQueueSelectAll);
+  on('queue-bulk-action', 'change', updateQueueBulkControls);
+  on('queue-bulk-apply-btn', 'click', applyQueueBulkAction);
+  on('queue-bulk-clear-btn', 'click', clearQueueSelection);
+  on('autosave-undo-btn', 'click', undoAutosaveSnapshot);
+  on('autosave-redo-btn', 'click', redoAutosaveSnapshot);
 
   on('auto-refresh-toggle', 'change', (event) => {
     setAutoRefresh(!!event.target.checked);
@@ -170,6 +222,19 @@ function bindEvents() {
   on('field-desc', 'input', updateComposerMeta);
   on('field-alt', 'input', updateComposerMeta);
   on('field-link', 'input', updateComposerMeta);
+  on('field-title', 'input', handleAutosaveTrackedInput);
+  on('field-desc', 'input', handleAutosaveTrackedInput);
+  on('field-link', 'input', handleAutosaveTrackedInput);
+  on('field-alt', 'input', handleAutosaveTrackedInput);
+  on('reel-url', 'input', handleAutosaveTrackedInput);
+  on('x-field-text', 'input', handleAutosaveTrackedInput);
+  on('session-cookie', 'input', handleAutosaveTrackedInput);
+  on('x-session-cookie', 'input', handleAutosaveTrackedInput);
+  on('ig-session-cookie', 'input', handleAutosaveTrackedInput);
+  on('engage-niche', 'change', handleAutosaveTrackedInput);
+  on('engage-count-manual', 'change', handleAutosaveTrackedInput);
+  on('x-engage-count', 'change', handleAutosaveTrackedInput);
+  on('new-channel-input', 'input', handleAutosaveTrackedInput);
 
   on('reel-url', 'keydown', (event) => {
     if (event.key === 'Enter') handleExtract();
@@ -181,6 +246,17 @@ function bindEvents() {
   ['wf-pinterest-posting', 'wf-pinterest-engagement', 'wf-x-posting', 'wf-x-engagement'].forEach(id => {
     on(id, 'change', (e) => handleWorkflowToggle(id, e.target.checked));
   });
+
+  document.querySelectorAll('.mobile-tab-btn').forEach((button) => {
+    button.addEventListener('click', () => switchTab(button.dataset.tab));
+  });
+
+  document.addEventListener('keydown', handleGlobalKeyDown);
+  document.addEventListener('click', (event) => {
+    if (event.target?.matches?.('[data-command-close="true"]')) closeCommandPalette();
+  });
+
+  updateQueueBulkControls();
 }
 
 function on(id, event, handler) {
@@ -290,6 +366,51 @@ function initVisualSystem() {
   document.documentElement.style.setProperty('--cursor-y', '28vh');
 }
 
+function initPerformanceMode() {
+  let saved = '';
+  try {
+    saved = localStorage.getItem(PERFORMANCE_MODE_STORAGE_KEY) || '';
+  } catch {
+    saved = '';
+  }
+  const enabled = saved === '1';
+  applyPerformanceMode(enabled, { persist: false, notify: false });
+}
+
+function applyPerformanceMode(enabled, options = {}) {
+  const { persist = true, notify = false } = options;
+  state.performance.enabled = !!enabled;
+
+  if (document.body) {
+    document.body.classList.toggle('performance-mode', state.performance.enabled);
+  }
+
+  const toggle = byId('performance-mode-toggle');
+  if (toggle) toggle.checked = state.performance.enabled;
+
+  if (persist) {
+    try {
+      localStorage.setItem(PERFORMANCE_MODE_STORAGE_KEY, state.performance.enabled ? '1' : '0');
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  const autoEnabled = !!byId('auto-refresh-toggle')?.checked;
+  setAutoRefresh(autoEnabled);
+  renderActionDockState();
+  if (state.currentTab === 'queue') renderQueueList();
+  if (state.currentTab === 'history') renderHistoryList();
+
+  if (notify) {
+    showToast(`Performance mode ${state.performance.enabled ? 'enabled' : 'disabled'}.`, 'info');
+  }
+}
+
+function handlePerformanceToggle(event) {
+  applyPerformanceMode(!!event?.target?.checked, { persist: true, notify: true });
+}
+
 function handleVisualModeToggle() {
   const modeKeys = Object.keys(VISUAL_MODES);
   const currentIndex = modeKeys.indexOf(resolveVisualMode(state.visual.mode));
@@ -313,6 +434,10 @@ function switchTab(tab) {
     panel.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
   });
 
+  document.querySelectorAll('.mobile-tab-btn').forEach((button) => {
+    button.classList.toggle('active', button.dataset.tab === tab);
+  });
+
   if (tab !== 'dashboard') {
     setPreviewScrollLock(false);
   }
@@ -324,6 +449,7 @@ function switchTab(tab) {
       if (typeof window.refreshXData === 'function') window.refreshXData();
   }
   if (tab === 'settings') loadDiagnostics();
+  renderActionDockState();
 }
 
 function startClock() {
@@ -372,14 +498,23 @@ function setAutoRefresh(enabled) {
   }
 
   if (!enabled) return;
+  const intervalMs = state.performance.enabled ? PERFORMANCE_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
   state.refreshTimer = setInterval(() => {
     // Use window.refreshAll so x-app.js override is honored
     if (typeof window.refreshAll === 'function') window.refreshAll();
     else refreshAll();
-  }, REFRESH_INTERVAL_MS);
+  }, intervalMs);
 }
 
-async function refreshAll() {
+async function refreshAll(options = {}) {
+  const force = options === true || options.force === true;
+  const now = Date.now();
+  const minGap = state.performance.enabled ? PERFORMANCE_REFRESH_THROTTLE_MS : DEFAULT_REFRESH_THROTTLE_MS;
+  if (!force && state.performance.lastRefreshAt && (now - state.performance.lastRefreshAt) < minGap) {
+    return;
+  }
+  state.performance.lastRefreshAt = now;
+
   await refreshOverview();
 
   if (state.currentTab === 'queue') renderQueueList();
@@ -404,6 +539,7 @@ async function refreshOverview() {
   // Only update state if the fetch succeeded (non-null response)
   if (queueResp !== null) {
     state.queue = Array.isArray(queueResp.queue) ? queueResp.queue : [];
+    pruneQueueSelection();
   }
   if (historyResp !== null) {
     state.history = Array.isArray(historyResp.history) ? historyResp.history : [];
@@ -424,6 +560,7 @@ async function refreshOverview() {
   updateStats(state.queue, state.history);
   updateConnectionBar(pinterestResp || {}, systemStatus || {});
   updateHealthDashboard(pinterestResp || {}, systemStatus || {});
+  renderAlertCenter(pinterestResp || {}, systemStatus || {});
   renderMiniQueue();
   renderDashboardHistory();
 
@@ -659,6 +796,8 @@ function showPreview(payload) {
 
   section.classList.remove('hidden');
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  renderActionDockState();
+  handleAutosaveTrackedInput();
 }
 
 async function handlePostNow() {
@@ -799,60 +938,388 @@ function renderQueueList() {
   const list = byId('queue-list');
   if (!list) return;
 
+  const rows = getFilteredQueueRows();
+  const virtual = getVirtualWindow(list, rows, 'queue');
+  const queueSortMode = String(byId('queue-sort-mode')?.value || 'manual');
+  const canDrag = queueSortMode === 'manual';
+
+  if (!rows.length) {
+    list.innerHTML = '<div class="pulse-item">No queue items match your filters.</div>';
+    syncQueueSelectionControls();
+    return;
+  }
+
+  const rowHtml = virtual.items.map((item) => {
+    const thumb = `/api/queue/thumb/${encodeURIComponent(item.id)}`;
+    const title = escHtml(item.title || 'Untitled mission');
+    const meta = escHtml(item.sourceUrl || item.username || 'manual');
+    const status = String(item.status || 'pending');
+    const statusText = escHtml(status.toUpperCase());
+    const priority = normalizeQueuePriority(item.priority);
+    const selected = state.queuePlanner.selectedIds.has(item.id);
+    const errorText = item.error ? `<div class="item-meta">${escHtml(item.error)}</div>` : '';
+    const addedAt = item.addedAt ? formatDateTime12h(item.addedAt) : '';
+    const dateText = addedAt ? `<div class="item-meta">Added ${escHtml(addedAt)}</div>` : '';
+    const scheduleLabel = formatScheduledTime(item.scheduledAfter);
+    const scheduleInput = toLocalDateTimeInput(item.scheduledAfter);
+    const actionBtns = status === 'pending' || status === 'failed'
+      ? `
+        <button class="pill-btn" onclick="handlePromoteQueueItem('${escAttr(item.id)}')">Post Now</button>
+        <button class="pill-btn btn-danger-text" onclick="handleRemoveQueueItem('${escAttr(item.id)}')">Remove</button>
+      `
+      : '';
+
+    return `
+      <div class="list-item queue-row ${canDrag && status === 'pending' ? 'queue-draggable' : ''}" data-queue-id="${escAttr(item.id)}" draggable="${canDrag && status === 'pending' ? 'true' : 'false'}">
+        <div class="list-item-main">
+          <input class="queue-select" type="checkbox" data-queue-select="${escAttr(item.id)}" ${selected ? 'checked' : ''}>
+          <button class="queue-drag-handle" type="button" data-queue-drag-handle title="Drag to reorder">
+            <i data-lucide="grip-vertical" class="mini-icon"></i>
+          </button>
+          <img class="thumb-img" src="${escAttr(thumb)}" alt="Queue item">
+          <div class="queue-main">
+            <div class="item-title">${title}</div>
+            <div class="item-meta">${meta}</div>
+            <div class="queue-meta-grid">
+              <span class="badge status-${escHtml(status)}">${statusText}</span>
+              <span class="priority-badge priority-${escAttr(priority)}">${escHtml(priority.toUpperCase())}</span>
+              <span class="item-meta">${escHtml(scheduleLabel)}</span>
+            </div>
+            ${dateText}
+            ${errorText}
+          </div>
+        </div>
+        <div class="item-actions queue-ops">
+          <select data-queue-priority="${escAttr(item.id)}">
+            ${QUEUE_PRIORITY_ORDER.map((p) => `<option value="${p}" ${p === priority ? 'selected' : ''}>${p.toUpperCase()}</option>`).join('')}
+          </select>
+          <input type="datetime-local" data-queue-schedule="${escAttr(item.id)}" value="${escAttr(scheduleInput)}">
+          ${actionBtns}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const topSpacer = virtual.top > 0 ? `<div class="virtual-spacer" style="height:${virtual.top}px"></div>` : '';
+  const bottomSpacer = virtual.bottom > 0 ? `<div class="virtual-spacer" style="height:${virtual.bottom}px"></div>` : '';
+  list.innerHTML = `${topSpacer}${rowHtml}${bottomSpacer}`;
+
+  bindVirtualScroll(list, 'queue', renderQueueList);
+  bindQueueRowEvents(list, canDrag);
+  syncQueueSelectionControls();
+  hydrateIcons();
+}
+
+function normalizeQueuePriority(value) {
+  const priority = String(value || '').trim().toLowerCase();
+  return QUEUE_PRIORITY_ORDER.includes(priority) ? priority : 'normal';
+}
+
+function getFilteredQueueRows() {
   const search = String(byId('queue-search')?.value || '').trim().toLowerCase();
   const statusFilter = byId('queue-status-filter')?.value || 'all';
+  const priorityFilter = byId('queue-priority-filter')?.value || 'all';
+  const sortMode = byId('queue-sort-mode')?.value || 'manual';
 
-  const rows = state.queue.filter((item) => {
-    const matchStatus = statusFilter === 'all' ? true : (item.status || '') === statusFilter;
+  let rows = state.queue.filter((item) => {
+    const status = String(item.status || '').toLowerCase();
+    const priority = normalizeQueuePriority(item.priority);
+    const matchStatus = statusFilter === 'all' ? true : status === statusFilter;
     if (!matchStatus) return false;
+    const matchPriority = priorityFilter === 'all' ? true : priority === priorityFilter;
+    if (!matchPriority) return false;
     if (!search) return true;
     const haystack = `${item.title || ''} ${item.sourceUrl || ''} ${item.username || ''}`.toLowerCase();
     return haystack.includes(search);
   });
 
-  if (!rows.length) {
-    list.innerHTML = '<div class="pulse-item">No queue items match your filters.</div>';
+  if (sortMode !== 'manual') {
+    rows = [...rows].sort((a, b) => {
+      const pa = QUEUE_PRIORITY_ORDER.indexOf(normalizeQueuePriority(a.priority));
+      const pb = QUEUE_PRIORITY_ORDER.indexOf(normalizeQueuePriority(b.priority));
+      const ta = a.scheduledAfter ? new Date(a.scheduledAfter).getTime() : Number.POSITIVE_INFINITY;
+      const tb = b.scheduledAfter ? new Date(b.scheduledAfter).getTime() : Number.POSITIVE_INFINITY;
+      const aa = a.addedAt ? new Date(a.addedAt).getTime() : 0;
+      const ab = b.addedAt ? new Date(b.addedAt).getTime() : 0;
+
+      if (sortMode === 'priority_desc') return pb - pa;
+      if (sortMode === 'priority_asc') return pa - pb;
+      if (sortMode === 'scheduled_soon') return ta - tb;
+      if (sortMode === 'scheduled_late') return tb - ta;
+      if (sortMode === 'newest') return ab - aa;
+      if (sortMode === 'oldest') return aa - ab;
+      return 0;
+    });
+  }
+
+  return rows;
+}
+
+function getVirtualWindow(listEl, rows, key) {
+  if (!state.performance.enabled || rows.length <= 40) {
+    return { items: rows, top: 0, bottom: 0 };
+  }
+
+  const rowHeight = key === 'queue' ? 126 : 108;
+  const viewport = Math.max(320, listEl.clientHeight || 440);
+  const scrollTop = listEl.scrollTop || 0;
+  const visible = Math.ceil(viewport / rowHeight) + 10;
+  const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 4);
+  const end = Math.min(rows.length, start + visible);
+  return {
+    items: rows.slice(start, end),
+    top: start * rowHeight,
+    bottom: Math.max(0, (rows.length - end) * rowHeight),
+  };
+}
+
+function bindVirtualScroll(listEl, key, renderer) {
+  const attr = key === 'queue' ? 'data-vscroll-queue' : 'data-vscroll-history';
+  if (listEl.getAttribute(attr) === '1') return;
+  listEl.setAttribute(attr, '1');
+  let ticking = false;
+  listEl.addEventListener('scroll', () => {
+    if (!state.performance.enabled) return;
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(() => {
+      ticking = false;
+      renderer();
+    });
+  }, { passive: true });
+}
+
+function bindQueueRowEvents(list, canDrag) {
+  list.querySelectorAll('[data-queue-select]').forEach((el) => {
+    el.addEventListener('change', () => {
+      const id = el.getAttribute('data-queue-select');
+      if (!id) return;
+      if (el.checked) state.queuePlanner.selectedIds.add(id);
+      else state.queuePlanner.selectedIds.delete(id);
+      syncQueueSelectionControls();
+    });
+  });
+
+  list.querySelectorAll('[data-queue-priority]').forEach((el) => {
+    el.addEventListener('change', async () => {
+      const id = el.getAttribute('data-queue-priority');
+      if (!id) return;
+      await updateQueueItemPatch(id, { priority: el.value });
+    });
+  });
+
+  list.querySelectorAll('[data-queue-schedule]').forEach((el) => {
+    el.addEventListener('change', async () => {
+      const id = el.getAttribute('data-queue-schedule');
+      if (!id) return;
+      await updateQueueItemPatch(id, { scheduledAfter: fromLocalDateTimeInput(el.value) });
+    });
+  });
+
+  if (!canDrag) return;
+
+  list.querySelectorAll('.queue-row[data-queue-id]').forEach((row) => {
+    row.addEventListener('dragstart', (event) => {
+      const id = row.getAttribute('data-queue-id');
+      if (!id) return;
+      state.queuePlanner.draggingId = id;
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', id);
+      }
+    });
+
+    row.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      row.classList.add('queue-drop-target');
+    });
+
+    row.addEventListener('dragleave', () => {
+      row.classList.remove('queue-drop-target');
+    });
+
+    row.addEventListener('drop', async (event) => {
+      event.preventDefault();
+      row.classList.remove('queue-drop-target');
+      const targetId = row.getAttribute('data-queue-id');
+      const dragId = state.queuePlanner.draggingId || event.dataTransfer?.getData('text/plain') || '';
+      state.queuePlanner.draggingId = '';
+      if (!dragId || !targetId || dragId === targetId) return;
+      await reorderQueueByDrag(dragId, targetId);
+    });
+
+    row.addEventListener('dragend', () => {
+      state.queuePlanner.draggingId = '';
+      row.classList.remove('queue-drop-target');
+    });
+  });
+}
+
+function formatScheduledTime(value) {
+  if (!value) return 'No schedule';
+  const ts = new Date(value);
+  if (!Number.isFinite(ts.getTime())) return 'No schedule';
+  return `Scheduled ${formatDateTime12h(ts.toISOString())}`;
+}
+
+function toLocalDateTimeInput(value) {
+  if (!value) return '';
+  const ts = new Date(value);
+  if (!Number.isFinite(ts.getTime())) return '';
+  const offsetMs = ts.getTimezoneOffset() * 60000;
+  const local = new Date(ts.getTime() - offsetMs);
+  return local.toISOString().slice(0, 16);
+}
+
+function fromLocalDateTimeInput(value) {
+  const clean = String(value || '').trim();
+  if (!clean) return null;
+  const ts = new Date(clean);
+  if (!Number.isFinite(ts.getTime())) return null;
+  return ts.toISOString();
+}
+
+function pruneQueueSelection() {
+  const validIds = new Set((state.queue || []).map((item) => item.id));
+  state.queuePlanner.selectedIds.forEach((id) => {
+    if (!validIds.has(id)) state.queuePlanner.selectedIds.delete(id);
+  });
+}
+
+function syncQueueSelectionControls() {
+  const selectAll = byId('queue-select-all');
+  if (selectAll) {
+    const rows = getFilteredQueueRows();
+    const selectableIds = rows.map((item) => item.id);
+    const selectedCount = selectableIds.filter((id) => state.queuePlanner.selectedIds.has(id)).length;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < selectableIds.length;
+    selectAll.checked = selectableIds.length > 0 && selectedCount === selectableIds.length;
+  }
+
+  const clearBtn = byId('queue-bulk-clear-btn');
+  if (clearBtn) {
+    clearBtn.textContent = `Clear Selection (${state.queuePlanner.selectedIds.size})`;
+  }
+}
+
+function handleQueueSelectAll(event) {
+  const checked = !!event?.target?.checked;
+  const rows = getFilteredQueueRows();
+  rows.forEach((item) => {
+    if (checked) state.queuePlanner.selectedIds.add(item.id);
+    else state.queuePlanner.selectedIds.delete(item.id);
+  });
+  renderQueueList();
+}
+
+function clearQueueSelection() {
+  state.queuePlanner.selectedIds.clear();
+  renderQueueList();
+}
+
+function updateQueueBulkControls() {
+  const action = byId('queue-bulk-action')?.value || 'priority';
+  const priorityField = byId('queue-bulk-priority');
+  const scheduleField = byId('queue-bulk-schedule');
+  if (priorityField) priorityField.disabled = action !== 'priority';
+  if (scheduleField) scheduleField.disabled = action !== 'schedule';
+}
+
+async function applyQueueBulkAction() {
+  const ids = Array.from(state.queuePlanner.selectedIds);
+  if (!ids.length) {
+    showToast('Select at least one queue item first.', 'warn');
     return;
   }
 
-  list.innerHTML = rows
-    .slice(0, 15)
-    .map((item) => {
-      const thumb = `/api/queue/thumb/${encodeURIComponent(item.id)}`;
-      const title = escHtml(item.title || 'Untitled mission');
-      const meta = escHtml(item.sourceUrl || item.username || 'manual');
-      const status = String(item.status || 'pending');
-      const statusText = escHtml(status.toUpperCase());
-      const errorText = item.error ? `<div class="item-meta">${escHtml(item.error)}</div>` : '';
-      const addedAt = item.addedAt ? formatDateTime12h(item.addedAt) : '';
-      const dateText = addedAt ? `<div class="item-meta">${escHtml(addedAt)}</div>` : '';
+  const action = byId('queue-bulk-action')?.value || 'priority';
+  try {
+    if (action === 'remove') {
+      if (!window.confirm(`Remove ${ids.length} selected queue item(s)?`)) return;
+      const response = await apiRequest('/api/queue/bulk-remove', {
+        method: 'POST',
+        body: { ids },
+      });
+      showToast(response.message || 'Selected queue items removed.', 'success');
+      state.queuePlanner.selectedIds.clear();
+      await refreshAll({ force: true });
+      return;
+    }
 
-      const actionBtns = status === 'pending' || status === 'failed'
-        ? `
-          <button class="pill-btn" onclick="handlePromoteQueueItem('${escAttr(item.id)}')">Post Now</button>
-          <button class="pill-btn btn-danger-text" onclick="handleRemoveQueueItem('${escAttr(item.id)}')">Remove</button>
-        `
-        : '';
+    let patch = {};
+    if (action === 'priority') {
+      patch.priority = byId('queue-bulk-priority')?.value || 'normal';
+    } else if (action === 'schedule') {
+      patch.scheduledAfter = fromLocalDateTimeInput(byId('queue-bulk-schedule')?.value || '');
+      if (!patch.scheduledAfter) {
+        showToast('Select a valid schedule time for bulk scheduling.', 'warn');
+        return;
+      }
+    } else if (action === 'clear_schedule') {
+      patch.scheduledAfter = null;
+    }
 
-      return `
-        <div class="list-item">
-          <div class="list-item-main">
-            <img class="thumb-img" src="${escAttr(thumb)}" alt="Queue item">
-            <div>
-              <div class="item-title">${title}</div>
-              <div class="item-meta">${meta}</div>
-              ${dateText}
-              ${errorText}
-            </div>
-          </div>
-          <div class="item-actions">
-            <span class="badge status-${escHtml(status)}">${statusText}</span>
-            ${actionBtns}
-          </div>
-        </div>
-      `;
-    })
-    .join('');
+    const response = await apiRequest('/api/queue/bulk-update', {
+      method: 'POST',
+      body: { ids, patch },
+    });
+    showToast(response.message || 'Bulk queue update applied.', 'success');
+    await refreshAll({ force: true });
+  } catch (error) {
+    showToast(error.message || 'Bulk queue action failed.', 'error');
+  }
+}
+
+async function updateQueueItemPatch(id, patch) {
+  try {
+    await apiRequest(`/api/queue/item/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+
+    state.queue = state.queue.map((item) => (
+      item.id === id
+        ? {
+          ...item,
+          ...patch,
+          priority: Object.prototype.hasOwnProperty.call(patch, 'priority')
+            ? normalizeQueuePriority(patch.priority)
+            : normalizeQueuePriority(item.priority),
+          scheduledAfter: Object.prototype.hasOwnProperty.call(patch, 'scheduledAfter')
+            ? (patch.scheduledAfter || null)
+            : (item.scheduledAfter || null),
+        }
+        : item
+    ));
+
+    renderQueueList();
+    renderMiniQueue();
+  } catch (error) {
+    showToast(error.message || 'Queue item update failed.', 'error');
+    await refreshAll({ force: true });
+  }
+}
+
+async function reorderQueueByDrag(dragId, targetId) {
+  const fromIndex = state.queue.findIndex((item) => item.id === dragId);
+  const toIndex = state.queue.findIndex((item) => item.id === targetId);
+  if (fromIndex === -1 || toIndex === -1) return;
+
+  const updated = [...state.queue];
+  const [moved] = updated.splice(fromIndex, 1);
+  updated.splice(toIndex, 0, moved);
+  state.queue = updated;
+  renderQueueList();
+
+  try {
+    await apiRequest('/api/queue/reorder', {
+      method: 'POST',
+      body: { orderedIds: updated.map((item) => item.id) },
+    });
+  } catch (error) {
+    showToast(error.message || 'Queue reorder failed.', 'error');
+    await refreshAll({ force: true });
+  }
 }
 
 function renderMiniQueue() {
@@ -936,8 +1403,8 @@ function renderHistoryList() {
     return;
   }
 
-  list.innerHTML = rows
-    .slice(0, 10)
+  const virtual = getVirtualWindow(list, rows, 'history');
+  const itemsHtml = virtual.items
     .map((item) => {
       const status = item.status || 'preview';
       const title = escHtml(item.aiContent?.title || 'Untitled post');
@@ -970,6 +1437,11 @@ function renderHistoryList() {
       `;
     })
     .join('');
+
+  const topSpacer = virtual.top > 0 ? `<div class="virtual-spacer" style="height:${virtual.top}px"></div>` : '';
+  const bottomSpacer = virtual.bottom > 0 ? `<div class="virtual-spacer" style="height:${virtual.bottom}px"></div>` : '';
+  list.innerHTML = `${topSpacer}${itemsHtml}${bottomSpacer}`;
+  bindVirtualScroll(list, 'history', renderHistoryList);
 }
 
 async function loadEngagements() {
@@ -1245,11 +1717,13 @@ async function retryFailed() {
 }
 
 async function clearQueue() {
-  if (!window.confirm('Clear all queue items?')) return;
+  if (!window.confirm('Clear all queue items? A safety snapshot will be created first.')) return;
   try {
+    await createQueueSnapshot('pre-clear');
     const response = await apiRequest('/api/queue', { method: 'DELETE' });
     showToast(response.message || 'Queue cleared.', 'success');
     state.queue = [];
+    state.queuePlanner.selectedIds.clear();
     renderQueueList();
     renderMiniQueue();
     await refreshOverview();
@@ -1259,8 +1733,9 @@ async function clearQueue() {
 }
 
 async function clearHistory() {
-  if (!window.confirm('Clear all history entries?')) return;
+  if (!window.confirm('Clear all history entries? A safety snapshot will be created first.')) return;
   try {
+    await createHistorySnapshot('pre-clear');
     const response = await apiRequest('/api/history', { method: 'DELETE' });
     showToast(response.message || 'History cleared.', 'success');
     state.history = [];
@@ -1268,6 +1743,69 @@ async function clearHistory() {
     await refreshOverview();
   } catch (error) {
     showToast(error.message || 'Could not clear history.', 'error');
+  }
+}
+
+async function createQueueSnapshot(reason = 'manual') {
+  const response = await apiRequest('/api/queue/snapshots', {
+    method: 'POST',
+    body: {
+      label: `Queue Snapshot ${new Date().toLocaleString()}`,
+      reason,
+    },
+  });
+  if (reason === 'manual') {
+    showToast(response.message || 'Queue snapshot created.', 'success');
+  }
+  return response.snapshot;
+}
+
+async function restoreLatestQueueSnapshot() {
+  try {
+    const response = await apiRequest('/api/queue/snapshots');
+    const latest = Array.isArray(response.snapshots) ? response.snapshots[0] : null;
+    if (!latest) {
+      showToast('No queue snapshot found to restore.', 'warn');
+      return;
+    }
+    if (!window.confirm(`Restore queue snapshot from ${formatDateTime12h(latest.createdAt)}?`)) return;
+    const restore = await apiRequest(`/api/queue/snapshots/${encodeURIComponent(latest.id)}/restore`, { method: 'POST' });
+    showToast(restore.message || 'Queue snapshot restored.', 'success');
+    state.queuePlanner.selectedIds.clear();
+    await refreshAll({ force: true });
+  } catch (error) {
+    showToast(error.message || 'Failed to restore queue snapshot.', 'error');
+  }
+}
+
+async function createHistorySnapshot(reason = 'manual') {
+  const response = await apiRequest('/api/history/snapshots', {
+    method: 'POST',
+    body: {
+      label: `History Snapshot ${new Date().toLocaleString()}`,
+      reason,
+    },
+  });
+  if (reason === 'manual') {
+    showToast(response.message || 'History snapshot created.', 'success');
+  }
+  return response.snapshot;
+}
+
+async function restoreLatestHistorySnapshot() {
+  try {
+    const response = await apiRequest('/api/history/snapshots');
+    const latest = Array.isArray(response.snapshots) ? response.snapshots[0] : null;
+    if (!latest) {
+      showToast('No history snapshot found to restore.', 'warn');
+      return;
+    }
+    if (!window.confirm(`Restore history snapshot from ${formatDateTime12h(latest.createdAt)}?`)) return;
+    const restore = await apiRequest(`/api/history/snapshots/${encodeURIComponent(latest.id)}/restore`, { method: 'POST' });
+    showToast(restore.message || 'History snapshot restored.', 'success');
+    await refreshAll({ force: true });
+  } catch (error) {
+    showToast(error.message || 'Failed to restore history snapshot.', 'error');
   }
 }
 
@@ -1562,6 +2100,7 @@ function resetPreviewMedia() {
     scrollBtn.classList.add('hidden');
     scrollBtn.textContent = 'No Scroll: Off';
   }
+  renderActionDockState();
 }
 
 function normalizeEngagementEntry(entry = {}) {
@@ -1607,6 +2146,264 @@ function getEngagementActionIcon(action) {
   if (lower.includes('post')) return 'send';
   if (lower.includes('extract')) return 'scissors';
   return 'activity';
+}
+
+function renderAlertCenter(pinterestStatus = {}, systemStatus = {}) {
+  const list = byId('alert-center-list');
+  const countBadge = byId('alert-center-count');
+  if (!list || !countBadge) return;
+
+  const alerts = [];
+  const pendingCount = state.queue.filter((item) => ['pending', 'processing'].includes(String(item.status || '').toLowerCase())).length;
+  const failedQueueCount = state.queue.filter((item) => ['failed', 'error'].includes(String(item.status || '').toLowerCase())).length;
+  const failedHistoryCount = state.history.filter((item) => ['failed', 'error'].includes(String(item.status || '').toLowerCase())).length;
+
+  if (!pinterestStatus.connected && !pinterestStatus.sessionLinked) {
+    alerts.push({
+      level: 'error',
+      title: 'Pinterest account is not connected',
+      subtitle: 'Link API token or session cookie to publish successfully.',
+      actionLabel: 'Open Settings',
+      action: () => switchTab('settings'),
+    });
+  }
+
+  if (failedQueueCount > 0) {
+    alerts.push({
+      level: 'warn',
+      title: `${failedQueueCount} failed queue item(s) need attention`,
+      subtitle: 'Review failures, retry, or remove problematic missions.',
+      actionLabel: 'Open Queue',
+      action: () => {
+        switchTab('queue');
+        const statusFilter = byId('queue-status-filter');
+        if (statusFilter) statusFilter.value = 'failed';
+        renderQueueList();
+      },
+    });
+  }
+
+  if (failedHistoryCount > 0) {
+    alerts.push({
+      level: 'warn',
+      title: `${failedHistoryCount} failed history entry(s) detected`,
+      subtitle: 'Inspect posting errors and verify account/session health.',
+      actionLabel: 'Open History',
+      action: () => {
+        switchTab('history');
+        const statusFilter = byId('history-status-filter');
+        if (statusFilter) statusFilter.value = 'error';
+        renderHistoryList();
+      },
+    });
+  }
+
+  if (pendingCount >= 25) {
+    alerts.push({
+      level: 'info',
+      title: `Queue backlog is high (${pendingCount} pending)`,
+      subtitle: 'Consider running queue bot now or prioritizing urgent missions.',
+      actionLabel: 'Run Bot',
+      action: () => processQueueNow(),
+    });
+  }
+
+  if (state.performance.enabled) {
+    alerts.push({
+      level: 'info',
+      title: 'Performance mode is enabled',
+      subtitle: 'Animations are reduced and refreshes are throttled for smoother UX.',
+      actionLabel: 'Disable',
+      action: () => applyPerformanceMode(false, { persist: true, notify: true }),
+    });
+  }
+
+  if (!alerts.length) {
+    alerts.push({
+      level: 'info',
+      title: 'All systems nominal',
+      subtitle: `Runtime ${systemStatus?.runtime?.isServerless ? 'Cloud' : 'Local'} and queue health look good.`,
+      actionLabel: 'Refresh',
+      action: () => refreshAll({ force: true }),
+    });
+  }
+
+  state.alerts = alerts;
+  countBadge.textContent = `${alerts.length} ALERT${alerts.length === 1 ? '' : 'S'}`;
+
+  list.innerHTML = alerts.map((alert, index) => `
+    <div class="alert-item alert-${escAttr(alert.level)}" data-alert-index="${index}">
+      <div class="alert-item-main">
+        <div class="alert-item-title">${escHtml(alert.title)}</div>
+        <div class="alert-item-sub">${escHtml(alert.subtitle)}</div>
+      </div>
+      <button class="pill-btn" type="button" data-alert-action="${index}">${escHtml(alert.actionLabel || 'Open')}</button>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('[data-alert-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number(button.getAttribute('data-alert-action'));
+      const alert = state.alerts[index];
+      if (alert && typeof alert.action === 'function') alert.action();
+    });
+  });
+}
+
+function renderActionDockState() {
+  const postBtn = byId('dock-post-btn');
+  const queueBtn = byId('dock-queue-btn');
+  if (postBtn) postBtn.disabled = !state.lastExtracted;
+  if (queueBtn) queueBtn.disabled = !state.lastExtracted;
+}
+
+function getCommandItems() {
+  return [
+    { title: 'Open Dashboard', meta: 'Tab', run: () => switchTab('dashboard') },
+    { title: 'Open Queue', meta: 'Tab', run: () => switchTab('queue') },
+    { title: 'Open Pinterest Builder', meta: 'Tab', run: () => switchTab('pinterest') },
+    { title: 'Open History', meta: 'Tab', run: () => switchTab('history') },
+    { title: 'Open Settings', meta: 'Tab', run: () => switchTab('settings') },
+    { title: 'Refresh Everything', meta: 'Action', run: () => refreshAll({ force: true }) },
+    { title: 'Run Queue Bot', meta: 'Action', run: () => processQueueNow() },
+    { title: 'Retry Failed Queue Items', meta: 'Action', run: () => retryFailed() },
+    { title: 'Toggle Performance Mode', meta: 'System', run: () => applyPerformanceMode(!state.performance.enabled, { persist: true, notify: true }) },
+    { title: 'Cycle Visual Theme', meta: 'System', run: () => handleVisualModeToggle() },
+    { title: 'Create Queue Snapshot', meta: 'Safety', run: () => createQueueSnapshot('manual') },
+    { title: 'Restore Latest Queue Snapshot', meta: 'Safety', run: () => restoreLatestQueueSnapshot() },
+    { title: 'Create History Snapshot', meta: 'Safety', run: () => createHistorySnapshot('manual') },
+    { title: 'Restore Latest History Snapshot', meta: 'Safety', run: () => restoreLatestHistorySnapshot() },
+  ];
+}
+
+function initCommandPalette() {
+  const input = byId('command-input');
+  if (input) {
+    input.addEventListener('input', renderCommandResults);
+    input.addEventListener('keydown', handleCommandInputKeydown);
+  }
+}
+
+function openCommandPalette() {
+  const root = byId('command-palette');
+  const input = byId('command-input');
+  if (!root || !input) return;
+  root.classList.remove('hidden');
+  state.commandPalette.open = true;
+  state.commandPalette.activeIndex = 0;
+  input.value = '';
+  renderCommandResults();
+  setTimeout(() => input.focus(), 0);
+}
+
+function closeCommandPalette() {
+  const root = byId('command-palette');
+  if (!root) return;
+  root.classList.add('hidden');
+  state.commandPalette.open = false;
+}
+
+function renderCommandResults() {
+  const resultsEl = byId('command-results');
+  const input = byId('command-input');
+  if (!resultsEl || !input) return;
+
+  const query = String(input.value || '').trim().toLowerCase();
+  const all = getCommandItems();
+  const results = all.filter((item) => {
+    if (!query) return true;
+    return `${item.title} ${item.meta}`.toLowerCase().includes(query);
+  });
+
+  state.commandPalette.results = results;
+  if (state.commandPalette.activeIndex >= results.length) state.commandPalette.activeIndex = 0;
+
+  if (!results.length) {
+    resultsEl.innerHTML = '<div class="pulse-item">No command found.</div>';
+    return;
+  }
+
+  resultsEl.innerHTML = results.map((item, index) => `
+    <button class="command-item ${index === state.commandPalette.activeIndex ? 'active' : ''}" type="button" data-command-index="${index}">
+      <span>
+        <span class="command-item-title">${escHtml(item.title)}</span>
+        <span class="command-item-meta">${escHtml(item.meta)}</span>
+      </span>
+      <span class="badge">${index === state.commandPalette.activeIndex ? 'ENTER' : ''}</span>
+    </button>
+  `).join('');
+
+  resultsEl.querySelectorAll('[data-command-index]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number(button.getAttribute('data-command-index'));
+      runPaletteCommand(index);
+    });
+  });
+}
+
+function handleCommandInputKeydown(event) {
+  if (!state.commandPalette.open) return;
+  const max = state.commandPalette.results.length - 1;
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    state.commandPalette.activeIndex = Math.min(max, state.commandPalette.activeIndex + 1);
+    renderCommandResults();
+    return;
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    state.commandPalette.activeIndex = Math.max(0, state.commandPalette.activeIndex - 1);
+    renderCommandResults();
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    runPaletteCommand(state.commandPalette.activeIndex);
+    return;
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeCommandPalette();
+  }
+}
+
+function runPaletteCommand(index) {
+  const item = state.commandPalette.results[index];
+  if (!item) return;
+  closeCommandPalette();
+  try {
+    item.run();
+  } catch (error) {
+    showToast(error.message || 'Command failed.', 'error');
+  }
+}
+
+function handleGlobalKeyDown(event) {
+  const isEditable = ['INPUT', 'TEXTAREA'].includes(event.target?.tagName) || event.target?.isContentEditable;
+  if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'k') {
+    event.preventDefault();
+    if (state.commandPalette.open) closeCommandPalette();
+    else openCommandPalette();
+    return;
+  }
+
+  if (event.key === 'Escape' && state.commandPalette.open) {
+    event.preventDefault();
+    closeCommandPalette();
+    return;
+  }
+
+  if (isEditable) return;
+
+  if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'z') {
+    event.preventDefault();
+    undoAutosaveSnapshot();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'y') {
+    event.preventDefault();
+    redoAutosaveSnapshot();
+  }
 }
 
 function hydrateIcons() {
@@ -1719,6 +2516,160 @@ function updateComposerMeta() {
   } else {
     setInputMetaState('field-link-meta', 'Valid destination URL.', 'success');
   }
+}
+
+function getAutosaveFieldIds() {
+  return [
+    'reel-url',
+    'field-title',
+    'field-desc',
+    'field-link',
+    'field-alt',
+    'x-field-text',
+    'session-cookie',
+    'x-session-cookie',
+    'ig-session-cookie',
+    'engage-niche',
+    'engage-count-manual',
+    'x-engage-count',
+    'new-channel-input',
+  ];
+}
+
+function readAutosaveValues() {
+  const values = {};
+  getAutosaveFieldIds().forEach((id) => {
+    const el = byId(id);
+    if (!el) return;
+    values[id] = String(el.value ?? '');
+  });
+  return values;
+}
+
+function writeAutosaveValues(values = {}) {
+  state.autosave.applying = true;
+  getAutosaveFieldIds().forEach((id) => {
+    const el = byId(id);
+    if (!el) return;
+    if (Object.prototype.hasOwnProperty.call(values, id)) {
+      el.value = String(values[id] ?? '');
+    }
+  });
+  state.autosave.applying = false;
+
+  updateComposerMeta();
+  if (typeof window.updateXTextMeta === 'function') {
+    try { window.updateXTextMeta(); } catch {}
+  }
+
+  const manualCount = byId('engage-count-manual');
+  const dashboardCount = byId('engage-count');
+  if (manualCount && dashboardCount) dashboardCount.value = manualCount.value;
+  setText('engage-count-value', manualCount?.value || '');
+  setText('engage-count-value-dashboard', dashboardCount?.value || manualCount?.value || '');
+}
+
+function snapshotHash(values) {
+  return JSON.stringify(values);
+}
+
+function updateAutosaveStatus(text, tone = '') {
+  const status = byId('autosave-status');
+  if (!status) return;
+  status.textContent = text;
+  status.className = 'input-meta';
+  if (tone) status.classList.add(tone);
+}
+
+function persistAutosave() {
+  const payload = {
+    values: readAutosaveValues(),
+    undoStack: state.autosave.undoStack.slice(-AUTOSAVE_MAX_STACK),
+    redoStack: state.autosave.redoStack.slice(-AUTOSAVE_MAX_STACK),
+    savedAt: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function pushAutosaveSnapshot(values, label = 'Saved') {
+  const hash = snapshotHash(values);
+  const previous = state.autosave.undoStack[state.autosave.undoStack.length - 1];
+  if (previous && snapshotHash(previous.values) === hash) return;
+
+  state.autosave.undoStack.push({
+    values,
+    at: Date.now(),
+  });
+  if (state.autosave.undoStack.length > AUTOSAVE_MAX_STACK) {
+    state.autosave.undoStack = state.autosave.undoStack.slice(-AUTOSAVE_MAX_STACK);
+  }
+  state.autosave.redoStack = [];
+  persistAutosave();
+  updateAutosaveStatus(`${label} ${formatTime12h(new Date())}`, 'success');
+}
+
+function handleAutosaveTrackedInput() {
+  if (state.autosave.applying) return;
+  if (state.autosave.timer) clearTimeout(state.autosave.timer);
+  state.autosave.timer = setTimeout(() => {
+    const values = readAutosaveValues();
+    pushAutosaveSnapshot(values, 'Autosaved');
+  }, 300);
+}
+
+function initAutosaveSystem() {
+  let payload = null;
+  try {
+    payload = JSON.parse(localStorage.getItem(AUTOSAVE_STORAGE_KEY) || 'null');
+  } catch {
+    payload = null;
+  }
+
+  if (payload && payload.values && typeof payload.values === 'object') {
+    writeAutosaveValues(payload.values);
+  }
+
+  state.autosave.undoStack = Array.isArray(payload?.undoStack) ? payload.undoStack.slice(-AUTOSAVE_MAX_STACK) : [];
+  state.autosave.redoStack = Array.isArray(payload?.redoStack) ? payload.redoStack.slice(-AUTOSAVE_MAX_STACK) : [];
+
+  if (!state.autosave.undoStack.length) {
+    pushAutosaveSnapshot(readAutosaveValues(), 'Autosave baseline');
+  } else {
+    updateAutosaveStatus(`Restored ${formatTime12h(payload?.savedAt || new Date())}`, 'success');
+  }
+}
+
+function undoAutosaveSnapshot() {
+  if (state.autosave.undoStack.length <= 1) {
+    showToast('No more undo history.', 'info');
+    return;
+  }
+
+  const current = state.autosave.undoStack.pop();
+  if (current) state.autosave.redoStack.push(current);
+  const previous = state.autosave.undoStack[state.autosave.undoStack.length - 1];
+  if (!previous) return;
+  writeAutosaveValues(previous.values || {});
+  persistAutosave();
+  updateAutosaveStatus(`Undo ${formatTime12h(new Date())}`, 'warn');
+}
+
+function redoAutosaveSnapshot() {
+  if (!state.autosave.redoStack.length) {
+    showToast('No redo history.', 'info');
+    return;
+  }
+
+  const next = state.autosave.redoStack.pop();
+  if (!next) return;
+  state.autosave.undoStack.push(next);
+  writeAutosaveValues(next.values || {});
+  persistAutosave();
+  updateAutosaveStatus(`Redo ${formatTime12h(new Date())}`, 'warn');
 }
 
 function countWords(text) {

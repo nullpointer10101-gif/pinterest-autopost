@@ -144,6 +144,46 @@ router.delete('/history', async (req, res) => {
   }
 });
 
+router.get('/history/snapshots', async (req, res) => {
+  try {
+    const snapshots = await historyService.listSnapshots('history');
+    res.json({ success: true, snapshots });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/history/snapshots', async (req, res) => {
+  try {
+    const history = await historyService.getAll();
+    const snapshot = await historyService.createSnapshot(
+      'history',
+      { items: history },
+      {
+        label: req.body?.label || 'History Snapshot',
+        reason: req.body?.reason || 'manual',
+      }
+    );
+    res.json({ success: true, snapshot, message: `History snapshot saved (${snapshot.count} items).` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/history/snapshots/:id/restore', async (req, res) => {
+  try {
+    const snapshot = await historyService.getSnapshot('history', req.params.id);
+    if (!snapshot) {
+      return res.status(404).json({ success: false, error: 'History snapshot not found.' });
+    }
+
+    await historyService.setPostsData(Array.isArray(snapshot.items) ? snapshot.items : []);
+    res.json({ success: true, restoredCount: snapshot.count || 0, message: 'History restored from snapshot.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/engagements', async (req, res) => {
   try {
     const engagements = await historyService.getEngagements();

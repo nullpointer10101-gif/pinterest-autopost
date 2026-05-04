@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const queueService = require('../services/queueService');
+const historyService = require('../services/historyService');
 const githubService = require('../services/githubService');
 const instagramService = require('../services/instagramService');
 const axios = require('axios');
@@ -129,11 +130,18 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Non-empty items array is required' });
     }
     const added = await queueService.addToQueue(items);
-    
-    // Fire instant mission immediately — no waiting
-    githubService.triggerInstantMission().catch(() => {});
+    if (added.length > 0) {
+      // Fire instant mission immediately when new items were added.
+      githubService.triggerInstantMission().catch(() => {});
+    }
 
-    res.json({ success: true, added, message: `Added ${added.length} item(s) to queue. GitHub Bot fired!` });
+    res.json({
+      success: true,
+      added,
+      message: added.length > 0
+        ? `Added ${added.length} item(s) to queue. GitHub Bot fired!`
+        : 'No new queue items added (duplicates skipped).',
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -178,6 +186,87 @@ router.post('/process', async (req, res) => {
   }
 });
 
+router.post('/reorder', async (req, res) => {
+  try {
+    const orderedIds = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds : [];
+    const queue = await queueService.reorderQueue(orderedIds);
+    res.json({ success: true, queue, message: 'Queue order updated.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.patch('/item/:id', async (req, res) => {
+  try {
+    const patch = req.body || {};
+    const updated = await queueService.updateQueueItem(req.params.id, patch);
+    res.json({ success: true, item: updated, message: 'Queue item updated.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/bulk-update', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const patch = req.body?.patch || {};
+    const result = await queueService.bulkUpdateQueue(ids, patch);
+    res.json({ success: true, ...result, message: `Updated ${result.changed} queue item(s).` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/bulk-remove', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const result = await queueService.bulkRemoveQueue(ids);
+    res.json({ success: true, ...result, message: `Removed ${result.removed} queue item(s).` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/snapshots', async (req, res) => {
+  try {
+    const snapshots = await historyService.listSnapshots('queue');
+    res.json({ success: true, snapshots });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/snapshots', async (req, res) => {
+  try {
+    const queue = await queueService.getQueue();
+    const snapshot = await historyService.createSnapshot(
+      'queue',
+      { items: queue },
+      {
+        label: req.body?.label || 'Queue Snapshot',
+        reason: req.body?.reason || 'manual',
+      }
+    );
+    res.json({ success: true, snapshot, message: `Queue snapshot saved (${snapshot.count} items).` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/snapshots/:id/restore', async (req, res) => {
+  try {
+    const snapshot = await historyService.getSnapshot('queue', req.params.id);
+    if (!snapshot) {
+      return res.status(404).json({ success: false, error: 'Queue snapshot not found.' });
+    }
+
+    await queueService.saveQueue(Array.isArray(snapshot.items) ? snapshot.items : []);
+    res.json({ success: true, restoredCount: snapshot.count || 0, message: 'Queue restored from snapshot.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     await queueService.removeItem(req.params.id);
@@ -199,4 +288,3 @@ router.post('/promote/:id', async (req, res) => {
 });
 
 module.exports = router;
-

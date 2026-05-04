@@ -50,6 +50,7 @@ function updateXTextMeta() {
     meta.textContent = `${el.value.length}/280 chars`;
   }
 }
+window.updateXTextMeta = updateXTextMeta;
 
 async function refreshXData() {
   try {
