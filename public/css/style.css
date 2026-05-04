@@ -43,6 +43,14 @@
   --shadow-md: 0 16px 36px rgba(3, 10, 20, 0.42);
   --shadow-lg: 0 28px 52px rgba(2, 8, 18, 0.5);
 
+  --glow-cursor: rgba(54, 161, 255, 0.17);
+  --glow-left: rgba(79, 107, 255, 0.18);
+  --glow-right: rgba(32, 212, 197, 0.14);
+  --scene-a: rgba(79, 107, 255, 0.3);
+  --scene-b: rgba(32, 212, 197, 0.24);
+  --grid-line: rgba(121, 159, 219, 0.07);
+  --bg-angle: 180deg;
+
   --card-pad: clamp(14px, 2vw, 22px);
   --ring: 0 0 0 2px rgba(54, 161, 255, 0.38);
 }
@@ -82,7 +90,153 @@ body[data-visual-mode="light"] {
   --shadow-md: 0 14px 32px rgba(24, 56, 93, 0.16);
   --shadow-lg: 0 24px 48px rgba(24, 56, 93, 0.19);
 
+  --glow-cursor: rgba(14, 126, 242, 0.16);
+  --glow-left: rgba(63, 87, 223, 0.18);
+  --glow-right: rgba(9, 159, 141, 0.14);
+  --scene-a: rgba(63, 87, 223, 0.28);
+  --scene-b: rgba(9, 159, 141, 0.24);
+  --grid-line: rgba(63, 97, 149, 0.09);
+  --bg-angle: 180deg;
+
   --ring: 0 0 0 2px rgba(14, 126, 242, 0.34);
+}
+
+body[data-visual-mode="neon"] {
+  color-scheme: dark;
+
+  --bg-0: #060014;
+  --bg-1: #0d0222;
+  --bg-2: #140533;
+  --bg-3: #1a0a43;
+
+  --surface-0: rgba(20, 10, 42, 0.86);
+  --surface-1: rgba(25, 12, 52, 0.92);
+  --surface-2: rgba(31, 15, 66, 0.96);
+  --surface-raised: rgba(36, 17, 74, 0.95);
+
+  --line-weak: rgba(199, 139, 255, 0.16);
+  --line: rgba(178, 126, 255, 0.28);
+  --line-strong: rgba(153, 202, 255, 0.44);
+
+  --text: #f4ecff;
+  --text-strong: #ffffff;
+  --text-mid: #e2cbff;
+  --text-soft: #bda4e2;
+
+  --accent: #d93dff;
+  --accent-strong: #a323e0;
+  --accent-2: #00e8ff;
+  --accent-3: #7f5bff;
+
+  --good: #39eec7;
+  --warn: #f6ba4b;
+  --bad: #ff6f9c;
+
+  --shadow-sm: 0 8px 24px rgba(10, 2, 24, 0.34);
+  --shadow-md: 0 16px 38px rgba(10, 3, 26, 0.46);
+  --shadow-lg: 0 30px 56px rgba(8, 2, 23, 0.54);
+
+  --glow-cursor: rgba(217, 61, 255, 0.2);
+  --glow-left: rgba(127, 91, 255, 0.22);
+  --glow-right: rgba(0, 232, 255, 0.18);
+  --scene-a: rgba(127, 91, 255, 0.34);
+  --scene-b: rgba(0, 232, 255, 0.28);
+  --grid-line: rgba(178, 126, 255, 0.1);
+  --bg-angle: 178deg;
+
+  --ring: 0 0 0 2px rgba(217, 61, 255, 0.42);
+}
+
+body[data-visual-mode="graphite"] {
+  color-scheme: dark;
+
+  --bg-0: #0e1116;
+  --bg-1: #141921;
+  --bg-2: #1a2230;
+  --bg-3: #232e3f;
+
+  --surface-0: rgba(26, 34, 48, 0.86);
+  --surface-1: rgba(30, 40, 56, 0.92);
+  --surface-2: rgba(35, 46, 66, 0.96);
+  --surface-raised: rgba(39, 52, 74, 0.95);
+
+  --line-weak: rgba(154, 175, 205, 0.15);
+  --line: rgba(144, 169, 203, 0.24);
+  --line-strong: rgba(157, 186, 226, 0.38);
+
+  --text: #e8eef8;
+  --text-strong: #ffffff;
+  --text-mid: #c8d4e7;
+  --text-soft: #9eb0ca;
+
+  --accent: #5aa2ff;
+  --accent-strong: #3c7cd5;
+  --accent-2: #74c6ff;
+  --accent-3: #8b97ab;
+
+  --good: #4cd4af;
+  --warn: #f0bd66;
+  --bad: #ff8197;
+
+  --shadow-sm: 0 8px 22px rgba(10, 14, 20, 0.34);
+  --shadow-md: 0 16px 34px rgba(9, 13, 19, 0.44);
+  --shadow-lg: 0 30px 54px rgba(8, 11, 17, 0.52);
+
+  --glow-cursor: rgba(90, 162, 255, 0.16);
+  --glow-left: rgba(116, 198, 255, 0.14);
+  --glow-right: rgba(139, 151, 171, 0.18);
+  --scene-a: rgba(116, 198, 255, 0.24);
+  --scene-b: rgba(139, 151, 171, 0.24);
+  --grid-line: rgba(153, 173, 203, 0.09);
+  --bg-angle: 186deg;
+
+  --ring: 0 0 0 2px rgba(90, 162, 255, 0.38);
+}
+
+body[data-visual-mode="aurora"] {
+  color-scheme: dark;
+
+  --bg-0: #031118;
+  --bg-1: #05202c;
+  --bg-2: #072a39;
+  --bg-3: #0d3848;
+
+  --surface-0: rgba(7, 38, 51, 0.86);
+  --surface-1: rgba(9, 45, 60, 0.92);
+  --surface-2: rgba(12, 55, 72, 0.96);
+  --surface-raised: rgba(13, 62, 81, 0.95);
+
+  --line-weak: rgba(104, 189, 203, 0.16);
+  --line: rgba(97, 177, 197, 0.24);
+  --line-strong: rgba(116, 206, 214, 0.39);
+
+  --text: #e5f9ff;
+  --text-strong: #ffffff;
+  --text-mid: #b8e2ee;
+  --text-soft: #8fbecf;
+
+  --accent: #1fa4ff;
+  --accent-strong: #1174cb;
+  --accent-2: #30e0b2;
+  --accent-3: #52c3ff;
+
+  --good: #2fe2b5;
+  --warn: #e7c767;
+  --bad: #ff7f95;
+
+  --shadow-sm: 0 8px 24px rgba(3, 20, 27, 0.34);
+  --shadow-md: 0 16px 36px rgba(2, 17, 24, 0.44);
+  --shadow-lg: 0 30px 56px rgba(2, 15, 22, 0.52);
+
+  --glow-cursor: rgba(47, 179, 255, 0.18);
+  --glow-left: rgba(31, 164, 255, 0.2);
+  --glow-right: rgba(48, 224, 178, 0.17);
+  --scene-a: rgba(31, 164, 255, 0.31);
+  --scene-b: rgba(48, 224, 178, 0.28);
+  --grid-line: rgba(112, 192, 209, 0.1);
+  --bg-angle: 176deg;
+
+  --ring: 0 0 0 2px rgba(31, 164, 255, 0.4);
 }
 
 *,
@@ -103,10 +257,10 @@ body {
   line-height: 1.5;
   letter-spacing: 0.01em;
   background:
-    radial-gradient(1300px 600px at var(--cursor-x) var(--cursor-y), rgba(54, 161, 255, 0.17), transparent 60%),
-    radial-gradient(800px 460px at 12% -8%, rgba(79, 107, 255, 0.18), transparent 65%),
-    radial-gradient(760px 420px at 92% -10%, rgba(32, 212, 197, 0.14), transparent 64%),
-    linear-gradient(180deg, var(--bg-2), var(--bg-1) 38%, var(--bg-0));
+    radial-gradient(1300px 600px at var(--cursor-x) var(--cursor-y), var(--glow-cursor), transparent 60%),
+    radial-gradient(800px 460px at 12% -8%, var(--glow-left), transparent 65%),
+    radial-gradient(760px 420px at 92% -10%, var(--glow-right), transparent 64%),
+    linear-gradient(var(--bg-angle), var(--bg-2), var(--bg-1) 38%, var(--bg-0));
   overflow-x: hidden;
 }
 
@@ -158,7 +312,7 @@ textarea {
   max-height: 900px;
   left: -22vw;
   top: -34vw;
-  background: radial-gradient(circle, rgba(79, 107, 255, 0.3), rgba(79, 107, 255, 0));
+  background: radial-gradient(circle, var(--scene-a), rgba(79, 107, 255, 0));
 }
 
 .scene-gradient-b {
@@ -168,15 +322,15 @@ textarea {
   max-height: 820px;
   right: -18vw;
   top: -32vw;
-  background: radial-gradient(circle, rgba(32, 212, 197, 0.24), rgba(32, 212, 197, 0));
+  background: radial-gradient(circle, var(--scene-b), rgba(32, 212, 197, 0));
 }
 
 .scene-grid {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(121, 159, 219, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(121, 159, 219, 0.07) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 44px 44px;
   mask-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.1) 75%);
 }

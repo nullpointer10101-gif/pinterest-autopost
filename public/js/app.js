@@ -30,10 +30,27 @@ const VISUAL_MODES = {
   dark: {
     label: 'Dark',
     themeColor: '#050b16',
+    icon: 'moon-star',
   },
   light: {
     label: 'Light',
     themeColor: '#edf3fb',
+    icon: 'sun-medium',
+  },
+  neon: {
+    label: 'Neon',
+    themeColor: '#0a0317',
+    icon: 'sparkles',
+  },
+  graphite: {
+    label: 'Graphite',
+    themeColor: '#121316',
+    icon: 'hexagon',
+  },
+  aurora: {
+    label: 'Aurora',
+    themeColor: '#07131f',
+    icon: 'atom',
   },
 };
 const PINTEREST_LIMITS = {
@@ -207,7 +224,7 @@ function applyVisualMode(mode, options = {}) {
     btn.setAttribute('title', `Switch visual mode (current: ${modeMeta.label})`);
     const icon = btn.querySelector('.btn-icon');
     if (icon) {
-      icon.setAttribute('data-lucide', resolvedMode === 'dark' ? 'moon-star' : 'sun-medium');
+      icon.setAttribute('data-lucide', modeMeta.icon || 'palette');
     }
   }
 
