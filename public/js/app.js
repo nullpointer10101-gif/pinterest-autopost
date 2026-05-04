@@ -90,17 +90,13 @@ const PINTEREST_LIMITS = {
 
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
-  initPerformanceMode();
   initVisualSystem();
-  initAutosaveSystem();
-  initCommandPalette();
   loadDrafts();
   switchTab('dashboard');
   startClock();
   refreshAll({ force: true });
   setAutoRefresh(true);
   updateComposerMeta();
-  renderActionDockState();
   hydrateIcons();
   window.addEventListener('beforeunload', () => {
     setPreviewScrollLock(false);
@@ -139,7 +135,6 @@ function bindEvents() {
   on('clear-engagements-btn', 'click', clearEngagements);
   on('manual-refresh-btn', 'click', () => refreshAll({ force: true }));
   on('visual-mode-btn', 'click', handleVisualModeToggle);
-  on('performance-mode-toggle', 'change', handlePerformanceToggle);
   on('hero-open-channels-btn', 'click', () => switchTab('channels'));
   on('hero-open-history-btn', 'click', () => switchTab('history'));
   on('hero-refresh-btn', 'click', () => refreshAll({ force: true }));
@@ -147,26 +142,6 @@ function bindEvents() {
   on('unlink-session-btn', 'click', unlinkSessionCookie);
   on('link-ig-session-btn', 'click', linkIgSession);
   on('add-channel-btn', 'click', handleAddChannel);
-  on('dock-refresh-btn', 'click', () => refreshAll({ force: true }));
-  on('dock-run-queue-btn', 'click', processQueueNow);
-  on('dock-queue-btn', 'click', handleQueue);
-  on('dock-post-btn', 'click', handlePostNow);
-  on('dock-command-btn', 'click', openCommandPalette);
-  on('command-close-btn', 'click', closeCommandPalette);
-
-  on('snapshot-queue-btn', 'click', createQueueSnapshot);
-  on('restore-queue-snapshot-btn', 'click', restoreLatestQueueSnapshot);
-  on('snapshot-history-btn', 'click', createHistorySnapshot);
-  on('restore-history-snapshot-btn', 'click', restoreLatestHistorySnapshot);
-
-  on('queue-priority-filter', 'change', renderQueueList);
-  on('queue-sort-mode', 'change', renderQueueList);
-  on('queue-select-all', 'change', handleQueueSelectAll);
-  on('queue-bulk-action', 'change', updateQueueBulkControls);
-  on('queue-bulk-apply-btn', 'click', applyQueueBulkAction);
-  on('queue-bulk-clear-btn', 'click', clearQueueSelection);
-  on('autosave-undo-btn', 'click', undoAutosaveSnapshot);
-  on('autosave-redo-btn', 'click', redoAutosaveSnapshot);
 
   on('auto-refresh-toggle', 'change', (event) => {
     setAutoRefresh(!!event.target.checked);
@@ -222,19 +197,6 @@ function bindEvents() {
   on('field-desc', 'input', updateComposerMeta);
   on('field-alt', 'input', updateComposerMeta);
   on('field-link', 'input', updateComposerMeta);
-  on('field-title', 'input', handleAutosaveTrackedInput);
-  on('field-desc', 'input', handleAutosaveTrackedInput);
-  on('field-link', 'input', handleAutosaveTrackedInput);
-  on('field-alt', 'input', handleAutosaveTrackedInput);
-  on('reel-url', 'input', handleAutosaveTrackedInput);
-  on('x-field-text', 'input', handleAutosaveTrackedInput);
-  on('session-cookie', 'input', handleAutosaveTrackedInput);
-  on('x-session-cookie', 'input', handleAutosaveTrackedInput);
-  on('ig-session-cookie', 'input', handleAutosaveTrackedInput);
-  on('engage-niche', 'change', handleAutosaveTrackedInput);
-  on('engage-count-manual', 'change', handleAutosaveTrackedInput);
-  on('x-engage-count', 'change', handleAutosaveTrackedInput);
-  on('new-channel-input', 'input', handleAutosaveTrackedInput);
 
   on('reel-url', 'keydown', (event) => {
     if (event.key === 'Enter') handleExtract();
@@ -252,11 +214,6 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', handleGlobalKeyDown);
-  document.addEventListener('click', (event) => {
-    if (event.target?.matches?.('[data-command-close="true"]')) closeCommandPalette();
-  });
-
-  updateQueueBulkControls();
 }
 
 function on(id, event, handler) {
@@ -398,7 +355,6 @@ function applyPerformanceMode(enabled, options = {}) {
 
   const autoEnabled = !!byId('auto-refresh-toggle')?.checked;
   setAutoRefresh(autoEnabled);
-  renderActionDockState();
   if (state.currentTab === 'queue') renderQueueList();
   if (state.currentTab === 'history') renderHistoryList();
 
@@ -449,7 +405,6 @@ function switchTab(tab) {
       if (typeof window.refreshXData === 'function') window.refreshXData();
   }
   if (tab === 'settings') loadDiagnostics();
-  renderActionDockState();
 }
 
 function startClock() {
@@ -560,7 +515,6 @@ async function refreshOverview() {
   updateStats(state.queue, state.history);
   updateConnectionBar(pinterestResp || {}, systemStatus || {});
   updateHealthDashboard(pinterestResp || {}, systemStatus || {});
-  renderAlertCenter(pinterestResp || {}, systemStatus || {});
   renderMiniQueue();
   renderDashboardHistory();
 
@@ -796,8 +750,6 @@ function showPreview(payload) {
 
   section.classList.remove('hidden');
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  renderActionDockState();
-  handleAutosaveTrackedInput();
 }
 
 async function handlePostNow() {
@@ -939,29 +891,23 @@ function renderQueueList() {
   if (!list) return;
 
   const rows = getFilteredQueueRows();
-  const virtual = getVirtualWindow(list, rows, 'queue');
-  const queueSortMode = String(byId('queue-sort-mode')?.value || 'manual');
-  const canDrag = queueSortMode === 'manual';
 
   if (!rows.length) {
     list.innerHTML = '<div class="pulse-item">No queue items match your filters.</div>';
-    syncQueueSelectionControls();
     return;
   }
 
-  const rowHtml = virtual.items.map((item) => {
+  list.innerHTML = rows.map((item) => {
     const thumb = `/api/queue/thumb/${encodeURIComponent(item.id)}`;
     const title = escHtml(item.title || 'Untitled mission');
     const meta = escHtml(item.sourceUrl || item.username || 'manual');
     const status = String(item.status || 'pending');
     const statusText = escHtml(status.toUpperCase());
     const priority = normalizeQueuePriority(item.priority);
-    const selected = state.queuePlanner.selectedIds.has(item.id);
     const errorText = item.error ? `<div class="item-meta">${escHtml(item.error)}</div>` : '';
     const addedAt = item.addedAt ? formatDateTime12h(item.addedAt) : '';
     const dateText = addedAt ? `<div class="item-meta">Added ${escHtml(addedAt)}</div>` : '';
     const scheduleLabel = formatScheduledTime(item.scheduledAfter);
-    const scheduleInput = toLocalDateTimeInput(item.scheduledAfter);
     const actionBtns = status === 'pending' || status === 'failed'
       ? `
         <button class="pill-btn" onclick="handlePromoteQueueItem('${escAttr(item.id)}')">Post Now</button>
@@ -970,12 +916,8 @@ function renderQueueList() {
       : '';
 
     return `
-      <div class="list-item queue-row ${canDrag && status === 'pending' ? 'queue-draggable' : ''}" data-queue-id="${escAttr(item.id)}" draggable="${canDrag && status === 'pending' ? 'true' : 'false'}">
+      <div class="list-item queue-row">
         <div class="list-item-main">
-          <input class="queue-select" type="checkbox" data-queue-select="${escAttr(item.id)}" ${selected ? 'checked' : ''}>
-          <button class="queue-drag-handle" type="button" data-queue-drag-handle title="Drag to reorder">
-            <i data-lucide="grip-vertical" class="mini-icon"></i>
-          </button>
           <img class="thumb-img" src="${escAttr(thumb)}" alt="Queue item">
           <div class="queue-main">
             <div class="item-title">${title}</div>
@@ -990,23 +932,11 @@ function renderQueueList() {
           </div>
         </div>
         <div class="item-actions queue-ops">
-          <select data-queue-priority="${escAttr(item.id)}">
-            ${QUEUE_PRIORITY_ORDER.map((p) => `<option value="${p}" ${p === priority ? 'selected' : ''}>${p.toUpperCase()}</option>`).join('')}
-          </select>
-          <input type="datetime-local" data-queue-schedule="${escAttr(item.id)}" value="${escAttr(scheduleInput)}">
           ${actionBtns}
         </div>
       </div>
     `;
   }).join('');
-
-  const topSpacer = virtual.top > 0 ? `<div class="virtual-spacer" style="height:${virtual.top}px"></div>` : '';
-  const bottomSpacer = virtual.bottom > 0 ? `<div class="virtual-spacer" style="height:${virtual.bottom}px"></div>` : '';
-  list.innerHTML = `${topSpacer}${rowHtml}${bottomSpacer}`;
-
-  bindVirtualScroll(list, 'queue', renderQueueList);
-  bindQueueRowEvents(list, canDrag);
-  syncQueueSelectionControls();
   hydrateIcons();
 }
 
@@ -1018,41 +948,15 @@ function normalizeQueuePriority(value) {
 function getFilteredQueueRows() {
   const search = String(byId('queue-search')?.value || '').trim().toLowerCase();
   const statusFilter = byId('queue-status-filter')?.value || 'all';
-  const priorityFilter = byId('queue-priority-filter')?.value || 'all';
-  const sortMode = byId('queue-sort-mode')?.value || 'manual';
 
-  let rows = state.queue.filter((item) => {
+  return state.queue.filter((item) => {
     const status = String(item.status || '').toLowerCase();
-    const priority = normalizeQueuePriority(item.priority);
     const matchStatus = statusFilter === 'all' ? true : status === statusFilter;
     if (!matchStatus) return false;
-    const matchPriority = priorityFilter === 'all' ? true : priority === priorityFilter;
-    if (!matchPriority) return false;
     if (!search) return true;
     const haystack = `${item.title || ''} ${item.sourceUrl || ''} ${item.username || ''}`.toLowerCase();
     return haystack.includes(search);
   });
-
-  if (sortMode !== 'manual') {
-    rows = [...rows].sort((a, b) => {
-      const pa = QUEUE_PRIORITY_ORDER.indexOf(normalizeQueuePriority(a.priority));
-      const pb = QUEUE_PRIORITY_ORDER.indexOf(normalizeQueuePriority(b.priority));
-      const ta = a.scheduledAfter ? new Date(a.scheduledAfter).getTime() : Number.POSITIVE_INFINITY;
-      const tb = b.scheduledAfter ? new Date(b.scheduledAfter).getTime() : Number.POSITIVE_INFINITY;
-      const aa = a.addedAt ? new Date(a.addedAt).getTime() : 0;
-      const ab = b.addedAt ? new Date(b.addedAt).getTime() : 0;
-
-      if (sortMode === 'priority_desc') return pb - pa;
-      if (sortMode === 'priority_asc') return pa - pb;
-      if (sortMode === 'scheduled_soon') return ta - tb;
-      if (sortMode === 'scheduled_late') return tb - ta;
-      if (sortMode === 'newest') return ab - aa;
-      if (sortMode === 'oldest') return aa - ab;
-      return 0;
-    });
-  }
-
-  return rows;
 }
 
 function getVirtualWindow(listEl, rows, key) {
@@ -1717,9 +1621,8 @@ async function retryFailed() {
 }
 
 async function clearQueue() {
-  if (!window.confirm('Clear all queue items? A safety snapshot will be created first.')) return;
+  if (!window.confirm('Clear all queue items?')) return;
   try {
-    await createQueueSnapshot('pre-clear');
     const response = await apiRequest('/api/queue', { method: 'DELETE' });
     showToast(response.message || 'Queue cleared.', 'success');
     state.queue = [];
@@ -1733,9 +1636,8 @@ async function clearQueue() {
 }
 
 async function clearHistory() {
-  if (!window.confirm('Clear all history entries? A safety snapshot will be created first.')) return;
+  if (!window.confirm('Clear all history entries?')) return;
   try {
-    await createHistorySnapshot('pre-clear');
     const response = await apiRequest('/api/history', { method: 'DELETE' });
     showToast(response.message || 'History cleared.', 'success');
     state.history = [];
@@ -2100,7 +2002,6 @@ function resetPreviewMedia() {
     scrollBtn.classList.add('hidden');
     scrollBtn.textContent = 'No Scroll: Off';
   }
-  renderActionDockState();
 }
 
 function normalizeEngagementEntry(entry = {}) {
@@ -2250,13 +2151,6 @@ function renderAlertCenter(pinterestStatus = {}, systemStatus = {}) {
   });
 }
 
-function renderActionDockState() {
-  const postBtn = byId('dock-post-btn');
-  const queueBtn = byId('dock-queue-btn');
-  if (postBtn) postBtn.disabled = !state.lastExtracted;
-  if (queueBtn) queueBtn.disabled = !state.lastExtracted;
-}
-
 function getCommandItems() {
   return [
     { title: 'Open Dashboard', meta: 'Tab', run: () => switchTab('dashboard') },
@@ -2379,31 +2273,7 @@ function runPaletteCommand(index) {
 }
 
 function handleGlobalKeyDown(event) {
-  const isEditable = ['INPUT', 'TEXTAREA'].includes(event.target?.tagName) || event.target?.isContentEditable;
-  if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'k') {
-    event.preventDefault();
-    if (state.commandPalette.open) closeCommandPalette();
-    else openCommandPalette();
-    return;
-  }
-
-  if (event.key === 'Escape' && state.commandPalette.open) {
-    event.preventDefault();
-    closeCommandPalette();
-    return;
-  }
-
-  if (isEditable) return;
-
-  if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'z') {
-    event.preventDefault();
-    undoAutosaveSnapshot();
-    return;
-  }
-  if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'y') {
-    event.preventDefault();
-    redoAutosaveSnapshot();
-  }
+  if (event.key === 'Escape') setPreviewScrollLock(false);
 }
 
 function hydrateIcons() {

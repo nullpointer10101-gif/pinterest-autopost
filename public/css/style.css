@@ -256,11 +256,7 @@ body {
   font-family: 'Manrope', sans-serif;
   line-height: 1.5;
   letter-spacing: 0.01em;
-  background:
-    radial-gradient(1300px 600px at var(--cursor-x) var(--cursor-y), var(--glow-cursor), transparent 60%),
-    radial-gradient(800px 460px at 12% -8%, var(--glow-left), transparent 65%),
-    radial-gradient(760px 420px at 92% -10%, var(--glow-right), transparent 64%),
-    linear-gradient(var(--bg-angle), var(--bg-2), var(--bg-1) 38%, var(--bg-0));
+  background: linear-gradient(var(--bg-angle), var(--bg-2), var(--bg-1) 45%, var(--bg-0));
   overflow-x: hidden;
 }
 
