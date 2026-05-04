@@ -15,7 +15,7 @@ const state = {
     scrollLocked: false,
   },
   visual: {
-    mode: 'atlas',
+    mode: 'dark',
     pointerX: null,
     pointerY: null,
     pointerRaf: null,
@@ -27,17 +27,13 @@ const REFRESH_INTERVAL_MS = 30000;
 const DRAFTS_STORAGE_KEY = 'pmc_drafts_v1';
 const VISUAL_MODE_STORAGE_KEY = 'pmc_visual_mode_v1';
 const VISUAL_MODES = {
-  atlas: {
-    label: 'Atlas',
-    themeColor: '#1a2432',
+  dark: {
+    label: 'Dark',
+    themeColor: '#050b16',
   },
-  solar: {
-    label: 'Solar',
-    themeColor: '#2f4d33',
-  },
-  nova: {
-    label: 'Nova',
-    themeColor: '#5a2e20',
+  light: {
+    label: 'Light',
+    themeColor: '#edf3fb',
   },
 };
 const PINTEREST_LIMITS = {
@@ -181,7 +177,7 @@ function byId(id) {
 }
 
 function resolveVisualMode(mode) {
-  return Object.prototype.hasOwnProperty.call(VISUAL_MODES, mode) ? mode : 'atlas';
+  return Object.prototype.hasOwnProperty.call(VISUAL_MODES, mode) ? mode : 'dark';
 }
 
 function updateThemeMetaColor(color) {
@@ -209,9 +205,14 @@ function applyVisualMode(mode, options = {}) {
   if (btn) {
     btn.setAttribute('aria-label', `Switch visual mode. Current mode: ${modeMeta.label}`);
     btn.setAttribute('title', `Switch visual mode (current: ${modeMeta.label})`);
+    const icon = btn.querySelector('.btn-icon');
+    if (icon) {
+      icon.setAttribute('data-lucide', resolvedMode === 'dark' ? 'moon-star' : 'sun-medium');
+    }
   }
 
   updateThemeMetaColor(modeMeta.themeColor);
+  hydrateIcons();
 
   if (persist) {
     try {
@@ -266,7 +267,7 @@ function initVisualSystem() {
     savedMode = '';
   }
 
-  applyVisualMode(savedMode || 'atlas', { persist: false, notify: false });
+  applyVisualMode(savedMode || 'dark', { persist: false, notify: false });
   // Performance mode: disable pointer-tracking UI effects.
   document.documentElement.style.setProperty('--cursor-x', '50vw');
   document.documentElement.style.setProperty('--cursor-y', '28vh');

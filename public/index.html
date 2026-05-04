@@ -3,21 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#1a2432">
+    <meta name="theme-color" content="#050b16">
     <title>Pinterest Mission Control</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
 <body>
+    <div class="scene-layer" aria-hidden="true">
+        <span class="scene-gradient scene-gradient-a"></span>
+        <span class="scene-gradient scene-gradient-b"></span>
+        <span class="scene-grid"></span>
+    </div>
+
     <div class="app-shell">
         <header class="topbar">
             <div class="brand-wrap">
-                <p class="brand-kicker">Operations Deck</p>
+                <p class="brand-tag">Mission Deck v3</p>
                 <div class="brand-title">
-                    <i data-lucide="satellite" class="brand-icon"></i>
+                    <i data-lucide="radar" class="brand-icon"></i>
                     <span>Pinterest Mission Control</span>
                 </div>
-                <p class="brand-subtitle">Stable, high-speed automation console for Pinterest and X workflows.</p>
+                <p class="brand-subtitle">Advanced automation cockpit for Pinterest and X pipelines with real-time operational controls.</p>
                 <div class="status-wrap">
                     <span id="connection-status" class="badge badge-success">ONLINE</span>
                     <span id="active-mode" class="badge">MODE: AUTO</span>
@@ -33,79 +39,59 @@
                     <i data-lucide="refresh-cw" class="btn-icon"></i>
                     <span>Refresh</span>
                 </button>
-                <button id="visual-mode-btn" class="btn btn-secondary compact-btn visual-mode-btn" type="button" title="Switch interface style">
-                    <i data-lucide="sparkles" class="btn-icon"></i>
-                    <span id="visual-mode-label">Atlas</span>
+                <button id="visual-mode-btn" class="btn btn-secondary compact-btn visual-mode-btn" type="button" title="Toggle dark and light mode">
+                    <i data-lucide="moon-star" class="btn-icon"></i>
+                    <span id="visual-mode-label">Dark</span>
                 </button>
                 <div id="live-time" class="clock">00:00</div>
             </div>
         </header>
 
         <nav class="tab-nav" aria-label="Main tabs">
-            <button class="tab-btn active" data-tab="dashboard" type="button">
-                <i data-lucide="layout-dashboard" class="tab-icon"></i>
-                <span>Dashboard</span>
-            </button>
-            <button class="tab-btn" data-tab="channels" type="button">
-                <i data-lucide="rss" class="tab-icon"></i>
-                <span>Channels</span>
-            </button>
-            <button class="tab-btn" data-tab="queue" type="button">
-                <i data-lucide="layers" class="tab-icon"></i>
-                <span>Queue</span>
-            </button>
-            <button class="tab-btn" data-tab="pinterest" type="button">
-                <i data-lucide="camera" class="tab-icon"></i>
-                <span>Pinterest</span>
-            </button>
-            <button class="tab-btn" data-tab="x-dashboard" type="button">
-                <i data-lucide="twitter" class="tab-icon"></i>
-                <span>X</span>
-            </button>
-            <button class="tab-btn" data-tab="engagements" type="button">
-                <i data-lucide="activity" class="tab-icon"></i>
-                <span>Engagement</span>
-            </button>
-            <button class="tab-btn" data-tab="history" type="button">
-                <i data-lucide="history" class="tab-icon"></i>
-                <span>History</span>
-            </button>
-            <button class="tab-btn" data-tab="settings" type="button">
-                <i data-lucide="sliders-horizontal" class="tab-icon"></i>
-                <span>Settings</span>
-            </button>
+            <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
+            <button class="tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
+            <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
+            <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
+            <button class="tab-btn" data-tab="x-dashboard" type="button"><i data-lucide="twitter" class="tab-icon"></i><span>X</span></button>
+            <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Engagement</span></button>
+            <button class="tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
+            <button class="tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
         </nav>
 
         <main>
             <section id="panel-dashboard" class="panel">
                 <article class="card hero-panel">
-                    <div class="hero-shell">
-                        <div class="hero-main">
-                            <p class="hero-eyebrow">Live Overview</p>
-                            <h1 class="hero-title">Fast control without floating UI glitches.</h1>
-                            <p class="hero-description">This layout is rebuilt for stability: fixed flow sections, lightweight rendering, and cleaner mobile behavior.</p>
+                    <div class="hero-grid">
+                        <div class="hero-content">
+                            <div class="hero-pill-row">
+                                <span class="hero-pill hero-pill-primary">Ultra Modern UI</span>
+                                <span class="hero-pill hero-pill-secondary">Dark + Light Modes</span>
+                            </div>
+                            <h1 class="hero-title">High-tech command center built for speed and control.</h1>
+                            <p class="hero-description">Manage queue pressure, automate posting cycles, and monitor engagement operations from a single modern mission surface.</p>
 
                             <div class="hero-actions">
-                                <button id="hero-open-channels-btn" class="btn btn-primary" type="button">
+                                <button id="hero-open-channels-btn" class="btn btn-primary hero-action" type="button">
                                     <i data-lucide="rss" class="btn-icon"></i>
                                     <span>Open Channels</span>
                                 </button>
-                                <button id="hero-open-history-btn" class="btn btn-secondary" type="button">
+                                <button id="hero-open-history-btn" class="btn btn-secondary hero-action" type="button">
                                     <i data-lucide="history" class="btn-icon"></i>
                                     <span>View History</span>
                                 </button>
-                                <button id="hero-refresh-btn" class="btn btn-secondary" type="button">
+                                <button id="hero-refresh-btn" class="btn btn-secondary hero-action" type="button">
                                     <i data-lucide="refresh-cw" class="btn-icon"></i>
                                     <span>Refresh Now</span>
                                 </button>
                             </div>
                         </div>
 
-                        <div class="hero-side">
-                            <div class="hero-side-top">
-                                <div class="hero-side-label">Visual Mode</div>
-                                <div id="hero-mode-label" class="hero-side-value">Atlas</div>
+                        <aside class="hero-side">
+                            <div class="hero-mode-box">
+                                <span class="hero-mode-label">Current Theme</span>
+                                <strong id="hero-mode-label" class="hero-mode-value">Dark</strong>
                             </div>
+
                             <div class="hero-side-grid">
                                 <div class="hero-side-item">
                                     <span>Connection</span>
@@ -116,39 +102,58 @@
                                     <strong id="hero-channel-count">0</strong>
                                 </div>
                                 <div class="hero-side-item">
-                                    <span>Next cycle</span>
+                                    <span>Next Cycle</span>
                                     <strong id="hero-next-cycle">--:--</strong>
                                 </div>
                             </div>
-                        </div>
+                        </aside>
                     </div>
                 </article>
+
+                <section class="hero-metrics-grid">
+                    <article class="hero-metric-card">
+                        <span class="hero-metric-label">Published</span>
+                        <strong id="hero-total-posts" class="hero-metric-value">0</strong>
+                    </article>
+                    <article class="hero-metric-card">
+                        <span class="hero-metric-label">Pending</span>
+                        <strong id="hero-queue-pending" class="hero-metric-value">0</strong>
+                    </article>
+                    <article class="hero-metric-card">
+                        <span class="hero-metric-label">Success</span>
+                        <strong id="hero-success-rate" class="hero-metric-value">0%</strong>
+                    </article>
+                    <article class="hero-metric-card">
+                        <span class="hero-metric-label">Queue Failed</span>
+                        <strong id="hero-queue-failed" class="hero-metric-value">0</strong>
+                    </article>
+                </section>
 
                 <section class="stats-grid">
                     <article class="stat-card">
                         <div class="stat-head">
-                            <div class="stat-label">Total Published</div>
+                            <span class="stat-label">Total Published</span>
                             <i data-lucide="send" class="stat-icon"></i>
                         </div>
                         <div id="stat-total-posts" class="stat-value">0</div>
                     </article>
                     <article class="stat-card">
                         <div class="stat-head">
-                            <div class="stat-label">Queue Pending</div>
+                            <span class="stat-label">Queue Pending</span>
                             <i data-lucide="clock-3" class="stat-icon"></i>
                         </div>
                         <div id="stat-queue-pending" class="stat-value">0</div>
                     </article>
                     <article class="stat-card">
                         <div class="stat-head">
-                            <div class="stat-label">Success Rate</div>
+                            <span class="stat-label">Success Rate</span>
                             <i data-lucide="trending-up" class="stat-icon"></i>
                         </div>
                         <div id="stat-success-rate" class="stat-value">0%</div>
                     </article>
                     <article class="stat-card">
                         <div class="stat-head">
-                            <div class="stat-label">Queue Failed</div>
+                            <span class="stat-label">Queue Failed</span>
                             <i data-lucide="alert-triangle" class="stat-icon"></i>
                         </div>
                         <div id="stat-queue-failed" class="stat-value">0</div>
@@ -156,10 +161,10 @@
                 </section>
 
                 <section class="dashboard-grid">
-                    <article class="card dashboard-card-workflow">
+                    <article class="card dashboard-card dashboard-card-workflow">
                         <div class="card-title-wrap">
-                            <h2><i data-lucide="workflow" class="heading-icon"></i>Workflow Toggles</h2>
-                            <p class="muted-text">Switch automations on or off instantly.</p>
+                            <h2><i data-lucide="workflow" class="heading-icon"></i>Workflow Control Center</h2>
+                            <p class="muted-text">Master switches for all background automations.</p>
                         </div>
 
                         <div class="workflow-grid">
@@ -168,7 +173,7 @@
                                     <i data-lucide="camera" class="workflow-icon"></i>
                                     <div>
                                         <div class="workflow-name">Pinterest Posting</div>
-                                        <div class="workflow-desc">IG extraction and pin publishing</div>
+                                        <div class="workflow-desc">IG scraping and auto publishing</div>
                                     </div>
                                 </div>
                                 <label class="master-switch">
@@ -196,7 +201,7 @@
                                     <i data-lucide="twitter" class="workflow-icon"></i>
                                     <div>
                                         <div class="workflow-name">X Posting</div>
-                                        <div class="workflow-desc">Queue to X fire-post flow</div>
+                                        <div class="workflow-desc">Queue and fire-post tasks</div>
                                     </div>
                                 </div>
                                 <label class="master-switch">
@@ -221,10 +226,10 @@
                         </div>
                     </article>
 
-                    <article class="card dashboard-card-queue">
+                    <article class="card dashboard-card dashboard-card-queue">
                         <div class="card-title-wrap">
                             <h2><i data-lucide="layers" class="heading-icon"></i>Live Mission Queue</h2>
-                            <p class="muted-text">Current pending Pinterest queue items.</p>
+                            <p class="muted-text">Realtime queue preview of upcoming items.</p>
                         </div>
                         <div id="dashboard-queue-list" class="list">
                             <div class="pulse-item">Loading missions...</div>
@@ -234,10 +239,10 @@
                         </div>
                     </article>
 
-                    <article class="card dashboard-card-history">
+                    <article class="card dashboard-card dashboard-card-history">
                         <div class="card-title-wrap">
                             <h2><i data-lucide="history" class="heading-icon"></i>Recent History</h2>
-                            <p class="muted-text">Latest completed or failed publishing events.</p>
+                            <p class="muted-text">Latest success and error operations.</p>
                         </div>
                         <div id="dashboard-history-list" class="list">
                             <div class="pulse-item">Loading history...</div>
@@ -247,7 +252,7 @@
                         </div>
                     </article>
 
-                    <article class="card dashboard-card-cycle">
+                    <article class="card dashboard-card dashboard-card-cycle">
                         <div class="countdown-wrap">
                             <div class="countdown-label">Next Automation Cycle</div>
                             <div id="countdown-clock" class="countdown-timer">--:--</div>
@@ -275,7 +280,7 @@
                             <div class="health-item">
                                 <div id="light-ai" class="status-light"></div>
                                 <div>
-                                    <div class="stat-label">Content Engine</div>
+                                    <div class="stat-label">AI Engine</div>
                                     <div id="status-text-ai" class="input-meta">Ready</div>
                                 </div>
                             </div>
@@ -290,32 +295,13 @@
                         </div>
                     </article>
                 </section>
-
-                <section class="hero-metrics-grid">
-                    <div class="hero-metric">
-                        <span class="hero-metric-label">Published</span>
-                        <strong id="hero-total-posts" class="hero-metric-value">0</strong>
-                    </div>
-                    <div class="hero-metric">
-                        <span class="hero-metric-label">Pending</span>
-                        <strong id="hero-queue-pending" class="hero-metric-value">0</strong>
-                    </div>
-                    <div class="hero-metric">
-                        <span class="hero-metric-label">Success</span>
-                        <strong id="hero-success-rate" class="hero-metric-value">0%</strong>
-                    </div>
-                    <div class="hero-metric">
-                        <span class="hero-metric-label">Queue Failed</span>
-                        <strong id="hero-queue-failed" class="hero-metric-value">0</strong>
-                    </div>
-                </section>
             </section>
 
             <section id="panel-channels" class="panel hidden">
                 <article class="card">
                     <div class="card-title-wrap">
                         <h2><i data-lucide="users-round" class="heading-icon"></i>Target Channels</h2>
-                        <p class="muted-text">Add and manage Instagram sources for your automated content pipeline.</p>
+                        <p class="muted-text">Add Instagram sources for automated reel-to-pin missions.</p>
                     </div>
 
                     <div class="field-wrap">
@@ -341,23 +327,14 @@
                     <div class="card-header-row">
                         <h2><i data-lucide="layers" class="heading-icon"></i>Mission Queue</h2>
                         <div class="button-row">
-                            <button id="run-bot-btn" class="btn btn-primary compact-btn" type="button">
-                                <i data-lucide="zap" class="btn-icon"></i>
-                                <span>Run Queue Bot</span>
-                            </button>
-                            <button id="retry-failed-btn" class="btn btn-secondary compact-btn" type="button">
-                                <i data-lucide="refresh-cw" class="btn-icon"></i>
-                                <span>Retry Failed</span>
-                            </button>
-                            <button id="clear-queue-btn" class="btn btn-danger compact-btn" type="button">
-                                <i data-lucide="trash-2" class="btn-icon"></i>
-                                <span>Clear Queue</span>
-                            </button>
+                            <button id="run-bot-btn" class="btn btn-primary compact-btn" type="button"><i data-lucide="zap" class="btn-icon"></i><span>Run Queue Bot</span></button>
+                            <button id="retry-failed-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="refresh-cw" class="btn-icon"></i><span>Retry Failed</span></button>
+                            <button id="clear-queue-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear Queue</span></button>
                         </div>
                     </div>
 
                     <div class="control-row">
-                        <input type="text" id="queue-search" placeholder="Search by title, source, or username">
+                        <input type="text" id="queue-search" placeholder="Search queue by title, source, or username">
                         <select id="queue-status-filter">
                             <option value="all">All statuses</option>
                             <option value="pending">Pending</option>
@@ -375,7 +352,7 @@
                     <article class="card">
                         <div class="card-title-wrap">
                             <h2><i data-lucide="pen-square" class="heading-icon"></i>Pinterest Mission Builder</h2>
-                            <p class="muted-text">Extract Instagram reels, generate copy, and push to queue or post immediately.</p>
+                            <p class="muted-text">Extract reels, generate high-conversion copy, and launch posting operations.</p>
                         </div>
 
                         <div class="field-wrap">
@@ -383,10 +360,7 @@
                             <div class="inline-field inline-field-reel">
                                 <input type="text" id="reel-url" placeholder="https://www.instagram.com/reel/...">
                                 <div class="inline-actions">
-                                    <button id="paste-reel-btn" class="btn btn-secondary compact-btn" type="button">
-                                        <i data-lucide="clipboard" class="btn-icon"></i>
-                                        <span>Paste</span>
-                                    </button>
+                                    <button id="paste-reel-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="clipboard" class="btn-icon"></i><span>Paste</span></button>
                                     <button id="extract-btn" class="btn btn-primary" type="button">Extract</button>
                                 </div>
                             </div>
@@ -408,19 +382,16 @@
                                     <input type="text" id="field-title" maxlength="100">
                                     <div id="field-title-meta" class="input-meta">0/100 chars | 0 words</div>
                                 </div>
-
                                 <div class="field-wrap">
                                     <label for="field-desc">Description</label>
                                     <textarea id="field-desc" rows="5" maxlength="800"></textarea>
                                     <div id="field-desc-meta" class="input-meta">0/800 chars | 0 words</div>
                                 </div>
-
                                 <div class="field-wrap">
                                     <label for="field-link">Destination Link</label>
                                     <input type="text" id="field-link" maxlength="2048" placeholder="https://your-site.com/product-page">
                                     <div id="field-link-meta" class="input-meta">Optional destination URL for click-through.</div>
                                 </div>
-
                                 <div class="field-wrap">
                                     <label for="field-alt">Alt Text</label>
                                     <input type="text" id="field-alt" maxlength="500" placeholder="Optional alt text">
@@ -435,7 +406,7 @@
                                 <div class="draft-strip">
                                     <label for="draft-name">Draft Name</label>
                                     <div class="inline-field">
-                                        <input type="text" id="draft-name" placeholder="e.g. Summer sale pin">
+                                        <input type="text" id="draft-name" placeholder="e.g. Summer haul pin">
                                         <button class="btn btn-secondary compact-btn" type="button" onclick="saveDraftFromName()">Save Named Draft</button>
                                         <button class="btn btn-secondary compact-btn" type="button" onclick="saveDraftFromPreview()">Quick Save</button>
                                     </div>
@@ -453,7 +424,7 @@
                         <article class="card">
                             <div class="card-title-wrap">
                                 <h2><i data-lucide="zap" class="heading-icon"></i>Pinterest Quick Actions</h2>
-                                <p class="muted-text">Run engagement jobs and track mini queue status.</p>
+                                <p class="muted-text">Run engagement jobs and inspect queue pressure.</p>
                             </div>
 
                             <div class="field-wrap">
@@ -474,10 +445,7 @@
                             </div>
 
                             <div class="quick-actions">
-                                <button id="engage-btn" class="btn btn-primary" type="button">
-                                    <i data-lucide="activity" class="btn-icon"></i>
-                                    <span>Engage Bot</span>
-                                </button>
+                                <button id="engage-btn" class="btn btn-primary" type="button"><i data-lucide="activity" class="btn-icon"></i><span>Engage Bot</span></button>
                             </div>
 
                             <div class="sub-title">Pinterest Queue Status</div>
@@ -494,17 +462,14 @@
                     <article class="card">
                         <div class="card-title-wrap">
                             <h2><i data-lucide="twitter" class="heading-icon"></i>X Mission Builder</h2>
-                            <p class="muted-text">Load media, write tweet copy, and queue it to the X pipeline.</p>
+                            <p class="muted-text">Load media, craft tweet copy, and schedule posts on X.</p>
                         </div>
 
                         <div class="field-wrap">
-                            <label for="x-manual-media-url">Media URL (Image or Video)</label>
+                            <label for="x-manual-media-url">Media URL (Image/Video)</label>
                             <div class="inline-field">
                                 <input type="text" id="x-manual-media-url" placeholder="Direct image or video URL">
-                                <button id="x-manual-load-btn" class="btn btn-secondary" type="button">
-                                    <i data-lucide="download" class="btn-icon"></i>
-                                    <span>Load</span>
-                                </button>
+                                <button id="x-manual-load-btn" class="btn btn-secondary" type="button"><i data-lucide="download" class="btn-icon"></i><span>Load</span></button>
                             </div>
                         </div>
 
@@ -530,7 +495,7 @@
                         <article class="card">
                             <div class="card-title-wrap">
                                 <h2><i data-lucide="zap" class="heading-icon"></i>X Quick Actions</h2>
-                                <p class="muted-text">Run engager and fire pending queue items.</p>
+                                <p class="muted-text">Run engagement and fire queue posting instantly.</p>
                             </div>
 
                             <div class="field-wrap">
@@ -539,14 +504,8 @@
                             </div>
 
                             <div class="quick-actions">
-                                <button id="x-engage-btn" class="btn btn-primary" type="button">
-                                    <i data-lucide="activity" class="btn-icon"></i>
-                                    <span>Engage Bot</span>
-                                </button>
-                                <button id="x-run-bot-btn" class="btn btn-secondary" type="button">
-                                    <i data-lucide="flame" class="btn-icon"></i>
-                                    <span>Run X Queue Bot</span>
-                                </button>
+                                <button id="x-engage-btn" class="btn btn-primary" type="button"><i data-lucide="activity" class="btn-icon"></i><span>Engage Bot</span></button>
+                                <button id="x-run-bot-btn" class="btn btn-secondary" type="button"><i data-lucide="flame" class="btn-icon"></i><span>Run X Queue Bot</span></button>
                             </div>
 
                             <div class="sub-title">X Queue Status</div>
@@ -558,7 +517,7 @@
                         <article class="card">
                             <div class="card-title-wrap">
                                 <h2><i data-lucide="receipt-text" class="heading-icon"></i>X Post History</h2>
-                                <p class="muted-text">Latest posted and failed X queue entries.</p>
+                                <p class="muted-text">Latest queued and posted mission history.</p>
                             </div>
                             <div id="x-history-list" class="list">
                                 <div class="pulse-item">No X history yet.</div>
@@ -568,7 +527,7 @@
                         <article class="card">
                             <div class="card-title-wrap">
                                 <h2><i data-lucide="hand-heart" class="heading-icon"></i>X Engagement Feed</h2>
-                                <p class="muted-text">Recent interactions made by the X engager bot.</p>
+                                <p class="muted-text">Recent actions from X engagement bot.</p>
                             </div>
                             <div id="x-engagements-list" class="list">
                                 <div class="pulse-item">No X engagements yet.</div>
@@ -585,14 +544,8 @@
                     <div class="card-header-row">
                         <h2><i data-lucide="history" class="heading-icon"></i>History</h2>
                         <div class="button-row">
-                            <button id="export-history-btn" class="btn btn-secondary compact-btn" type="button">
-                                <i data-lucide="download" class="btn-icon"></i>
-                                <span>Export JSON</span>
-                            </button>
-                            <button id="clear-history-btn" class="btn btn-danger compact-btn" type="button">
-                                <i data-lucide="trash-2" class="btn-icon"></i>
-                                <span>Clear History</span>
-                            </button>
+                            <button id="export-history-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="download" class="btn-icon"></i><span>Export JSON</span></button>
+                            <button id="clear-history-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear History</span></button>
                         </div>
                     </div>
 
@@ -614,7 +567,7 @@
                 <article class="card">
                     <div class="card-title-wrap">
                         <h2><i data-lucide="activity" class="heading-icon"></i>Engagement Logbook</h2>
-                        <p class="muted-text">Readonly timeline of actions captured in the last 24 hours.</p>
+                        <p class="muted-text">Read-only stream of engagement activity in the last 24 hours.</p>
                     </div>
 
                     <div class="control-row">
@@ -626,10 +579,7 @@
                     </div>
 
                     <div class="button-row inline-actions-row">
-                        <button id="clear-engagements-btn" class="btn btn-danger compact-btn" type="button">
-                            <i data-lucide="eraser" class="btn-icon"></i>
-                            <span>Clear Logs</span>
-                        </button>
+                        <button id="clear-engagements-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="eraser" class="btn-icon"></i><span>Clear Logs</span></button>
                     </div>
 
                     <div id="engagement-summary" class="stats-mini-grid"></div>
@@ -648,7 +598,7 @@
                                 <h2><i data-lucide="camera" class="heading-icon"></i>Pinterest Setup</h2>
                                 <span id="settings-badge-pin" class="badge">Checking...</span>
                             </div>
-                            <p class="muted-text">Connect via official OAuth or fallback session mode.</p>
+                            <p class="muted-text">Connect your Pinterest account through OAuth or session cookie mode.</p>
                         </div>
 
                         <div class="field-wrap">
@@ -675,7 +625,7 @@
                                 <h2><i data-lucide="twitter" class="heading-icon"></i>X Console Setup</h2>
                                 <span id="settings-badge-x" class="badge">Checking...</span>
                             </div>
-                            <p class="muted-text">Link your X account using auth_token cookie value.</p>
+                            <p class="muted-text">Link your X account using browser auth_token cookie value.</p>
                         </div>
 
                         <div class="field-wrap">
@@ -691,7 +641,7 @@
                     <article class="card">
                         <div class="card-title-wrap">
                             <h2><i data-lucide="instagram" class="heading-icon"></i>Extraction Engine</h2>
-                            <p class="muted-text">Optional Instagram cookie for restricted or high-volume reels.</p>
+                            <p class="muted-text">Optional Instagram cookie for high-frequency or restricted reel extraction.</p>
                         </div>
 
                         <div class="field-wrap">
@@ -700,29 +650,20 @@
                                 <input type="password" id="ig-session-cookie" placeholder="sessionid=...">
                                 <button id="link-ig-session-btn" class="btn btn-secondary" type="button">Save</button>
                             </div>
-                            <div class="input-meta">Only required when extraction volume is high.</div>
+                            <div class="input-meta">Required only for stricter extraction scenarios.</div>
                         </div>
                     </article>
 
                     <article class="card">
                         <div class="card-title-wrap">
                             <h2><i data-lucide="stethoscope" class="heading-icon"></i>System Status</h2>
-                            <p class="muted-text">Runtime and storage diagnostics.</p>
+                            <p class="muted-text">Runtime diagnostics and environment health.</p>
                         </div>
 
                         <div class="diag-list">
-                            <div class="diag-item">
-                                <span>Runtime</span>
-                                <span id="diag-runtime" class="badge">Checking...</span>
-                            </div>
-                            <div class="diag-item">
-                                <span>Posting</span>
-                                <span id="diag-posting" class="badge">Checking...</span>
-                            </div>
-                            <div class="diag-item">
-                                <span>Storage</span>
-                                <span id="diag-storage" class="badge">Checking...</span>
-                            </div>
+                            <div class="diag-item"><span>Runtime</span><span id="diag-runtime" class="badge">Checking...</span></div>
+                            <div class="diag-item"><span>Posting</span><span id="diag-posting" class="badge">Checking...</span></div>
+                            <div class="diag-item"><span>Storage</span><span id="diag-storage" class="badge">Checking...</span></div>
                         </div>
                     </article>
                 </div>
