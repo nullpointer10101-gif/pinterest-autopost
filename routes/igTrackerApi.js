@@ -103,9 +103,9 @@ router.post('/channels', async (req, res) => {
     //   - Run triple-layer dedup
     //   - AI identify products + generate affiliate links
     //   - AI generate Pinterest content
-    //   - Queue: reel 0 = instant, reel 1 = +60min, reel 2 = +120min
-    //   - Trigger fire-post.yml for the instant reel
-    console.log(`[API] 🚀 Starting full pipeline for @${username} (top 3 reels, scheduled)...`);
+    //   - Queue: reel 0, 1, 2 = instant
+    //   - Trigger fire-post.yml for the instant reels
+    console.log(`[API] 🚀 Starting full pipeline for @${username} (top 3 reels, instant)...`);
     automationService.processInstagramReels({
       username: username,
       limit: 3,
@@ -126,7 +126,7 @@ router.post('/channels', async (req, res) => {
       success: true, 
       username, 
       channels, 
-      message: `Channel @${username} added. Processing top 3 reels: 1 instant + 2 scheduled (1hr apart). Affiliate links will be generated automatically.` 
+      message: `Channel @${username} added. Processing top 3 reels instantly. Affiliate links will be generated automatically.` 
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

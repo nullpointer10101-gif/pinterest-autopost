@@ -460,16 +460,9 @@ async function processInstagramReels(options = {}) {
 
         // ═══════════════════════════════════════════════════════════════
         // STEP 4: Calculate schedule time
-        // Reel 0 = NOW (instant), Reel 1 = +60min, Reel 2 = +120min
         // ═══════════════════════════════════════════════════════════════
-        let scheduledAfter = null;
-        if (queuedIndex > 0) {
-          const delayMs = queuedIndex * SCHEDULE_GAP_MINUTES * 60 * 1000;
-          scheduledAfter = new Date(Date.now() + delayMs).toISOString();
-          console.log(`[Automation] ⏰ Scheduled for: ${scheduledAfter} (${SCHEDULE_GAP_MINUTES * queuedIndex}min from now)`);
-        } else {
-          console.log(`[Automation] 🚀 Reel 0: Will be posted INSTANTLY`);
-        }
+        let scheduledAfter = null; // Always post instantly when a new channel is added
+        console.log(`[Automation] 🚀 Reel ${queuedIndex}: Will be posted INSTANTLY`);
 
         // ═══════════════════════════════════════════════════════════════
         // STEP 5: Build queue item with ALL correct fields

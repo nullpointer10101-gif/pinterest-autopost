@@ -444,7 +444,61 @@ async function createPinWithBot(pinData) {
       console.log('[Bot] Board selection error:', e.message);
     }
 
-    // ─── 5b. Fill Destination Link (AFTER board selection) ─────────────────
+    // ─── 5b. Upload Smart Cover Thumbnail (if AI selected a better frame) ───────
+    if (coverPath && fs.existsSync(coverPath)) {
+      console.log('[Bot] 🖼️ Uploading AI-selected cover thumbnail...');
+      try {
+        // Pinterest shows a "Change cover" button on video pins after upload
+        const coverBtnSelectors = [
+          'button[data-test-id="pin-draft-cover-image-button"]',
+          'button[aria-label*="cover" i]',
+          'button[aria-label*="Cover" i]',
+          '[data-test-id="cover-image-selector"] button',
+          'button[data-test-id="change-cover-btn"]',
+        ];
+        let coverBtn = null;
+        for (const sel of coverBtnSelectors) {
+          try { coverBtn = await page.$(sel); if (coverBtn) { console.log(`[Bot] Cover button found: ${sel}`); break; } } catch {}
+        }
+
+        if (coverBtn) {
+          await coverBtn.click();
+          await new Promise(r => setTimeout(r, 2000));
+
+          // Find the file input that appeared for cover upload
+          const coverInputs = await page.$$('input[type="file"]');
+          if (coverInputs.length > 0) {
+            await coverInputs[coverInputs.length - 1].uploadFile(coverPath);
+            await new Promise(r => setTimeout(r, 3000));
+
+            // Confirm/apply the cover if there's an apply button
+            const applyResult = await page.evaluate(() => {
+              const btns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+              const apply = btns.find(b => {
+                const t = (b.innerText || '').toLowerCase();
+                return b.offsetParent !== null && (t === 'apply' || t === 'set cover' || t === 'use this' || t === 'select' || t === 'done');
+              });
+              if (apply) { apply.click(); return true; }
+              return false;
+            });
+            if (applyResult) {
+              await new Promise(r => setTimeout(r, 2000));
+              console.log('[Bot] ✅ Smart cover image applied.');
+            } else {
+              console.log('[Bot] Cover input uploaded (no apply button found — auto-applied).');
+            }
+          } else {
+            console.log('[Bot] ⚠️ No file input found after clicking cover button.');
+          }
+        } else {
+          console.log('[Bot] ℹ️ No cover change button found — Pinterest will use auto-selected frame.');
+        }
+      } catch (e) {
+        console.log('[Bot] Cover upload warning (non-fatal):', e.message);
+      }
+    }
+
+    // ─── 5c. Fill Destination Link (AFTER board selection) ─────────────────
     // CRITICAL: This MUST happen after the board dropdown is closed.
     // Pinterest resets the destination link field when the board picker is opened.
     const linkSelectors = [
@@ -509,60 +563,6 @@ async function createPinWithBot(pinData) {
       }
     } else {
       console.log('[Bot] ℹ️ No destination link provided — posting without link.');
-    }
-
-    // ─── 5c. Upload Smart Cover Thumbnail (if AI selected a better frame) ───────
-    if (coverPath && fs.existsSync(coverPath)) {
-      console.log('[Bot] 🖼️ Uploading AI-selected cover thumbnail...');
-      try {
-        // Pinterest shows a "Change cover" button on video pins after upload
-        const coverBtnSelectors = [
-          'button[data-test-id="pin-draft-cover-image-button"]',
-          'button[aria-label*="cover" i]',
-          'button[aria-label*="Cover" i]',
-          '[data-test-id="cover-image-selector"] button',
-          'button[data-test-id="change-cover-btn"]',
-        ];
-        let coverBtn = null;
-        for (const sel of coverBtnSelectors) {
-          try { coverBtn = await page.$(sel); if (coverBtn) { console.log(`[Bot] Cover button found: ${sel}`); break; } } catch {}
-        }
-
-        if (coverBtn) {
-          await coverBtn.click();
-          await new Promise(r => setTimeout(r, 2000));
-
-          // Find the file input that appeared for cover upload
-          const coverInputs = await page.$$('input[type="file"]');
-          if (coverInputs.length > 0) {
-            await coverInputs[coverInputs.length - 1].uploadFile(coverPath);
-            await new Promise(r => setTimeout(r, 3000));
-
-            // Confirm/apply the cover if there's an apply button
-            const applyResult = await page.evaluate(() => {
-              const btns = Array.from(document.querySelectorAll('button, div[role="button"]'));
-              const apply = btns.find(b => {
-                const t = (b.innerText || '').toLowerCase();
-                return b.offsetParent !== null && (t === 'apply' || t === 'set cover' || t === 'use this' || t === 'select' || t === 'done');
-              });
-              if (apply) { apply.click(); return true; }
-              return false;
-            });
-            if (applyResult) {
-              await new Promise(r => setTimeout(r, 2000));
-              console.log('[Bot] ✅ Smart cover image applied.');
-            } else {
-              console.log('[Bot] Cover input uploaded (no apply button found — auto-applied).');
-            }
-          } else {
-            console.log('[Bot] ⚠️ No file input found after clicking cover button.');
-          }
-        } else {
-          console.log('[Bot] ℹ️ No cover change button found — Pinterest will use auto-selected frame.');
-        }
-      } catch (e) {
-        console.log('[Bot] Cover upload warning (non-fatal):', e.message);
-      }
     }
 
     // 6. Final Publish
