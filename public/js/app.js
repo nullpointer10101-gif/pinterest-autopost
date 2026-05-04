@@ -107,10 +107,34 @@ function bindEvents() {
     setAutoRefresh(!!event.target.checked);
   });
 
-  on('engage-count-manual', 'input', (event) => {
+  const syncEngageCountDisplay = (value, source = 'manual') => {
+    const text = String(value || '');
     const valueEl = byId('engage-count-value');
-    if (valueEl) valueEl.textContent = String(event.target.value || '');
+    if (valueEl) valueEl.textContent = text;
+
+    const dashboardValueEl = byId('engage-count-value-dashboard');
+    if (dashboardValueEl) dashboardValueEl.textContent = text;
+
+    if (source !== 'manual') {
+      const manualInput = byId('engage-count-manual');
+      if (manualInput) manualInput.value = text;
+    }
+
+    if (source !== 'dashboard') {
+      const dashboardRange = byId('engage-count');
+      if (dashboardRange) dashboardRange.value = text;
+    }
+  };
+
+  on('engage-count-manual', 'input', (event) => {
+    syncEngageCountDisplay(event.target.value, 'manual');
   });
+
+  on('engage-count', 'input', (event) => {
+    syncEngageCountDisplay(event.target.value, 'dashboard');
+  });
+
+  syncEngageCountDisplay(byId('engage-count-manual')?.value || byId('engage-count')?.value || '20');
 
   on('queue-search', 'input', renderQueueList);
   on('queue-status-filter', 'change', renderQueueList);
