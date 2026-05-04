@@ -29,15 +29,15 @@ const VISUAL_MODE_STORAGE_KEY = 'pmc_visual_mode_v1';
 const VISUAL_MODES = {
   atlas: {
     label: 'Atlas',
-    themeColor: '#08141b',
+    themeColor: '#1a2432',
   },
   solar: {
     label: 'Solar',
-    themeColor: '#0b1b16',
+    themeColor: '#2f4d33',
   },
   nova: {
     label: 'Nova',
-    themeColor: '#160705',
+    themeColor: '#5a2e20',
   },
 };
 const PINTEREST_LIMITS = {
@@ -267,18 +267,9 @@ function initVisualSystem() {
   }
 
   applyVisualMode(savedMode || 'atlas', { persist: false, notify: false });
-
-  const prefersReducedMotion = typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const hasCoarsePointer = typeof window.matchMedia === 'function'
-    && window.matchMedia('(pointer: coarse)').matches;
-
-  if (!prefersReducedMotion && !hasCoarsePointer) {
-    bindPointerGlow();
-  } else {
-    document.documentElement.style.setProperty('--cursor-x', '50vw');
-    document.documentElement.style.setProperty('--cursor-y', '28vh');
-  }
+  // Performance mode: disable pointer-tracking UI effects.
+  document.documentElement.style.setProperty('--cursor-x', '50vw');
+  document.documentElement.style.setProperty('--cursor-y', '28vh');
 }
 
 function handleVisualModeToggle() {
