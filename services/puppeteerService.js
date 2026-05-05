@@ -433,74 +433,84 @@ async function createPinWithBot(pinData) {
     // 5. Select Board
     console.log('[Bot] Selecting board...');
     try {
-      const boardMenuSelectors = [
-        '[data-test-id="board-dropdown-select-button"]',
-        'button[aria-label*="board" i]',
-        'button[aria-label*="Board" i]',
-        '[data-test-id="board-dropdown"] button',
-        '.board-dropdown button',
-        'button[data-test-id="storyboard-selector-board"]'
-      ];
-      let boardMenu = null;
-      for (const sel of boardMenuSelectors) {
-        boardMenu = await page.$(sel);
-        if (boardMenu) {
-          console.log(`[Bot] Board button found: ${sel}`);
+      // Step 1: Find and click the board dropdown (find by visible text or selector)
+      const boardClicked = await page.evaluate(() => {
+        // Look for the 'Choose a board' button or any board dropdown trigger
+        const allElements = Array.from(document.querySelectorAll('div, button, [role="button"]'));
+        for (const el of allElements) {
+          const text = (el.innerText || '').trim().toLowerCase();
+          const isVisible = el.offsetParent !== null;
+          if (isVisible && (text === 'choose a board' || text.startsWith('choose a board'))) {
+            el.click();
+            return 'clicked_choose_a_board';
+          }
+        }
+        // Fallback: try known selectors
+        const fallbacks = [
+          '[data-test-id="board-dropdown-select-button"]',
+          '[data-test-id="storyboard-selector-board-dropdown"]',
+          'button[aria-haspopup="listbox"]',
+          '[aria-label*="board" i]',
+        ];
+        for (const sel of fallbacks) {
+          const el = document.querySelector(sel);
+          if (el && el.offsetParent !== null) {
+            el.click();
+            return `clicked_fallback:${sel}`;
+          }
+        }
+        return 'not_found';
+      });
+      console.log(`[Bot] Board dropdown click result: ${boardClicked}`);
+      
+      await new Promise(r => setTimeout(r, 3000));
+
+      // Step 2: Select the first available board from the dropdown list
+      let boardSelected = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        boardSelected = await page.evaluate(() => {
+          // Look for board items in any list/menu that appears after clicking
+          const candidateSelectors = [
+            '[data-test-id="board-row"]',
+            '[role="option"]',
+            '[role="menuitem"]',
+            '[role="listitem"]',
+          ];
+          for (const sel of candidateSelectors) {
+            const items = Array.from(document.querySelectorAll(sel));
+            for (const item of items) {
+              const text = (item.innerText || '').trim().toLowerCase();
+              const isVisible = item.offsetParent !== null;
+              // Skip "search", "create new board", or empty items
+              if (isVisible && text.length > 1 && !text.includes('search') && !text.includes('create') && !text.startsWith('choose')) {
+                item.scrollIntoView({ block: 'nearest' });
+                item.click();
+                return `selected:${text.slice(0, 40)}`;
+              }
+            }
+          }
+          return false;
+        });
+        
+        if (boardSelected) {
+          console.log(`[Bot] ✅ Board selected: ${boardSelected}`);
           break;
         }
+        console.log(`[Bot] Board list not ready yet (attempt ${attempt + 1}/5)...`);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      if (!boardSelected) {
+        console.log('[Bot] ⚠️ Could not select a board. Attempting keyboard navigation...');
+        await page.keyboard.press('Tab');
+        await new Promise(r => setTimeout(r, 500));
+        await page.keyboard.press('ArrowDown');
+        await new Promise(r => setTimeout(r, 500));
+        await page.keyboard.press('Enter');
       }
       
-      if (boardMenu) {
-        console.log(`[Bot] Clicking board menu: ${await page.evaluate(el => el.innerText, boardMenu)}`);
-        await boardMenu.click();
-        console.log('[Bot] Opened board menu.');
-        await new Promise(r => setTimeout(r, 3000));
-        
-        // Try a second click if the menu didn't open
-        const isMenuOpen = await page.evaluate(() => !!document.querySelector('[role="listitem"], [data-test-id="board-row"]'));
-        if (!isMenuOpen) {
-          console.log('[Bot] Menu didn\'t seem to open, clicking again...');
-          await boardMenu.click();
-          await new Promise(r => setTimeout(r, 2000));
-        }
-
-        // Wait and try multiple times for the list to appear
-        let boardSelected = false;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          await new Promise(r => setTimeout(r, 2000));
-          boardSelected = await page.evaluate(() => {
-            const items = Array.from(document.querySelectorAll('[role="listitem"], [data-test-id="board-row"], div[role="button"], [role="option"], li[role="menuitem"]'));
-            const boardItem = items.find(el => {
-                const text = (el.innerText || '').toLowerCase();
-                const isVisible = el.offsetParent !== null;
-                const isInMenu = el.closest('[role="menu"], [role="listbox"], .fixed-height-container, [data-test-id="board-dropdown-menu"]');
-                return isVisible && isInMenu && text.length > 1 && !text.includes('choose') && !text.includes('search') && !text.includes('create');
-            });
-
-            if (boardItem) {
-              boardItem.scrollIntoView();
-              boardItem.click();
-              return true;
-            }
-            return false;
-          });
-          if (boardSelected) break;
-          console.log(`[Bot] Board list not ready, retrying... (${attempt + 1}/3)`);
-        }
-
-        if (boardSelected) {
-          console.log('[Bot] Board item clicked.');
-          await new Promise(r => setTimeout(r, 3000));
-        } else {
-          console.log('[Bot] ⚠️ No boards found in list. Please create at least one board manually.');
-          // Try to create a board as absolute last resort
-          await page.keyboard.type('Fashion Curation');
-          await page.keyboard.press('Enter');
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      } else {
-        console.log('[Bot] Board menu not found — using default board.');
-      }
+      // Wait for board selection to settle
+      await new Promise(r => setTimeout(r, 2000));
     } catch (e) {
       console.log('[Bot] Board selection error:', e.message);
     }
