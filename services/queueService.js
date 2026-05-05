@@ -1,5 +1,7 @@
 const aiService = require('./aiService');
 const historyService = require('./historyService');
+const flipkartSearchService = require('./flipkartSearchService');
+const earnKaroService = require('./earnKaroService');
 
 let createPinWithBot = null;
 try {
@@ -419,22 +421,71 @@ async function processNextInQueue() {
     }
 
     const title = (aiContent?.title || item.title || 'Pinterest Post').substring(0, 100);
-    const description = (aiContent?.description || item.description || '').substring(0, 800);
+    let description = (aiContent?.description || item.description || '').substring(0, 800);
     const altText = (item.altText || '').substring(0, 500);
+    const mediaUrl = item.mediaUrl;
     
     // ═══════════════════════════════════════════════════════════════════════
-    // FIX: Correct field mapping for destination link
-    // Priority: destinationLink (affiliate) → link → sourceUrl (fallback)
+    // AI PIPELINE: Multi-Product Curation & Affiliate Links
     // ═══════════════════════════════════════════════════════════════════════
-    const link = item.destinationLink || item.link || item.sourceUrl || '';
-    const mediaUrl = item.mediaUrl;
+    let finalLink = item.destinationLink || item.link || item.sourceUrl || '';
+    let affiliateLinks = [];
+    let mainProductName = null;
+    let outfitName = null;
+    
+    // Only run if we don't already have a valid affiliate destination link AND we have a shortcode to build a look page
+    if (!item.destinationLink && itemShortcode && item.sourceUrl) {
+      console.log(`[Queue] 🤖 AI identifying outfit for shortcode: ${itemShortcode}...`);
+      const outfitData = await aiService.identifyOutfit({
+        caption: item.caption || '',
+        username: item.username || '',
+        thumbnailUrl: item.thumbnailUrl || mediaUrl
+      });
+      
+      if (outfitData.found && outfitData.items) {
+        console.log(`[Queue] 🎯 Found outfit: "${outfitData.outfitName}"`);
+        outfitName = outfitData.outfitName;
+        for (const outItem of outfitData.items) {
+          const queries = {
+            exactMatchQuery: outItem.query,
+            similarMatchQuery: outItem.query,
+            broadMatchQuery: outItem.query.split(' ').slice(0, 3).join(' ')
+          };
+          
+          const fp = await flipkartSearchService.findProduct(queries, outItem.query);
+          if (fp) {
+            const ek = await earnKaroService.makeAffiliateLink(fp.url);
+            if (ek && ek.affiliateUrl) {
+              affiliateLinks.push({ 
+                type: outItem.type, 
+                name: fp.title, 
+                url: ek.affiliateUrl, 
+                image: fp.image, 
+                originalPrice: fp.price 
+              });
+              if (outItem.type === 'main') mainProductName = fp.title;
+            }
+          }
+        }
+      }
+      
+      // If we found products, generate the storefront URL
+      if (affiliateLinks.length > 0) {
+        const appDomain = process.env.APP_BASE_URL || 'http://localhost:3000';
+        finalLink = `${appDomain.replace(/\/$/, '')}/look/${itemShortcode}`;
+        description = `${description}\n\n🛒 Shop the full outfit here → ${finalLink}`.substring(0, 800);
+        console.log(`[Queue] ✨ Storefront generated: ${finalLink}`);
+      }
+    }
 
     if (item.destinationLink) {
-      console.log(`[Queue] 🔗 Using affiliate link: ${item.destinationLink}`);
+      console.log(`[Queue] 🔗 Using existing affiliate link: ${item.destinationLink}`);
+    } else if (affiliateLinks.length > 0) {
+      console.log(`[Queue] 🔗 Using AI-generated storefront: ${finalLink}`);
     } else if (item.link) {
-      console.log(`[Queue] 🔗 Using link field: ${item.link}`);
+      console.log(`[Queue] 🔗 Using standard link: ${item.link}`);
     } else {
-      console.log(`[Queue] ⚠️ No affiliate/product link found. Using source URL as fallback.`);
+      console.log(`[Queue] ⚠️ No products found. Using source URL as fallback.`);
     }
 
     let result;
@@ -449,7 +500,7 @@ async function processNextInQueue() {
       title,
       description,
       alt_text: altText,
-      link,
+      link: finalLink,
       media_source: {
         url: mediaUrl,
         // Pass smart thumbnail so the bot can upload it as the pin cover image
@@ -476,7 +527,11 @@ async function processNextInQueue() {
         description,
         hashtags: aiContent?.hashtags || [],
       },
-      affiliateLink: item.destinationLink || null,
+      affiliateLink: finalLink !== item.sourceUrl ? finalLink : null,
+      productInfo: affiliateLinks.length > 0 ? {
+        name: outfitName || mainProductName || 'Curated Look',
+        outfit: affiliateLinks
+      } : undefined,
       pinterestPin: {
         id: item.id || result?.pin?.id || `pin_${Date.now()}`,
         url: result?.pin?.url || '#',
