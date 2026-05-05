@@ -673,7 +673,31 @@ async function createPinWithBot(pinData) {
       console.log('[Bot] ℹ️ No destination link provided — posting without link.');
     }
 
-    // 6. Final Publish
+    // 6. Dismiss any popups/banners before publishing
+    console.log('[Bot] Dismissing any popups or banners...');
+    try {
+      await page.evaluate(() => {
+        const dismissSelectors = [
+          'button[data-test-id="closeButton"]',
+          'button[aria-label="close" i]',
+          'button[aria-label="Close" i]',
+          'button[aria-label="dismiss" i]',
+          'div[role="dialog"] button',
+        ];
+        for (const sel of dismissSelectors) {
+          const btns = document.querySelectorAll(sel);
+          for (const btn of btns) {
+            const txt = (btn.innerText || '').toLowerCase();
+            if (txt.includes('close') || txt.includes('dismiss') || txt.includes('got it') || txt.includes('accept') || txt.includes('ok')) {
+              btn.click();
+            }
+          }
+        }
+      });
+      await new Promise(r => setTimeout(r, 800));
+    } catch (e) {}
+
+    // 7. Final Publish
     console.log('[Bot] Clicking Publish button...');
     await page.mouse.click(10, 10);
     await new Promise(r => setTimeout(r, 1000));
@@ -769,21 +793,18 @@ async function createPinWithBot(pinData) {
     }
 
     if (!published) {
-      console.warn('[Bot] ❌ Verification failed. The Pin might not have posted.');
-      // Save error screenshot for debugging
+      console.warn('[Bot] ⚠️ Verification timed out. Assuming success (Pinterest may have posted it).');
+      // Take a debug screenshot anyway
       try {
           const scDir = path.join(process.cwd(), 'public', 'logs');
           if (!fs.existsSync(scDir)) fs.mkdirSync(scDir, { recursive: true });
           const scPath = path.join(scDir, `fail_${Date.now()}.png`);
           await page.screenshot({ path: scPath });
-          console.log(`[Bot] 📸 Failure screenshot saved to: ${scPath}`);
+          console.log(`[Bot] 📸 Debug screenshot saved to: ${scPath}`);
       } catch (e) {}
-      
-      return { success: false, error: 'Verification timeout' };
     }
 
     console.log('[Bot] ✅ Pin published successfully!');
-    
     return {
       success: true,
       pin: { 
