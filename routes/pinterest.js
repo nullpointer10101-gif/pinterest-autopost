@@ -94,16 +94,21 @@ router.post('/post', async (req, res) => {
 
     const missionId = `mission_${Date.now()}`;
 
-    // 🚀 INSTANT GitHub Bot — prepend to queue front + fire immediately
-    console.log(`[Post Mission] 🚀 Instant GitHub Bot — queueing + firing NOW...`);
+    // Extract shortcode from the original reel URL for dedup and look page
+    const shortcodeMatch = (sourceUrl || '').match(/\/(reel|p|tv)\/([A-Za-z0-9_-]+)/);
+    const shortcode = shortcodeMatch ? shortcodeMatch[2] : null;
 
-    await queueService.addToQueue([{
+    // 🚀 INSTANT GitHub Bot — prepend to queue front + fire immediately
+    console.log(`[Post Mission] 🚀 Instant GitHub Bot — queueing + firing NOW... shortcode=${shortcode || 'N/A'}`);
+
+    const added = await queueService.addToQueue([{
       id: missionId,
+      shortcode,
       title: title.trim(),
       description: descWithTags,
       altText: altText ? altText.trim() : '',
       mediaUrl,
-      sourceUrl: cleanLink,
+      sourceUrl: sourceUrl || cleanLink,   // keep original IG URL for shortcode dedup
       originalSourceUrl: sourceUrl || '',
       username: reelMeta?.username || 'unknown',
       caption: reelMeta?.caption || '',
@@ -111,6 +116,13 @@ router.post('/post', async (req, res) => {
       reelMeta,
       isInstant: true,
     }], true); // true = prepend to front of queue
+
+    if (!added || added.length === 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'This reel was already posted or is already in the queue (dedup blocked it). Try a different reel.',
+      });
+    }
 
     // Fire GitHub Actions instant mission — fire-and-forget, no blocking
     githubService.triggerInstantMission().catch((err) => {
@@ -121,12 +133,14 @@ router.post('/post', async (req, res) => {
       success: true,
       queued: true,
       missionId,
-      message: '🚀 Instant Mission fired! GitHub Bot will post in ~60 seconds.',
+      shortcode,
+      message: `🚀 Instant Mission fired! GitHub Bot will post${shortcode ? ` reel /${shortcode}` : ''} in ~60 seconds.`,
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 
 router.get('/session/status', async (req, res) => {
   try {
