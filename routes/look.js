@@ -12,7 +12,11 @@ router.get('/:shortcode', async (req, res) => {
     
     if (!lookData) {
       const history = await historyService.getAll();
-      lookData = history.find(item => item.shortcode === shortcode);
+      lookData = history.find(item => 
+        item.shortcode === shortcode || 
+        item.reelData?.shortcode === shortcode || 
+        (item.url || '').includes(`/${shortcode}`)
+      );
     }
     
     if (!lookData) {
