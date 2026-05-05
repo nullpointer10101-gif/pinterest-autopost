@@ -444,35 +444,72 @@ async function createPinWithBot(pinData) {
           break;
         }
       }
+      
       if (boardMenu) {
+        console.log(`[Bot] Clicking board menu: ${await page.evaluate(el => el.innerText, boardMenu)}`);
         await boardMenu.click();
         console.log('[Bot] Opened board menu.');
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 3000));
+        
+        // Try a second click if the menu didn't open
+        const isMenuOpen = await page.evaluate(() => !!document.querySelector('[role="listitem"], [data-test-id="board-row"]'));
+        if (!isMenuOpen) {
+          console.log('[Bot] Menu didn\'t seem to open, clicking again...');
+          await boardMenu.click();
+          await new Promise(r => setTimeout(r, 2000));
+        }
 
-        const boardSelected = await page.evaluate(() => {
-          const items = Array.from(document.querySelectorAll('[role="listitem"], [data-test-id="board-row"], div[role="button"], [role="option"], li[role="menuitem"]'));
-          const boardItem = items.find(el => {
-              const text = (el.innerText || '').toLowerCase();
-              return el.offsetParent !== null && text.length > 1 && !text.includes('choose') && !text.includes('search') && !text.includes('create');
+        // Wait and try multiple times for the list to appear
+        let boardSelected = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await new Promise(r => setTimeout(r, 2000));
+          boardSelected = await page.evaluate(() => {
+            const items = Array.from(document.querySelectorAll('[role="listitem"], [data-test-id="board-row"], div[role="button"], [role="option"], li[role="menuitem"]'));
+            const boardItem = items.find(el => {
+                const text = (el.innerText || '').toLowerCase();
+                const isVisible = el.offsetParent !== null;
+                const isInMenu = el.closest('[role="menu"], [role="listbox"], .fixed-height-container, [data-test-id="board-dropdown-menu"]');
+                return isVisible && isInMenu && text.length > 1 && !text.includes('choose') && !text.includes('search') && !text.includes('create');
+            });
+
+            if (boardItem) {
+              boardItem.scrollIntoView();
+              boardItem.click();
+              return true;
+            }
+            return false;
           });
-
-          if (boardItem) {
-            boardItem.scrollIntoView();
-            boardItem.click();
-            return true;
-          }
-          return false;
-        });
+          if (boardSelected) break;
+          console.log(`[Bot] Board list not ready, retrying... (${attempt + 1}/3)`);
+        }
 
         if (boardSelected) {
           console.log('[Bot] Board item clicked.');
           await new Promise(r => setTimeout(r, 3000));
+        } else {
+          console.log('[Bot] ⚠️ No boards found in list. Please create at least one board manually.');
+          // Try to create a board as absolute last resort
+          await page.keyboard.type('Fashion Curation');
+          await page.keyboard.press('Enter');
+          await new Promise(r => setTimeout(r, 2000));
         }
       } else {
         console.log('[Bot] Board menu not found — using default board.');
       }
     } catch (e) {
       console.log('[Bot] Board selection error:', e.message);
+    }
+
+    // ─── 5a-bis. Wait for Video Processing ───────────
+    console.log('[Bot] Waiting for media processing to complete...');
+    for (let i = 0; i < 15; i++) {
+       const isProcessing = await page.evaluate(() => {
+          const text = document.body.innerText.toLowerCase();
+          return text.includes('processing') || text.includes('uploading') || text.includes('preparing');
+       });
+       if (!isProcessing) break;
+       console.log(`[Bot] Still processing video... (${i+1}/15)`);
+       await new Promise(r => setTimeout(r, 4000));
     }
 
     // ─── 5b. Upload Smart Cover Thumbnail ───────
@@ -727,9 +764,17 @@ async function createPinWithBot(pinData) {
     }
 
     if (!published) {
-      console.warn('[Bot] ⚠️ Verification timed out, but proceeding as success if no hard error occurred.');
-      // If we got this far without a crash, it's often a success on Pinterest
-      published = true; 
+      console.warn('[Bot] ❌ Verification failed. The Pin might not have posted.');
+      // Save error screenshot for debugging
+      try {
+          const scDir = path.join(process.cwd(), 'public', 'logs');
+          if (!fs.existsSync(scDir)) fs.mkdirSync(scDir, { recursive: true });
+          const scPath = path.join(scDir, `fail_${Date.now()}.png`);
+          await page.screenshot({ path: scPath });
+          console.log(`[Bot] 📸 Failure screenshot saved to: ${scPath}`);
+      } catch (e) {}
+      
+      return { success: false, error: 'Verification timeout' };
     }
 
     console.log('[Bot] ✅ Pin published successfully!');
