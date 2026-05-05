@@ -29,6 +29,7 @@ async function processReel(reel) {
   let productResult = await aiService.identifyProduct({
     caption: reel.caption || '',
     username: reel.username,
+  });
   if (productResult.found) {
     productName = productResult.productName;
     console.log('    ✅ Product: "' + productName + '" (' + productResult.category + ')');

@@ -202,7 +202,10 @@ async function runIgPinterestPipeline() {
           // CRITICAL: This is what gets typed into Pinterest's "destination link" field
           // Must be the affiliate link, NOT the Instagram reel URL
           link: affiliateUrl || '',
-          media_source: { url: reel.mediaUrl },
+          media_source: { 
+            url: reel.mediaUrl,
+            thumbnailUrl: reel.thumbnailUrl
+          },
         };
 
         try {

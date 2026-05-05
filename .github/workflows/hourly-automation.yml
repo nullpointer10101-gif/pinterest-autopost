@@ -68,3 +68,7 @@ jobs:
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           APP_STATE_KEY: ${{ secrets.APP_STATE_KEY || 'pinterest_autopost_state_v1' }}
           GEMINI_API_KEY: ${{ secrets.AI_API_KEY }}
+          # 3-Layer AI Fallback
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_FALLBACK_API_KEY: ${{ secrets.GEMINI_FALLBACK_API_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}

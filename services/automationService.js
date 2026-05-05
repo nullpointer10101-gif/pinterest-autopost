@@ -392,42 +392,46 @@ async function processInstagramReels(options = {}) {
         console.log(`[Automation] ✅ Passed dedup. Processing reel ${reel.shortcode}...`);
         
         // ═══════════════════════════════════════════════════════════════
-        // STEP 1: AI Product Identification
+        // STEP 1: Check affiliate cache / AI Outfit Identification
         // ═══════════════════════════════════════════════════════════════
-        console.log(`[Automation] 🤖 Step 1: Identifying product...`);
-        const productResult = await aiService.identifyProduct({
-          caption: reel.caption || '',
-          username: reel.username,
-          thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl
+        let outfitData = null;
+        console.log(`[Automation] 🤖 Step 1: Identifying full outfit...`);
+        outfitData = await aiService.identifyOutfit({
+            caption: reel.caption || '',
+            username: reel.username,
+            thumbnailUrl: reel.thumbnailUrl || reel.mediaUrl
         });
 
-        let affiliateUrl = null;
-        let productName = null;
-
-        if (productResult.found) {
-          productName = productResult.productName;
-          console.log(`[Automation] 🎯 Product found: "${productName}" (${productResult.category})`);
-          
-          // ═══════════════════════════════════════════════════════════════
-          // STEP 2: Flipkart Search → EarnKaro Affiliate Link
-          // ═══════════════════════════════════════════════════════════════
-          console.log(`[Automation] 🔍 Step 2: Searching Flipkart...`);
-          const fp = await flipkartSearchService.findProduct(productResult, productName);
-          if (fp) {
-            console.log(`[Automation] 🛒 Flipkart match: "${fp.title}"`);
-            console.log(`[Automation] 🔗 Step 3: Generating EarnKaro affiliate link...`);
-            const ek = await earnKaroService.makeAffiliateLink(fp.url);
-            affiliateUrl = ek.affiliateUrl;
-            console.log(`[Automation] ✅ Affiliate link: ${affiliateUrl} (source: ${ek.source})`);
-            
-            // Cache the affiliate link
-            await igTrackerService.setCachedAffiliateLink(reel.shortcode, affiliateUrl);
-          } else {
-            console.log(`[Automation] ⚠️ No Flipkart match. Will post without affiliate link.`);
-          }
+        const affiliateLinks = []; // { type, name, url, image }
+        let mainProductName = null;
+        
+        if (outfitData.found && outfitData.items) {
+           console.log(`[Automation] 🎯 Outfit found: "${outfitData.outfitName}" with ${outfitData.items.length} items`);
+           
+           for (const item of outfitData.items) {
+               console.log(`[Automation] 🔍 Searching Flipkart for ${item.type}: "${item.query}"...`);
+               
+               const queries = {
+                  exactMatchQuery: item.query,
+                  similarMatchQuery: item.query,
+                  broadMatchQuery: item.query.split(' ').slice(0, 3).join(' ')
+               };
+               
+               const fp = await flipkartSearchService.findProduct(queries, item.query);
+               if (fp) {
+                   console.log(`[Automation] 🔗 Generating EarnKaro link for ${item.type}...`);
+                   const ek = await earnKaroService.makeAffiliateLink(fp.url);
+                   if (ek && ek.affiliateUrl) {
+                       affiliateLinks.push({ type: item.type, name: fp.title, url: ek.affiliateUrl, image: fp.image, originalPrice: fp.price });
+                       if (item.type === 'main' || !mainProductName) mainProductName = fp.title;
+                   }
+               }
+           }
         } else {
-          console.log(`[Automation] ℹ️ No shoppable product detected. Posting as standard Pin.`);
+           console.log(`[Automation] ℹ️ No shoppable outfit detected. Posting as standard Pin.`);
         }
+        
+        if (!mainProductName && outfitData.found) mainProductName = outfitData.outfitName;
 
         // ═══════════════════════════════════════════════════════════════
         // STEP 2b: Smart Thumbnail Selection (AI picks best product frame)
@@ -449,13 +453,16 @@ async function processInstagramReels(options = {}) {
         const pinContent = await aiService.generatePinterestContent({
           caption: reel.caption,
           username: reel.username,
-          productName: productName
+          productName: mainProductName
         });
 
         // Build description with affiliate CTA
         let finalDescription = pinContent.description;
-        if (affiliateUrl) {
-          finalDescription = `${pinContent.description}\n\n🛒 Shop this look → ${affiliateUrl}`.substring(0, 800);
+        const appDomain = process.env.APP_BASE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || 'yourdomain.com';
+        const landingPageUrl = `https://${appDomain.replace('https://', '')}/look/${reel.shortcode}`;
+
+        if (affiliateLinks.length > 0) {
+          finalDescription = `${pinContent.description}\n\n🛒 Shop this entire look → ${landingPageUrl}`.substring(0, 800);
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -470,37 +477,33 @@ async function processInstagramReels(options = {}) {
         const queueItem = {
           title: pinContent.title,
           description: finalDescription,
-          altText: `${productName ? `Product: ${productName}` : 'Showcased item'} from @${reel.username}`,
+          altText: `${mainProductName ? `Outfit: ${mainProductName}` : 'Showcased outfit'} from @${reel.username}`,
           mediaUrl: reel.mediaUrl,
           sourceUrl: reel.url,
-          // CRITICAL: destinationLink is the affiliate/product link
-          destinationLink: affiliateUrl || '',
-          link: affiliateUrl || '',
+          // CRITICAL: destinationLink points to our new landing page
+          destinationLink: affiliateLinks.length > 0 ? landingPageUrl : '',
+          link: affiliateLinks.length > 0 ? landingPageUrl : '',
           originalSourceUrl: reel.url,
           username: reel.username,
           caption: reel.caption || '',
-          // Use AI-selected best thumbnail (base64 data URI or original URL)
           thumbnailUrl: bestThumbnailUrl || reel.thumbnailUrl || reel.mediaUrl,
-          // CRITICAL: Store shortcode as top-level field for dedup
           shortcode: reel.shortcode,
-          // Schedule
           scheduledAfter: scheduledAfter,
-          // AI Content blob
           aiContent: {
             title: pinContent.title,
             description: finalDescription,
             hashtags: pinContent.hashtags || [],
           },
           // Metadata
-          productInfo: productResult.found ? {
-            name: productName,
-            category: productResult.category,
-            affiliateUrl: affiliateUrl,
+          productInfo: affiliateLinks.length > 0 ? {
+            name: outfitData.outfitName || mainProductName,
+            category: 'outfit',
+            affiliateUrl: affiliateLinks[0].url, // fallback
+            outfit: affiliateLinks
           } : null,
-          // Thumbnail metadata for debugging
           thumbnailMeta: {
             source: thumbnailChanged ? 'ai_frame_selection' : 'original',
-            productName: productName || null,
+            productName: mainProductName || null,
           },
         };
 
@@ -508,7 +511,7 @@ async function processInstagramReels(options = {}) {
         await queueService.addToQueue([queueItem], isFirst);
         console.log(`[Automation] ✅ Added to queue: ${reel.shortcode} (${isFirst ? '🚀 INSTANT' : `⏰ SCHEDULED +${SCHEDULE_GAP_MINUTES * queuedIndex}min`})`);
         console.log(`[Automation]    Title: "${pinContent.title}"`);
-        console.log(`[Automation]    Affiliate: ${affiliateUrl || 'NONE'}`);
+        console.log(`[Automation]    Landing Page: ${affiliateLinks.length > 0 ? landingPageUrl : 'NONE'}`);
 
         // Mark seen AFTER successful queue add
         await igTrackerService.markReelAsSeen(reel.username, reel.shortcode);

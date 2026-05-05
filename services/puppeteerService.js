@@ -260,24 +260,55 @@ async function createPinWithBot(pinData) {
   const ext = isImage ? '.jpg' : '.mp4';
   const mediaPath = path.join(tempDir, `pin_${Date.now()}${ext}`);
 
-  // Smart thumbnail: base64 data URI → temp JPEG file
-  let coverPath = null;
-  const thumbnailSrc = media_source.thumbnailUrl || '';
-  if (thumbnailSrc.startsWith('data:image/')) {
-    try {
-      const base64Data = thumbnailSrc.replace(/^data:image\/\w+;base64,/, '');
-      coverPath = path.join(tempDir, `pin_cover_${Date.now()}.jpg`);
-      fs.writeFileSync(coverPath, Buffer.from(base64Data, 'base64'));
-      console.log('[Bot] Smart cover thumbnail written to temp file.');
-    } catch (e) {
-      console.warn('[Bot] Could not write cover thumbnail:', e.message);
-      coverPath = null;
-    }
-  }
-
   console.log(`[Bot] Downloading media (${ext}) to temp storage...`);
   await downloadVideo(mediaUrl, mediaPath);
   console.log('[Bot] Media downloaded successfully.');
+
+  let coverPath = null;
+  if (ext === '.mp4') {
+    try {
+      console.log('[Bot] Extracting a frame from the middle of the video for the Cover Image...');
+      coverPath = path.join(tempDir, `pin_cover_${Date.now()}.jpg`);
+      const { execSync } = require('child_process');
+      // Extract a frame at 3 seconds in. If video is shorter, ffmpeg might fail, so we fallback to 1 sec.
+      try {
+        execSync(`ffmpeg -y -i "${mediaPath}" -ss 00:00:03 -vframes 1 "${coverPath}"`, { stdio: 'ignore' });
+        console.log('[Bot] ✅ Extracted 3-second frame using ffmpeg.');
+      } catch (e) {
+        console.log('[Bot] ⚠️ 3-second extraction failed (video too short?), trying 1-second...');
+        execSync(`ffmpeg -y -i "${mediaPath}" -ss 00:00:01 -vframes 1 "${coverPath}"`, { stdio: 'ignore' });
+        console.log('[Bot] ✅ Extracted 1-second frame using ffmpeg.');
+      }
+    } catch (e) {
+      console.warn('[Bot] ❌ Could not extract cover frame with ffmpeg:', e.message);
+      coverPath = null;
+    }
+    
+    // Fallback to Instagram's provided thumbnail if ffmpeg failed
+    const thumbnailSrc = media_source.thumbnailUrl || '';
+    if (!coverPath && thumbnailSrc) {
+      console.log('[Bot] Falling back to Instagram thumbnail...');
+      try {
+        coverPath = path.join(tempDir, `pin_cover_fallback_${Date.now()}.jpg`);
+        if (thumbnailSrc.startsWith('data:image/')) {
+          const base64Data = thumbnailSrc.replace(/^data:image\/\w+;base64,/, '');
+          fs.writeFileSync(coverPath, Buffer.from(base64Data, 'base64'));
+        } else if (thumbnailSrc.startsWith('http')) {
+          const writer = fs.createWriteStream(coverPath);
+          const response = await axios({ url: thumbnailSrc, method: 'GET', responseType: 'stream' });
+          response.data.pipe(writer);
+          await new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+          });
+        }
+        console.log('[Bot] ✅ Instagram thumbnail fallback downloaded.');
+      } catch (err) {
+        console.warn('[Bot] ❌ Fallback thumbnail failed:', err.message);
+        coverPath = null;
+      }
+    }
+  }
 
   // 2. Launch Puppeteer (Headless mode for server deployment)
   if (!puppeteer) throw new Error('Puppeteer not available in this environment (Vercel/serverless). Bot runs on GitHub Actions only.');
@@ -444,54 +475,68 @@ async function createPinWithBot(pinData) {
       console.log('[Bot] Board selection error:', e.message);
     }
 
-    // ─── 5b. Upload Smart Cover Thumbnail (if AI selected a better frame) ───────
+    // ─── 5b. Upload Smart Cover Thumbnail ───────
     if (coverPath && fs.existsSync(coverPath)) {
       console.log('[Bot] 🖼️ Uploading AI-selected cover thumbnail...');
       try {
-        // Pinterest shows a "Change cover" button on video pins after upload
+        // Hover over the video to reveal the edit/cover button
+        try { await page.hover('[data-test-id="pin-builder-media"]'); } catch(e) {}
+        try { await page.hover('video'); } catch(e) {}
+        await new Promise(r => setTimeout(r, 1000));
+
         const coverBtnSelectors = [
+          '[data-test-id="pin-builder-media"] button[aria-label*="Edit" i]',
           'button[data-test-id="pin-draft-cover-image-button"]',
-          'button[aria-label*="cover" i]',
-          'button[aria-label*="Cover" i]',
-          '[data-test-id="cover-image-selector"] button',
           'button[data-test-id="change-cover-btn"]',
+          'button[aria-label*="Edit" i]',
+          '[data-test-id="edit-pin-button"]',
+          'button[data-test-id="edit-media-button"]'
         ];
         let coverBtn = null;
         for (const sel of coverBtnSelectors) {
-          try { coverBtn = await page.$(sel); if (coverBtn) { console.log(`[Bot] Cover button found: ${sel}`); break; } } catch {}
+          try { coverBtn = await page.$(sel); if (coverBtn) { console.log(`[Bot] Edit button found: ${sel}`); break; } } catch {}
         }
 
         if (coverBtn) {
           await coverBtn.click();
           await new Promise(r => setTimeout(r, 2000));
 
-          // Find the file input that appeared for cover upload
-          const coverInputs = await page.$$('input[type="file"]');
-          if (coverInputs.length > 0) {
-            await coverInputs[coverInputs.length - 1].uploadFile(coverPath);
+          // Find the file input strictly inside the Edit modal
+          const modalInputs = await page.$$('div[role="dialog"] input[type="file"], .Modal input[type="file"]');
+          
+          if (modalInputs.length > 0) {
+            console.log(`[Bot] Found ${modalInputs.length} file inputs in modal. Uploading cover...`);
+            await modalInputs[modalInputs.length - 1].uploadFile(coverPath);
             await new Promise(r => setTimeout(r, 3000));
 
-            // Confirm/apply the cover if there's an apply button
+            // Confirm/apply the cover
             const applyResult = await page.evaluate(() => {
-              const btns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+              const btns = Array.from(document.querySelectorAll('div[role="dialog"] button, .Modal button'));
               const apply = btns.find(b => {
                 const t = (b.innerText || '').toLowerCase();
-                return b.offsetParent !== null && (t === 'apply' || t === 'set cover' || t === 'use this' || t === 'select' || t === 'done');
+                return b.offsetParent !== null && (t === 'apply' || t === 'done' || t === 'save');
               });
               if (apply) { apply.click(); return true; }
+              
+              const doneBtn = document.querySelector('[data-test-id="done-button"]');
+              if (doneBtn) { doneBtn.click(); return true; }
+              
               return false;
             });
+
             if (applyResult) {
-              await new Promise(r => setTimeout(r, 2000));
-              console.log('[Bot] ✅ Smart cover image applied.');
+              console.log('[Bot] ✅ Cover uploaded and applied.');
             } else {
-              console.log('[Bot] Cover input uploaded (no apply button found — auto-applied).');
+              console.log('[Bot] ⚠️ No Apply/Done button found in modal, pressing Escape.');
+              await page.keyboard.press('Escape');
             }
           } else {
-            console.log('[Bot] ⚠️ No file input found after clicking cover button.');
+            console.log('[Bot] ⚠️ No file input found in the edit modal to upload cover.');
+            await page.keyboard.press('Escape');
           }
+          await new Promise(r => setTimeout(r, 2000));
         } else {
-          console.log('[Bot] ℹ️ No cover change button found — Pinterest will use auto-selected frame.');
+          console.log('[Bot] ℹ️ No Edit button found — Pinterest will use auto-selected frame.');
         }
       } catch (e) {
         console.log('[Bot] Cover upload warning (non-fatal):', e.message);
@@ -501,6 +546,13 @@ async function createPinWithBot(pinData) {
     // ─── 5c. Fill Destination Link (AFTER board selection) ─────────────────
     // CRITICAL: This MUST happen after the board dropdown is closed.
     // Pinterest resets the destination link field when the board picker is opened.
+    
+    // Ensure any open modals (like Edit Cover) are fully closed
+    await page.keyboard.press('Escape');
+    await new Promise(r => setTimeout(r, 1000));
+    await page.keyboard.press('Escape');
+    await new Promise(r => setTimeout(r, 1500));
+
     const linkSelectors = [
       'textarea#storyboard-selector-link',
       'input[id*="pin-draft-link"]',
@@ -514,6 +566,20 @@ async function createPinWithBot(pinData) {
     ];
 
     const fillLinkField = async () => {
+      // Sometimes Pinterest hides the link behind an "Add a link" button
+      try {
+        const addLinkBtns = await page.$$('button');
+        for (const btn of addLinkBtns) {
+           const text = await page.evaluate(el => (el.innerText || '').toLowerCase(), btn);
+           const ariaLabel = await page.evaluate(el => (el.getAttribute('aria-label') || '').toLowerCase(), btn);
+           if (text.includes('add a link') || text.includes('add link') || ariaLabel.includes('add a link')) {
+              await btn.click();
+              await new Promise(r => setTimeout(r, 1000));
+              break;
+           }
+        }
+      } catch(e) {}
+
       let linkField = null;
       for (const sel of linkSelectors) {
         try {
@@ -696,47 +762,96 @@ async function createPinWithBot(pinData) {
 }
 
 
-function isPinRelevant(title, description, niche) {
-  if (niche !== 'fashion' && niche !== 'home') return true;
+function isPinRelevant(title, description, boardName = '', fallbackMode = false, targetNiche = 'all') {
+  const text = `${title} ${description}`.toLowerCase();
+  const boardText = (boardName || '').toLowerCase();
   
-  const text = (title + ' ' + description).toLowerCase();
+  // STEP 1: Blacklist is the only hard reject
+  const baseBlacklist = [
+    'women', 'woman', 'female', 'girl', 'girls', 'ladies', 'lady', 'feminine', 'she', 'her', 'hers', 'womens', 'womenswear', 'bridal', 'bride',
+    'recipe', 'food', 'cooking', 'baking', 'meal', 'dinner', 'lunch', 'breakfast', 'dessert', 'cake',
+    'makeup', 'lipstick', 'nail', 'mascara', 'blush', 'foundation', 'contour', 'lashes',
+    'kids', 'children', 'baby', 'toddler', 'infant', 'nursery',
+    'pets', 'cat', 'dog'
+  ];
   
-  if (niche === 'fashion') {
-    // Strict Blacklist: Block completely unrelated stuff
-    const blacklisted = [
-      'decor', 'home', 'furniture', 'interior', 'kitchen', 'architecture', 'recipe', 'food', 
-      'art', 'diy', 'craft', 'room', 'apartment', 'women', 'woman', 'girl', 'ladies', 'female',
-      'makeup', 'beauty', 'skincare', 'hair', 'nails', 'dog', 'cat', 'pet', 'car', 'vehicle', 'wedding'
-    ];
-    
-    if (blacklisted.some(word => text.includes(word))) return false;
-    
-    // Explicit whitelists (if it matches any of these exact phrases, pass immediately)
-    const exactPhrases = ['menswear', 'mens fashion', 'men fashion', 'mens style', 'men style', 'mens outfit', 'men outfit'];
-    if (exactPhrases.some(phrase => text.includes(phrase))) return true;
-
-    // Matrix Matching: Must have at least one male identifier AND one apparel identifier
-    const maleIdentifiers = ['men', 'man', 'mens', 'boy', 'boys', 'male', 'gentleman'];
-    const apparelIdentifiers = ['fashion', 'style', 'outfit', 'clothes', 'trouser', 'pants', 'shirt', 'jacket', 'streetwear', 'suit', 'sneaker', 'denim', 'blazer', 'hoodie', 'apparel', 'wear', 'tshirt', 'polo', 'footwear', 'shoes'];
-
-    const hasMale = maleIdentifiers.some(word => text.split(/[^a-z]+/).includes(word));
-    const hasApparel = apparelIdentifiers.some(word => text.includes(word));
-
-    return hasMale && hasApparel;
+  // Add niche-specific blacklists
+  let blacklisted = [...baseBlacklist];
+  if (targetNiche === 'fashion') {
+      blacklisted.push('decor', 'interior', 'home', 'room', 'bedroom', 'living room', 'kitchen', 'bathroom', 'furniture', 'diy', 'craft', 'car', 'vehicle', 'tech', 'software');
+  } else if (targetNiche === 'home') {
+      blacklisted.push('outfit', 'streetwear', 'menswear', 'suit', 'blazer', 'sneakers', 'grooming', 'beard', 'cologne');
   }
 
-  if (niche === 'home') {
-    const mustHave = ['home', 'decor', 'interior', 'room', 'furniture', 'design', 'apartment', 'house', 'living', 'kitchen', 'bedroom'];
-    const blacklisted = ['fashion', 'clothes', 'outfit', 'makeup', 'beauty', 'recipe', 'food', 'car', 'tech'];
-    
-    const hasBlacklisted = blacklisted.some(word => text.includes(word));
-    if (hasBlacklisted) return false;
-    
-    const hasRequired = mustHave.some(word => text.includes(word));
-    return hasRequired;
+  if (blacklisted.some(word => text.includes(word) || boardText.includes(word))) return { relevant: false, reason: 'blacklisted' };
+
+  // STEP 2: Strict filtering based on niche
+  if (targetNiche === 'fashion') {
+      const fashionRelatedWords = ['outfit', 'look', 'style', 'fit', 'drip', 'fashion', 'wear', 'wardrobe', 'clothing', 'apparel', 'dressed', 'ootd', 'blazer', 'suit', 'chinos', 'sneakers', 'streetwear', 'menswear', 'dapper', 'grooming', 'beard', 'fade', 'cologne', 'loafers', 'oxford', 'tailored', 'aesthetic'];
+      const menKeywords = ['men', 'man', 'male', 'guy', 'gentleman', 'menswear', 'mensstyle', 'outfit men', 'style men', 'fashion men', 'masculine', 'bro', 'him', 'mens'];
+
+      const hasMenKeyword = menKeywords.some(w => text.includes(w) || boardText.includes(w));
+      const hasFashionKeyword = fashionRelatedWords.some(w => text.includes(w) || boardText.includes(w));
+
+      if (!hasMenKeyword || !hasFashionKeyword) {
+          const strictFashionWords = ['menswear', 'dapper', 'chinos', 'blazer', 'loafers', 'streetwear', 'mensstyle', 'ootd', 'outfit', 'suit'];
+          const hasStrictFashion = strictFashionWords.some(w => text.includes(w) || boardText.includes(w));
+          
+          if (fallbackMode && hasStrictFashion) {
+              // Allowed through fallback
+          } else {
+              return { relevant: false, reason: 'missing strict mens or fashion identifiers' };
+          }
+      }
+  } else if (targetNiche === 'home') {
+      const homeKeywords = ['decor', 'interior', 'home', 'room', 'bedroom', 'living room', 'kitchen', 'bathroom', 'furniture', 'diy', 'craft', 'design', 'architecture', 'renovation', 'apartment', 'house'];
+      const hasHomeKeyword = homeKeywords.some(w => text.includes(w) || boardText.includes(w));
+      if (!hasHomeKeyword && !fallbackMode) {
+          return { relevant: false, reason: 'missing home identifiers' };
+      }
   }
-  
-  return true;
+
+  // STEP 3: Sub-niche detection
+  const subNiches = {
+    casual: ['streetwear', 'casual', 'everyday', 'weekend', 'relaxed'],
+    formal: ['suit', 'tuxedo', 'blazer', 'formal', 'business', 'dapper', 'sharp'],
+    streetwear: ['sneakers', 'hypebeast', 'urban', 'hype', 'drops'],
+    smart_casual: ['chinos', 'oxford', 'loafers', 'smart casual', 'business casual'],
+    seasonal: ['summer', 'winter', 'fall', 'spring'],
+    grooming: ['beard', 'haircut', 'hairstyle', 'fade', 'lineup', 'grooming'],
+    accessories: ['watch', 'chain', 'belt', 'sunglasses', 'rings'],
+    luxury: ['designer', 'gucci', 'louis vuitton', 'luxury'],
+    athletic: ['gym', 'athletic', 'workout'],
+    cultural: ['korean', 'italian', 'african', 'japan']
+  };
+
+  let detectedSubNiche = 'casual';
+  let matchCount = 0;
+  for (const [niche, keywords] of Object.entries(subNiches)) {
+    let hits = keywords.filter(k => text.includes(k) || boardText.includes(k)).length;
+    if (hits > 0) {
+      if (hits > matchCount) {
+        matchCount = hits;
+        detectedSubNiche = niche;
+      }
+    }
+  }
+
+  if (fallbackMode && targetNiche === 'fashion' && (!hasMenKeyword || !hasFashionKeyword)) {
+      return { relevant: true, subNiche: detectedSubNiche, matchCount: 1, reason: 'fallback_mode' };
+  }
+
+  return { relevant: true, subNiche: detectedSubNiche, matchCount, reason: 'matched' };
+}
+
+function scorePin(pinData, matchCount) {
+  let score = 0;
+  if (pinData.saves > 50) score += 20;
+  if (pinData.desc && pinData.desc.split(' ').length > 30) score += 15;
+  if (pinData.comments > 0) score += 10;
+  if (matchCount >= 2) score += 10;
+  if (!pinData.desc || pinData.desc.trim().length === 0) score -= 20;
+  return score;
 }
 
 async function runAutoEngagerSafe(options = {}) {
@@ -744,331 +859,288 @@ async function runAutoEngagerSafe(options = {}) {
   if (!sessionCookie) throw new Error('PINTEREST_SESSION_COOKIE is missing. Link a session in Settings.');
   const context = resolveEngagementContext(options.context || {});
 
-  const targetCount = Math.max(1, toInt(options.count, 2));
-  // Default to much faster gaps for manual UI triggers (15-45 seconds)
-  const minGapMs = Math.max(5000, toInt(options.minGapMs, toInt(process.env.AUTOMATION_ENGAGEMENT_MIN_GAP_MS, 15 * 1000)));
-  const maxGapMs = Math.max(minGapMs, toInt(options.maxGapMs, toInt(process.env.AUTOMATION_ENGAGEMENT_MAX_GAP_MS, 45 * 1000)));
-  const commentChance = clamp(
-    toFloat(options.commentChance, toFloat(process.env.AUTOMATION_COMMENT_PROBABILITY, 0.85)),
-    0.1,
-    1
-  );
+  const automationState = await historyService.getAutomationState();
+  let { likesToday = 0, commentsToday = 0, savesToday = 0, engagedUrls = [], circuitBreaker } = automationState;
+  
+  if (circuitBreaker && new Date(circuitBreaker).getTime() > Date.now()) {
+    console.log(`[Bot] Circuit breaker active until ${new Date(circuitBreaker).toLocaleString()}. Skipping engagement.`);
+    return { success: false, message: 'Circuit breaker active.' };
+  }
 
-  console.log(`[Bot] Starting safer engager mode. Target: ${targetCount} pins.`);
+  const DAILY_MAX_LIKES = 25;
+  const DAILY_MAX_COMMENTS = 12;
+  const DAILY_MAX_SAVES = 8;
+  
+  if (likesToday >= DAILY_MAX_LIKES && commentsToday >= DAILY_MAX_COMMENTS) {
+    console.log('[Bot] Daily hard caps reached. Exiting.');
+    return { success: true, message: 'Daily caps reached.' };
+  }
+
+  console.log(`[Bot] Starting strict hourly engagement mode.`);
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--window-size=1920,1080'
-    ]
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--window-size=1920,1080', '--disable-gpu']
   });
-  const commentPool = buildCommentPool();
-  const usedComments = new Set();
 
   try {
     const page = await browser.newPage();
-    page.on('console', msg => console.log(`[Bot-Browser] ${msg.text()}`));
+    page.on('console', msg => { if (!msg.text().includes('Failed to load resource')) console.log(`[Bot-Browser] ${msg.text()}`); });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-    await page.setCookie({
-      name: '_pinterest_sess',
-      value: sessionCookie,
-      domain: '.pinterest.com',
-      path: '/',
-      secure: true,
-      httpOnly: true,
-    });
+    await page.setCookie({ name: '_pinterest_sess', value: sessionCookie, domain: '.pinterest.com', path: '/', secure: true, httpOnly: true });
 
+    const targetNiche = options.niche || 'all';
+    let targetBoards = ["Men's Style Guide", "Gentleman's Wardrobe", "Streetwear Men", "Suits and Formal Men", "Men's Outfits", "Menswear Inspiration"];
+    
+    if (targetNiche === 'home') {
+      targetBoards = ["Home Decor", "Interior Design", "Living Room Ideas", "Minimalist Home", "Cozy Bedroom"];
+    } else if (targetNiche === 'all') {
+      targetBoards = [...targetBoards, "Home Decor", "Interior Design", "Tech Gadgets", "Luxury Cars"];
+    }
     let feedUrl = 'https://www.pinterest.com/homefeed/';
-    const niche = options.niche || 'all';
-    if (niche === 'fashion') {
-      feedUrl = 'https://www.pinterest.com/search/pins/?q=men%20fashion%20outfits%20menswear%20style';
-    } else if (niche === 'home') {
-      feedUrl = 'https://www.pinterest.com/search/pins/?q=modern%20home%20decor%20ideas%20minimalist';
+    
+    // 60% home feed, 40% direct board
+    if (Math.random() < 0.4) {
+      const board = targetBoards[Math.floor(Math.random() * targetBoards.length)];
+      feedUrl = `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(board)}`;
+      console.log(`[Bot] Routing to specific board search: ${board}`);
+    } else {
+      console.log(`[Bot] Routing to home feed.`);
     }
 
-    console.log(`[Bot] Navigating to target feed: ${feedUrl}`);
     await page.goto(feedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
 
-    let completed = 0;
-    let commentsMade = 0;
+    let hourlyLikes = 0;
+    let hourlyComments = 0;
     let cycle = 0;
-    const maxCycles = Math.max(10, targetCount * 5); // Increased max cycles to find relevant pins
-    
-    // Determine minimum guaranteed comments
-    const minRequiredComments = Math.min(3, targetCount); // At least 3 if targetCount >= 3
+    const maxCycles = 50; 
+    let loadMultiplier = 1;
 
-    while (completed < targetCount && cycle < maxCycles) {
-      cycle += 1;
-      const current = completed + 1;
-      console.log(`[Bot] Engaging with pin ${current} of ${targetCount}...`);
-
-      if (completed > 0) {
-        const gapMs = randomInt(minGapMs, maxGapMs);
-        console.log(`[Bot] Waiting ${Math.round(gapMs / 1000)}s before next engagement.`);
-        await sleep(gapMs);
+    // The session is complete ONLY when BOTH minimums are true (unless hard caps hit).
+    while ((hourlyLikes < 5 || hourlyComments < 3) && cycle < maxCycles) {
+      cycle++;
+      
+      if (likesToday >= DAILY_MAX_LIKES && commentsToday >= DAILY_MAX_COMMENTS) {
+          console.log('[Bot] Daily caps hit mid-session.');
+          break;
       }
 
-      const scrollLoops = randomInt(2, 5);
-      for (let i = 0; i < scrollLoops; i++) {
-        await page.evaluate(() => window.scrollBy(0, Math.floor(700 + Math.random() * 900)));
-        await sleep(randomInt(1200, 3500));
-      }
+      console.log(`[Bot] Target Loop ${cycle} | Hourly: ${hourlyLikes}/5 Likes, ${hourlyComments}/3 Comments`);
 
       const pinLinks = await page.evaluate(() => {
-        const selectors = [
-          'a[href*="/pin/"]',
-          '[data-test-id="pin"] a',
-          '[data-test-id="pwa-pin-link"]',
-          '.YlS a',
-          '.XiG a'
-        ];
-        let links = [];
-        selectors.forEach(sel => {
-          try {
-            const found = Array.from(document.querySelectorAll(sel))
-              .map(a => a.href)
-              .filter(href => href && href.includes('/pin/'));
-            links = [...links, ...found];
-          } catch (e) {}
-        });
-        return [...new Set(links)].filter(l => !l.includes('/pin/pin-builder/')).slice(0, 30);
+        const links = Array.from(document.querySelectorAll('a[href*="/pin/"]')).map(a => a.href);
+        return [...new Set(links)].filter(l => !l.includes('/pin/pin-builder/'));
       });
 
-      if (!pinLinks.length) {
-        console.log('[Bot] No pins found on feed, scrolling more and trying again...');
+      const unengagedLinks = pinLinks.filter(l => !engagedUrls.some(e => l.includes(e)));
+
+      if (!unengagedLinks.length) {
+        console.log('[Bot] No fresh pins found, scrolling deeper...');
         await page.evaluate(() => window.scrollBy(0, 1500));
-        await sleep(5000);
+        await sleep(randomInt(3000, 5000) * loadMultiplier);
         
-        // Final attempt reload
-        if (cycle > 2 && cycle % 2 === 0) {
-            console.log('[Bot] Forcing hard reload of homefeed...');
-            await page.goto('https://www.pinterest.com/homefeed/', { waitUntil: 'networkidle2', timeout: 45000 });
-            await sleep(5000);
+        if (cycle > 5 && cycle % 3 === 0) {
+            console.log('[Bot] Mid-session route switch to find more pins...');
+            const board = targetBoards[Math.floor(Math.random() * targetBoards.length)];
+            await page.goto(`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(board)}`, { waitUntil: 'networkidle2', timeout: 45000 });
+            await sleep(5000 * loadMultiplier);
         }
         continue;
       }
 
-      const randomPin = pinLinks[randomInt(0, pinLinks.length - 1)];
+      const randomPin = unengagedLinks[randomInt(0, unengagedLinks.length - 1)];
       console.log(`[Bot] Viewing pin: ${randomPin}`);
-      await page.goto(randomPin, { waitUntil: 'networkidle2', timeout: 30000 });
-      await sleep(randomInt(3000, 6000));
-
-      const pinData = await page.evaluate(() => {
-        const h1 = document.querySelector('h1');
-        const title = h1 ? h1.innerText : '';
-        const descEl = document.querySelector('[data-test-id="pin-description-text"], .TP9, ._8n');
-        const desc = descEl ? descEl.innerText : '';
-        return { title, desc };
-      });
-
-      // --- NEW: Strict Relevancy Check ---
-      if (!isPinRelevant(pinData.title, pinData.desc, niche)) {
-        console.log(`[Bot] ⏭️ Skipping irrelevant pin (Niche: ${niche}): "${pinData.title || 'No Title'}"`);
-        // Don't count this as completed or cycle, just continue the while loop
-        continue;
+      
+      const loadStart = Date.now();
+      const response = await page.goto(randomPin, { waitUntil: 'networkidle2', timeout: 45000 });
+      if (response && response.status() === 429) {
+          console.log('[Bot] HTTP 429 Too Many Requests detected. Triggering 2-hour circuit breaker.');
+          await historyService.setAutomationState({ ...automationState, circuitBreaker: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() });
+          break;
+      }
+      
+      if (Date.now() - loadStart > 8000) {
+          console.log('[Bot] Page loaded slowly, increasing delays by 50%.');
+          loadMultiplier = 1.5;
       }
 
-      console.log(`[Bot] ✅ Pin verified as relevant: "${pinData.title || 'Untitled'}"`);
+      // Check for login redirect / cookie expiration
+      if ((await page.url()).includes('login')) {
+          console.log('[Bot] Redirected to login. Session cookie expired. Triggering circuit breaker.');
+          await historyService.setAutomationState({ ...automationState, circuitBreaker: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
+          break;
+      }
 
-      let actionTaken = 'Viewed';
-      try {
-        // Try multiple reaction button selectors (Pinterest changes these frequently)
-        const reactionSelectors = [
-          'button[aria-label="React"]',
-          'button[aria-label="react"]',
-          'button[data-test-id="pin-rep-reaction-button"]',
-          'button[aria-label*="Love"]',
-          'button[aria-label*="Like"]',
-          'button[aria-label*="Heart"]',
-          'button[aria-label*="love"]',
-          'button[aria-label*="like"]',
-          'button[aria-label*="heart"]',
-          'button[aria-label="Add reaction"]',
-          'button[aria-label*="reaction"]',
-          '[data-test-id="reaction-button"]',
-          '.reaction-button',
-          '.heart-icon-container',
-          // Save/Pin button as fallback engagement
-          'button[aria-label*="Save"]',
-          'button[aria-label*="save"]',
-          'button[data-test-id="pin-save-button"]',
-        ];
-        
-        let reactionBtn = null;
-        for (const sel of reactionSelectors) {
-          reactionBtn = await page.$(sel);
-          if (reactionBtn) {
-            console.log(`[Bot] Found reaction button: ${sel}`);
+      await sleep(randomInt(2000, 5000) * loadMultiplier); // Read time
+
+      const pinData = await page.evaluate(() => {
+        const titleEls = document.querySelectorAll('h1, [data-test-id="pinTitle"]');
+        let title = '';
+        for (const el of titleEls) {
+          if (el.innerText && el.innerText.trim() !== 'Pinterest' && el.innerText.trim() !== 'Explore') {
+            title = el.innerText.trim();
             break;
           }
         }
-
-        if (reactionBtn) {
-          await reactionBtn.click();
-          actionTaken = 'Liked';
-          console.log('[Bot] ✅ Liked/Reacted to pin successfully');
-          await sleep(randomInt(1200, 2500));
-        } else {
-          console.log('[Bot] ⚠️ Reaction button not found, viewing only');
+        
+        const descEls = document.querySelectorAll('[data-test-id="pin-description-text"], .TP9, ._8n, [data-test-id="pinDescription"]');
+        let desc = '';
+        for (const el of descEls) {
+          if (el.innerText && el.innerText.trim() !== '') {
+            desc += ' ' + el.innerText.trim();
+          }
         }
-      } catch (e) {
-        console.log('[Bot] ❌ Reaction failed:', e.message);
+        
+        const images = document.querySelectorAll('img[src*="pinimg"]');
+        for (const img of images) {
+          if (img.alt) desc += ' ' + img.alt;
+        }
+
+        const comments = document.querySelectorAll('[data-test-id="comment-container"]').length;
+        
+        const boardEls = document.querySelectorAll('a[href*="/board/"], [data-test-id="board-title"], [data-test-id="board-name"], [data-test-id="SaveButton"]');
+        let boardName = '';
+        for (const el of boardEls) {
+            const txt = el.innerText ? el.innerText.trim() : '';
+            if (txt && !['Save', 'Saved', 'Profile'].includes(txt)) {
+                boardName += ' ' + txt;
+            }
+        }
+        
+        if (!title) {
+            title = document.querySelector('meta[property="og:title"]')?.content || '';
+        }
+        if (!desc.trim()) {
+            desc += ' ' + (document.querySelector('meta[property="og:description"]')?.content || '');
+        }
+
+        return { title: title.trim(), desc: desc.trim(), saves: 0, comments, boardName: boardName.trim() };
+      });
+
+      console.log(`[Bot] Extracted -> Title: "${pinData.title}" | Desc: "${pinData.desc.substring(0, 50)}..." | Board: "${pinData.boardName}"`);
+
+      const fallbackMode = cycle > 10;
+      const relevancy = isPinRelevant(pinData.title, pinData.desc, pinData.boardName, fallbackMode, targetNiche);
+      if (!relevancy.relevant) {
+        console.log(`[Bot] ⏭️ Skipped irrelevant pin: "${pinData.title}" Reason: ${relevancy.reason}`);
+        continue;
       }
 
-      await page.evaluate(() => window.scrollBy(0, Math.floor(450 + Math.random() * 700)));
-      await sleep(randomInt(1800, 4200));
-
-      const remainingTarget = targetCount - completed;
-      const remainingCommentsNeeded = minRequiredComments - commentsMade;
-      
-      // Force comment if we are running out of loops and haven't met the minimum
-      let shouldComment = Math.random() < commentChance;
-      if (remainingCommentsNeeded > 0 && remainingTarget <= remainingCommentsNeeded) {
-        shouldComment = true;
-        console.log(`[Bot] Forcing comment to meet minimum quota (${commentsMade}/${minRequiredComments})...`);
+      const score = scorePin(pinData, relevancy.matchCount);
+      const isUrgent = hourlyLikes < 5 || hourlyComments < 3;
+      if (score < 40 && !isUrgent && relevancy.reason !== 'fallback_mode') {
+          console.log(`[Bot] ⏭️ Skipped due to low score (${score}) and minimums are met.`);
+          continue;
       }
 
-      let commentLeft = false;
+      console.log(`[Bot] ✅ Pin relevant (Score: ${score}, Sub-niche: ${relevancy.subNiche}, Reason: ${relevancy.reason}). Engaging...`);
+
+      // 1. Like
+      let liked = false;
+      if (likesToday < DAILY_MAX_LIKES && hourlyLikes < 5 || Math.random() > 0.5) {
+          try {
+            const reactionBtn = await page.$('button[aria-label="React"], button[aria-label="react"], button[data-test-id="pin-rep-reaction-button"]');
+            if (reactionBtn) {
+              await reactionBtn.click();
+              console.log('[Bot] ❤️ Liked pin');
+              liked = true;
+              hourlyLikes++;
+              likesToday++;
+              await sleep(randomInt(18000, 90000) * loadMultiplier); // Human delay 18-90s
+            }
+          } catch(e) {}
+      }
+
+      // 2. Comment
+      let commented = false;
       let theComment = '';
+      if (commentsToday < DAILY_MAX_COMMENTS && (hourlyComments < 3 || Math.random() > 0.5)) {
+          try {
+              console.log(`[Bot] Generating comment for sub-niche: ${relevancy.subNiche}`);
+              theComment = await aiService.generateEngagementComment({
+                  title: pinData.title,
+                  description: pinData.desc,
+                  subNiche: relevancy.subNiche
+              });
 
-      if (shouldComment) {
-        try {
-          console.log(`[Bot] Generating AI comment...`);
-          theComment = await aiService.generateEngagementComment({
-            title: pinData.title || 'Fashion & Style',
-            description: pinData.desc || 'Men fashion inspiration'
-          });
+              // Click comment box
+              const openBtn = await page.$('button[aria-label="Comments"], [data-test-id="community-comment-button"]');
+              if (openBtn) await openBtn.click();
+              await sleep(1500 * loadMultiplier);
 
-          // First try to open the comments section if it's collapsed
-          const openCommentsSelectors = [
-            'button[aria-label="Comments"]',
-            'button[aria-label="comments"]',
-            'button[aria-label*="comment"]',
-            '[data-test-id="community-comment-button"]',
-            'button[aria-label="Toggle comments"]'
-          ];
-          for (const oSel of openCommentsSelectors) {
-            const openBtn = await page.$(oSel);
-            if (openBtn) {
-              await openBtn.click();
-              await sleep(1500);
-              break;
-            }
-          }
-
-          const commentSelectors = [
-            'div[aria-label="Add a comment"]',
-            'div[data-test-id="comment-composer"]',
-            'input[placeholder="Add a comment"]',
-            'textarea[placeholder="Add a comment"]',
-            '[data-test-id="comment-input-box"]',
-            '.addCommentInput',
-            'div[contenteditable="true"][aria-label="Add a comment"]',
-            'div[data-test-id="comment-box-input"]'
-          ];
-
-          let commentBox = null;
-          for (const sel of commentSelectors) {
-            commentBox = await page.$(sel);
-            if (commentBox) {
-              console.log(`[Bot] Found comment box using selector: ${sel}`);
-              break;
-            }
-          }
-
-          if (commentBox) {
-            // Scroll it into view just in case
-            await page.evaluate((el) => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), commentBox);
-            await sleep(1000);
-
-            await commentBox.click();
-            await sleep(randomInt(1000, 2000));
-            
-            console.log(`[Bot] Typing AI comment: "${theComment}"`);
-            await page.keyboard.type(theComment, { delay: randomInt(45, 95) });
-            await sleep(randomInt(1000, 2000));
-            
-            // Try hitting enter first
-            await page.keyboard.press('Enter');
-            await sleep(1000);
-
-            // Sometimes Enter just adds a newline. Let's try to click the Post/Done button just in case.
-            const postBtnSelectors = [
-              'button[aria-label="Post"]',
-              'button[aria-label="post"]',
-              'button[data-test-id="comment-submit-button"]',
-              'button[data-test-id="done-button"]',
-              'div[data-test-id="comment-submit-btn"]'
-            ];
-
-            for (const pSel of postBtnSelectors) {
-              const postBtn = await page.$(pSel);
-              if (postBtn) {
-                // Check if it's not disabled
-                const disabled = await page.evaluate(el => el.disabled || el.getAttribute('aria-disabled') === 'true', postBtn);
-                if (!disabled) {
-                  console.log(`[Bot] Clicking Post button via selector: ${pSel}`);
-                  await postBtn.click();
-                  break;
-                }
+              const commentBox = await page.$('div[aria-label="Add a comment"], [data-test-id="comment-composer"], input[placeholder="Add a comment"], [data-test-id="comment-input-box"]');
+              if (commentBox) {
+                  await commentBox.click();
+                  await sleep(randomInt(1000, 2000));
+                  
+                  // Type with character delays 80-200ms
+                  await page.keyboard.type(theComment, { delay: randomInt(80, 200) });
+                  await sleep(randomInt(1000, 2000));
+                  
+                  const postBtn = await page.$('button[aria-label="Post"], [data-test-id="comment-submit-button"], button[data-test-id="done-button"]');
+                  if (postBtn && !(await page.evaluate(el => el.disabled, postBtn))) {
+                      await postBtn.click();
+                      await sleep(randomInt(4000, 7000));
+                      console.log(`[Bot] 💬 Commented: "${theComment}"`);
+                      commented = true;
+                      hourlyComments++;
+                      commentsToday++;
+                      await sleep(randomInt(45000, 120000) * loadMultiplier); // Human delay 45-120s
+                  }
               }
-            }
-
-            // Wait for post to register
-            await sleep(randomInt(4000, 7000));
-            commentLeft = true;
-            commentsMade++;
-            actionTaken = actionTaken === 'Liked' ? 'Liked & Commented' : 'Commented';
-            console.log(`[Bot] ✅ AI Comment posted: "${theComment}"`);
-          } else {
-            console.log(`[Bot] ⚠️ Could not find the comment box. Pinterest UI may have changed, or comments are disabled on this pin.`);
-          }
-        } catch (err) {
-          console.error('[Bot] ❌ AI Commenting completely failed:', err.message);
-        }
-      } else {
-        console.log('[Bot] Comment skipped by randomization rule.');
+          } catch(e) {}
       }
+
+      // 3. Save (optional)
+      let saved = false;
+      if (savesToday < DAILY_MAX_SAVES && Math.random() > 0.7) {
+          try {
+            const saveBtn = await page.$('button[aria-label="Save"], button[data-test-id="pin-save-button"]');
+            if (saveBtn) {
+                await saveBtn.click();
+                console.log('[Bot] 📌 Saved pin');
+                saved = true;
+                savesToday++;
+                await sleep(randomInt(5000, 10000) * loadMultiplier);
+            }
+          } catch(e) {}
+      }
+
+      // Record History
+      const actionParts = [];
+      if (liked) actionParts.push('Liked');
+      if (commented) actionParts.push('Commented');
+      if (saved) actionParts.push('Saved');
+      const actionTaken = actionParts.length ? actionParts.join(' & ') : 'Viewed';
 
       await historyService.addEngagement({
         url: randomPin,
         action: actionTaken,
-        comment: commentLeft ? theComment : (actionTaken !== 'Viewed' ? '' : 'Failed to Engage'),
+        comment: commented ? theComment : '',
         source: context.source,
         command: context.command,
         workflow: context.workflow,
-        job: context.job,
         actor: context.actor,
-        runId: context.runId,
-        runNumber: context.runNumber,
-        workflowUrl: context.workflowUrl,
         engagedAt: new Date().toISOString(),
       });
-
-      completed += 1;
       
-      // Navigate back to the target feed for the next cycle
-      await page.goto(feedUrl, { waitUntil: 'networkidle2', timeout: 35000 });
+      engagedUrls.push(randomPin.split('?')[0]);
+      
+      // Update state live
+      await historyService.setAutomationState({ ...automationState, likesToday, commentsToday, savesToday, engagedUrls });
+
+      // Between scrolling and clicking wait 3-8s for next cycle
+      await sleep(randomInt(3000, 8000) * loadMultiplier);
+      
+      // Back to feed
+      await page.goto(feedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
     }
 
-    console.log('[Bot] Safer engager mode finished.');
-    return {
-      success: true,
-      executed: completed,
-      message: `Engaged with ${completed} pin(s).`,
-      config: {
-        requested: targetCount,
-        minGapMs,
-        maxGapMs,
-        commentChance,
-      },
-    };
+    console.log(`[Bot] Hourly run complete. Achieved ${hourlyLikes} Likes, ${hourlyComments} Comments.`);
+    return { success: true, message: `Achieved ${hourlyLikes} likes, ${hourlyComments} comments.` };
+    
   } catch (error) {
-    console.error('[Bot] Safer engager mode failed:', error.message);
+    console.error('[Bot] Strict engager failed:', error.message);
     throw new Error(`Booster failed: ${error.message}`);
   } finally {
     await browser.close();
