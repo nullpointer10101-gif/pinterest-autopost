@@ -427,13 +427,19 @@ async function processNextInQueue() {
     
     // ═══════════════════════════════════════════════════════════════════════
     // AI PIPELINE: Multi-Product Curation & Affiliate Links
+    // finalLink must NEVER be an Instagram URL — Pinterest silently rejects them.
     // ═══════════════════════════════════════════════════════════════════════
-    let finalLink = item.destinationLink || item.link || item.sourceUrl || '';
+    // Start with any pre-existing affiliate link, or empty (NOT the IG source URL)
+    let finalLink = item.destinationLink || item.link || '';
     let affiliateLinks = [];
     let mainProductName = null;
     let outfitName = null;
+    const appDomain = process.env.APP_BASE_URL || 'https://pinterest-autopost.vercel.app';
     
-    // Only run if we don't already have a valid affiliate destination link AND we have a shortcode to build a look page
+    // Always pre-build the storefront URL as our safe fallback (if we have a shortcode)
+    const storefrontUrl = itemShortcode ? `${appDomain.replace(/\/$/, '')}/look/${itemShortcode}` : '';
+    
+    // Only run AI pipeline if we don't already have a valid affiliate destination link
     if (!item.destinationLink && itemShortcode && item.sourceUrl) {
       console.log(`[Queue] 🤖 AI identifying outfit for shortcode: ${itemShortcode}...`);
       const outfitData = await aiService.identifyOutfit({
@@ -469,23 +475,29 @@ async function processNextInQueue() {
         }
       }
       
-      // If we found products, generate the storefront URL
+      // If we found products, use storefront. Otherwise still use storefront as safe fallback.
       if (affiliateLinks.length > 0) {
-        const appDomain = process.env.APP_BASE_URL || 'http://localhost:3000';
-        finalLink = `${appDomain.replace(/\/$/, '')}/look/${itemShortcode}`;
+        finalLink = storefrontUrl;
         description = `${description}\n\n🛒 Shop the full outfit here → ${finalLink}`.substring(0, 800);
-        console.log(`[Queue] ✨ Storefront generated: ${finalLink}`);
+        console.log(`[Queue] ✨ Storefront with products: ${finalLink}`);
+      } else if (storefrontUrl) {
+        // Use storefront as safe fallback (prevents posting with empty/IG link)
+        finalLink = storefrontUrl;
+        console.log(`[Queue] 🔗 No products found — using storefront as fallback: ${finalLink}`);
       }
+    } else if (!finalLink && storefrontUrl) {
+      // No existing link + no shortcode pipeline → use storefront URL if possible
+      finalLink = storefrontUrl;
     }
 
     if (item.destinationLink) {
-      console.log(`[Queue] 🔗 Using existing affiliate link: ${item.destinationLink}`);
+      console.log(`[Queue] 🔗 Using pre-set affiliate link: ${item.destinationLink}`);
     } else if (affiliateLinks.length > 0) {
       console.log(`[Queue] 🔗 Using AI-generated storefront: ${finalLink}`);
-    } else if (item.link) {
-      console.log(`[Queue] 🔗 Using standard link: ${item.link}`);
+    } else if (finalLink) {
+      console.log(`[Queue] 🔗 Using storefront fallback: ${finalLink}`);
     } else {
-      console.log(`[Queue] ⚠️ No products found. Using source URL as fallback.`);
+      console.log(`[Queue] ⚠️ No link available — posting without destination link.`);
     }
 
     let result;
@@ -507,6 +519,10 @@ async function processNextInQueue() {
         thumbnailUrl: item.thumbnailUrl || '',
       },
     });
+
+    if (result && result.success === false) {
+      throw new Error(result.error || 'Browser bot reported failure without throwing an exception');
+    }
 
     item.status = 'completed';
     item.method = method;
