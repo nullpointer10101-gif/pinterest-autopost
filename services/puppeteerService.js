@@ -2,9 +2,11 @@
 // Wrap the require so this module loads cleanly even when Chrome is absent.
 let puppeteer = null;
 try {
-  puppeteer = require('puppeteer');
+  puppeteer = require('puppeteer-extra');
+  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+  puppeteer.use(StealthPlugin());
 } catch (e) {
-  console.warn('[PuppeteerService] puppeteer not available (expected on Vercel):', e.message);
+  console.warn('[PuppeteerService] puppeteer-extra not available (expected on Vercel):', e.message);
 }
 const fs = require('fs');
 const path = require('path');
@@ -320,7 +322,10 @@ async function createPinWithBot(pinData) {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
-      '--window-size=1920,1080'
+      '--window-size=1920,1080',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-web-security',
+      '--disable-features=IsolateOrigins,site-per-process'
     ]
   });
 
