@@ -369,16 +369,9 @@ async function createPinWithBot(pinData) {
     await fileInput.uploadFile(mediaPath);
 
     console.log('[Bot] Waiting for media upload and processing...');
-    // Video processing can take a while on Pinterest
-    await page.waitForFunction(() => {
-      const text = document.body.innerText || '';
-      const isProcessing = text.includes('Uploading') || text.includes('Processing') || text.includes('uploading') || text.includes('processing');
-      const hasError = text.includes('Something went wrong') || text.includes('could not be uploaded');
-      if (hasError) throw new Error('Pinterest UI reported an upload error.');
-      return !isProcessing;
-    }, { timeout: 180000 }).catch(err => {
-        console.log('[Bot] Upload wait warning:', err.message);
-    });
+    // Video processing can take a while on Pinterest, but searching the whole body for "processing" causes false positives and 4-minute hangs.
+    // Instead of polling the whole page text, we just give it a safe 15-second buffer.
+    await new Promise(r => setTimeout(r, 15000));
 
     // 4. Fill in Details
     console.log('[Bot] Filling details...');
@@ -528,16 +521,8 @@ async function createPinWithBot(pinData) {
     }
 
     // ─── 5a-bis. Wait for Video Processing ───────────
-    console.log('[Bot] Waiting for media processing to complete...');
-    for (let i = 0; i < 15; i++) {
-       const isProcessing = await page.evaluate(() => {
-          const text = document.body.innerText.toLowerCase();
-          return text.includes('processing') || text.includes('uploading') || text.includes('preparing');
-       });
-       if (!isProcessing) break;
-       console.log(`[Bot] Still processing video... (${i+1}/15)`);
-       await new Promise(r => setTimeout(r, 4000));
-    }
+    console.log('[Bot] Additional wait for video processing...');
+    await new Promise(r => setTimeout(r, 10000));
 
     // ─── 5b. Upload Smart Cover Thumbnail ───────
     if (coverPath && fs.existsSync(coverPath)) {
