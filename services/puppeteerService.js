@@ -360,6 +360,13 @@ async function createPinWithBot(pinData) {
       }
     }
 
+    // Take a screenshot immediately after page load to see what was loaded
+    try {
+      const _scDir = path.join(process.cwd(), 'public', 'logs');
+      if (!fs.existsSync(_scDir)) fs.mkdirSync(_scDir, { recursive: true });
+      await page.screenshot({ path: path.join(_scDir, `page_loaded_${Date.now()}.png`), fullPage: false });
+    } catch (_e) {}
+
     // 3. Upload Media
     console.log('[Bot] Uploading media file...');
     const fileInputSelector = 'input[type="file"]';
@@ -369,9 +376,28 @@ async function createPinWithBot(pinData) {
     await fileInput.uploadFile(mediaPath);
 
     console.log('[Bot] Waiting for media upload and processing...');
-    // Video processing can take a while on Pinterest, but searching the whole body for "processing" causes false positives and 4-minute hangs.
-    // Instead of polling the whole page text, we just give it a safe 15-second buffer.
+    // Give Pinterest time to process the uploaded media
     await new Promise(r => setTimeout(r, 15000));
+
+    // Verify that the media actually uploaded (check for video or image in builder area)
+    const mediaUploaded = await page.evaluate(() => {
+      const video = document.querySelector('video');
+      const img = document.querySelector('[data-test-id="pin-builder-media"] img, [data-test-id="pin-draft-media"] img');
+      const uploadArea = document.querySelector('.Upload, [data-test-id="media-upload-area"]');
+      const chooseFileText = (document.body.innerText || '').includes('Choose a file');
+      if (video || img) return 'has_media';
+      if (chooseFileText || uploadArea) return 'no_media_still_showing_upload_prompt';
+      return 'unknown';
+    });
+    console.log(`[Bot] Media upload status: ${mediaUploaded}`);
+    if (mediaUploaded !== 'has_media') {
+      // Take a debug screenshot
+      try {
+        const _scDir = path.join(process.cwd(), 'public', 'logs');
+        await page.screenshot({ path: path.join(_scDir, `upload_fail_${Date.now()}.png`), fullPage: true });
+      } catch (_e) {}
+      console.error('[Bot] ❌ Media upload likely failed — no video/image found on the page.');
+    }
 
     // 4. Fill in Details
     console.log('[Bot] Filling details...');
@@ -436,39 +462,47 @@ async function createPinWithBot(pinData) {
     // so we must fill it last to guarantee it survives to publish.
 
     // 5. Select Board
+    // 5. Select Board
     console.log('[Bot] Selecting board...');
     try {
-      // Step 1: Find and click the board dropdown (find by visible text or selector)
       const boardClicked = await page.evaluate(() => {
-        // Look for the 'Choose a board' button or any board dropdown trigger
-        const allElements = Array.from(document.querySelectorAll('div, button, [role="button"]'));
-        for (const el of allElements) {
-          const text = (el.innerText || '').trim().toLowerCase();
-          const isVisible = el.offsetParent !== null;
-          if (isVisible && (text === 'choose a board' || text.startsWith('choose a board'))) {
-            el.click();
-            return 'clicked_choose_a_board';
-          }
-        }
-        // Fallback: try known selectors
-        const fallbacks = [
+        // Find and click the board dropdown precisely
+        const candidateSelectors = [
           '[data-test-id="board-dropdown-select-button"]',
-          '[data-test-id="storyboard-selector-board-dropdown"]',
-          'button[aria-haspopup="listbox"]',
-          '[aria-label*="board" i]',
+          '[data-test-id="board-dropdown-select-button"] button',
+          'div[data-test-id="storyboard-selector-board-dropdown"] button',
+          'div[role="button"][aria-haspopup="listbox"]'
         ];
-        for (const sel of fallbacks) {
-          const el = document.querySelector(sel);
-          if (el && el.offsetParent !== null) {
-            el.click();
-            return `clicked_fallback:${sel}`;
+        
+        for (const sel of candidateSelectors) {
+            const btn = document.querySelector(sel);
+            if (btn && btn.offsetParent !== null) {
+                btn.click();
+                return `clicked_precise_${sel}`;
+            }
+        }
+        
+        // Fallback: look for button containing "choose a board" or similar placeholder
+        const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
+        for (const btn of buttons) {
+          const text = (btn.innerText || '').toLowerCase().trim();
+          if (text === 'choose a board' || text === 'select board' || text === 'save to board') {
+            btn.click();
+            return `clicked_text_${text}`;
           }
         }
+        
         return 'not_found';
       });
       console.log(`[Bot] Board dropdown click result: ${boardClicked}`);
       
       await new Promise(r => setTimeout(r, 3000));
+      
+      const debugItems = await page.evaluate(() => {
+        const items = Array.from(document.querySelectorAll('[role="option"], [role="menuitem"], [role="listitem"], [data-test-id="board-row"], button, div[role="button"]'));
+        return items.map(i => i.innerText).filter(t => t && t.trim().length > 0).join(' | ');
+      });
+      console.log(`[Bot] DEBUG ALL ITEMS AFTER DROPDOWN CLICK: ${debugItems.substring(0, 500)}`);
 
       // Step 2: Select the first available board from the dropdown list
       let boardSelected = false;
@@ -479,19 +513,35 @@ async function createPinWithBot(pinData) {
             '[data-test-id="board-row"]',
             '[data-test-id="board-row"] button',
             'div[role="listbox"] [role="option"]',
-            'div[data-test-id="storyboard-selector-board-dropdown"] [role="button"]'
+            'div[data-test-id="storyboard-selector-board-dropdown"] [role="button"]',
+            'div[role="dialog"] [role="button"]',
+            'div[role="menu"] [role="menuitem"]',
+            'div[role="listbox"] [role="listitem"]',
+            '[data-test-id="storyboard-selector-board-dropdown"] div[role="button"]'
           ];
           for (const sel of candidateSelectors) {
             const items = Array.from(document.querySelectorAll(sel));
             for (const item of items) {
               const text = (item.innerText || '').trim().toLowerCase();
               const isVisible = item.offsetParent !== null;
-              // Skip "search", "create new board", or empty items
+              // Skip "search", "create new board", "create pin", or empty items
               if (isVisible && text.length > 1 && !text.includes('search') && !text.includes('create') && !text.startsWith('choose')) {
                 item.scrollIntoView({ block: 'nearest' });
                 item.click();
                 return `selected:${text.slice(0, 40)}`;
               }
+            }
+          }
+          
+          // Absolute fallback if candidate selectors didn't catch the board but it's clearly a button in a popup
+          const popupBtns = Array.from(document.querySelectorAll('div[role="dialog"] button, div[role="dialog"] div[role="button"], div[role="listbox"] button'));
+          for (const item of popupBtns) {
+            const text = (item.innerText || '').trim().toLowerCase();
+            const isVisible = item.offsetParent !== null;
+            if (isVisible && text.length > 1 && !text.includes('search') && !text.includes('create') && !text.startsWith('choose')) {
+              item.scrollIntoView({ block: 'nearest' });
+              item.click();
+              return `selected:${text.slice(0, 40)}`;
             }
           }
           return false;
@@ -704,25 +754,49 @@ async function createPinWithBot(pinData) {
     // 6. Dismiss any popups/banners before publishing
     console.log('[Bot] Dismissing any popups or banners...');
     try {
+      // Press Escape first to close any overlay
+      await page.keyboard.press('Escape');
+      await new Promise(r => setTimeout(r, 500));
+      
       await page.evaluate(() => {
+        // Aggressively close any overlay/modal/banner including Pinterest extension promos
+        const dismissed = [];
+        
+        // Close Pinterest "Install now" / browser extension promo dialogs
+        document.querySelectorAll('[data-test-id="upsell-modal"], [data-test-id="extension-banner"]').forEach(el => {
+          el.style.display = 'none';
+          dismissed.push('extension_banner');
+        });
+        
+        // Find any dialog and close it
+        document.querySelectorAll('[role="dialog"]').forEach(dialog => {
+          // Check if it looks like a promo (contains "Install now" or "browser extension")
+          const txt = (dialog.innerText || '').toLowerCase();
+          if (txt.includes('install') || txt.includes('extension') || txt.includes('find it') || txt.includes('save it')) {
+            dialog.style.display = 'none';
+            dismissed.push('promo_dialog');
+          }
+        });
+        
+        // Click standard dismiss/close buttons
         const dismissSelectors = [
           'button[data-test-id="closeButton"]',
           'button[aria-label="close" i]',
           'button[aria-label="Close" i]',
           'button[aria-label="dismiss" i]',
-          'div[role="dialog"] button',
         ];
         for (const sel of dismissSelectors) {
-          const btns = document.querySelectorAll(sel);
-          for (const btn of btns) {
+          document.querySelectorAll(sel).forEach(btn => {
             const txt = (btn.innerText || '').toLowerCase();
-            if (txt.includes('close') || txt.includes('dismiss') || txt.includes('got it') || txt.includes('accept') || txt.includes('ok')) {
+            if (txt.includes('close') || txt.includes('dismiss') || txt.includes('got it') || txt.includes('accept') || txt.includes('ok') || txt === '') {
               btn.click();
+              dismissed.push(sel);
             }
-          }
+          });
         }
+        return dismissed;
       });
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 1000));
     } catch (e) {}
 
     // 6.5. Select Board (Removed to prevent resetting fields)
@@ -732,8 +806,15 @@ async function createPinWithBot(pinData) {
     await page.mouse.click(10, 10);
     await new Promise(r => setTimeout(r, 1000));
 
+    // Take a screenshot before clicking Publish to verify page state
+    try {
+      const _scDir = path.join(process.cwd(), 'public', 'logs');
+      if (!fs.existsSync(_scDir)) fs.mkdirSync(_scDir, { recursive: true });
+      await page.screenshot({ path: path.join(_scDir, `pre_publish_${Date.now()}.png`), fullPage: true });
+    } catch (_e) {}
+    
     const publishResult = await page.evaluate(() => {
-      // 1. Try precise selectors first
+      // 1. Try precise data-test-id selectors first (most reliable)
       const selectors = [
         'button[data-test-id="pwt-publish-button"]',
         'button[data-test-id="publish-button"]',
@@ -744,95 +825,251 @@ async function createPinWithBot(pinData) {
       for (const sel of selectors) {
         const pubBtn = document.querySelector(sel);
         if (pubBtn && pubBtn.offsetParent !== null && !pubBtn.disabled) {
-          pubBtn.click();
+          pubBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
           return `clicked_${sel}`;
         }
       }
 
-      // 2. Try general button search
-      const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
+      // 2. Find exact 'Publish' or 'Save' button but only in the main pin-builder area,
+      //    NOT inside dialogs (which would be modals/promos)
+      const mainArea = document.querySelector('[data-test-id="pin-builder-form"], [data-test-id="storyboard"], form, main') || document.body;
+      const buttons = Array.from(mainArea.querySelectorAll('button'));
       for (const btn of buttons) {
+        // Skip if inside a dialog
+        if (btn.closest('[role="dialog"]')) continue;
         const text = (btn.innerText || '').toLowerCase().trim();
         const isVisible = btn.offsetParent !== null;
         if (isVisible && !btn.disabled && (text === 'publish' || text === 'save')) {
           btn.scrollIntoView({ block: 'center' });
-          btn.click();
+          btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
           return `clicked_text_${text}`;
         }
       }
-      return 'not found';
+      
+      // 3. Log what buttons are actually visible for debugging
+      const allBtns = Array.from(document.querySelectorAll('button'));
+      const visibleBtnTexts = allBtns
+        .filter(b => b.offsetParent !== null)
+        .map(b => (b.innerText || b.getAttribute('aria-label') || b.getAttribute('data-test-id') || '').trim())
+        .filter(t => t.length > 0)
+        .slice(0, 15);
+      return `not_found__visible_buttons: ${visibleBtnTexts.join(' | ')}`;
     });
 
     console.log('[Bot] Publish result:', publishResult);
-    if (publishResult === 'not found') {
-        console.log('[Bot] Fallback: Pressing Enter to Publish');
-        await page.keyboard.press('Enter');
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 8000));
-
-    // Handle any modal/dialog that appears
-    const modalHandled = await page.evaluate(() => {
-      // Look for and click any primary action button in modals
-      const modalButtons = document.querySelectorAll('div[role="dialog"] button, .Modal button');
-      for (const btn of modalButtons) {
-        const text = btn.innerText?.toLowerCase() || '';
-        if (text.includes('save') || text.includes('publish') || text.includes('done') || text.includes('confirm')) {
-          btn.click();
-          return true;
-        }
-      }
-      // Press Escape to close any open dropdowns
-      return false;
-    });
-
-    if (modalHandled) {
-      await new Promise(r => setTimeout(r, 3000));
-    }
-    
-    // 7. Verify Success
-    console.log('[Bot] Verifying publication (15s window)...');
-    
-    let published = false;
-    let finalUrl = await page.url();
-    
-    // Check every 4 seconds for a total of 60 seconds (Videos can take a while to finish publishing)
-    for (let i = 0; i < 15; i++) {
-        await new Promise(resolve => setTimeout(resolve, 4000));
-        finalUrl = await page.url();
-        console.log(`[Bot] Verification attempt ${i+1} | URL: ${finalUrl}`);
-
-        const check = await page.evaluate(() => {
-          const url = window.location.href;
-          const bodyText = (document.body.innerText || '').toLowerCase();
-          
-          // 1. Instant Success: URL changed to a Pin URL (e.g. /pin/12345/)
-          if (url.includes('/pin/') && !url.includes('pin-creation-tool')) return true;
-
-          // 2. Success Keywords
-          const keywords = ['pin saved', 'published', 'pin created', 'see it now'];
-          if (keywords.some(k => bodyText.includes(k))) return true;
-
-          // DO NOT rely solely on the publish button missing because if it's disabled or we failed to find it initially, this will trigger a false positive.
-          // Wait for the URL change or clear success message.
-          return false;
-        });
-
-        if (check) {
-            published = true;
+    if (publishResult.startsWith('not_found')) {
+        console.log('[Bot] ⚠️ Publish button not found by JS. Trying Puppeteer native click...');
+        // Try native Puppeteer click on precise selectors
+        const nativeSelectors = [
+          'button[data-test-id="pwt-publish-button"]',
+          'button[data-test-id="publish-button"]'
+        ];
+        let nativeClicked = false;
+        for (const sel of nativeSelectors) {
+          try {
+            await page.click(sel);
+            console.log(`[Bot] ✅ Native Puppeteer click on: ${sel}`);
+            nativeClicked = true;
             break;
+          } catch (_) {}
         }
+        if (!nativeClicked) {
+          console.log('[Bot] Fallback: Pressing Enter to Publish');
+          await page.keyboard.press('Enter');
+        }
+    }
+
+    // ─── CRITICAL: Dismiss Pinterest Extension Promo & Confirm Publish ───────
+    // Pinterest shows a "Find it. Love it. Save it. — Install now" promo popup
+    // ─── CRITICAL: Dismiss Pinterest Extension Promo & Confirm Publish ───────
+    // Pinterest shows a "Find it. Love it. Save it. — Install now" promo popup
+    // right after the Publish button is clicked. This popup blocks the actual
+    // publish. We need to dismiss it and then click Publish again.
+    console.log('[Bot] Watching for Pinterest promo popup (up to 15s)...');
+    let promoHandled = false;
+    let published = false;   // declared here so the promo loop can set it
+    let finalUrl = '';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await new Promise(r => setTimeout(r, 2000));
+      
+      // Check if promo/extension dialog is visible and dismiss it
+      const dismissResult = await page.evaluate(() => {
+        // 1. Look for the specific "Find it. Love it. Save it." promo dialog
+        const allDialogs = Array.from(document.querySelectorAll('[role="dialog"], [data-test-id*="modal"], [data-test-id*="upsell"]'));
+        for (const dialog of allDialogs) {
+          const txt = (dialog.innerText || '').toLowerCase();
+          if (txt.includes('install') || txt.includes('find it') || txt.includes('save it') || txt.includes('browser extension') || txt.includes('love it')) {
+            // Click the X/close button INSIDE the dialog (don't hide with CSS — that resets React state)
+            const closeBtn = dialog.querySelector('button[aria-label="close" i], button[aria-label="Close" i], button[aria-label="dismiss" i], [data-test-id="closeButton"], button svg');
+            if (closeBtn) {
+              const actualBtn = closeBtn.closest('button') || closeBtn;
+              actualBtn.click();
+              return 'clicked_close_in_promo';
+            }
+            // Fallback: find any button in the dialog that's NOT "Install now"
+            const allBtnsInDialog = Array.from(dialog.querySelectorAll('button'));
+            for (const btn of allBtnsInDialog) {
+              const t = (btn.innerText || '').toLowerCase().trim();
+              if (!t.includes('install') && !t.includes('now')) {
+                btn.click();
+                return `clicked_non_install_btn_in_promo: ${t}`;
+              }
+            }
+            return 'promo_found_but_no_close_btn';
+          }
+        }
+        
+        // 2. Also try clicking standard close/X buttons in any visible dialog
+        const closeBtns = Array.from(document.querySelectorAll('button[aria-label="close" i], button[aria-label="Close" i], button[aria-label="dismiss" i], [data-test-id="closeButton"]'));
+        for (const btn of closeBtns) {
+          if (btn.offsetParent !== null) {
+            btn.click();
+            return 'clicked_close_button';
+          }
+        }
+        
+        return 'no_promo_found';
+      });
+      
+      console.log(`[Bot] Promo check ${attempt + 1}/5: ${dismissResult}`);
+      
+      if (dismissResult !== 'no_promo_found') {
+        // If we found the promo but couldn't find a close button, press Escape
+        if (dismissResult === 'promo_found_but_no_close_btn') {
+          console.log('[Bot] No close button found in promo — pressing Escape to dismiss...');
+          await page.keyboard.press('Escape');
+          await new Promise(r => setTimeout(r, 1000));
+        }
+        
+        promoHandled = true;
+        console.log('[Bot] ✅ Promo close clicked! Waiting for Pinterest to confirm publish...');
+        // DO NOT re-click Publish here — clicking Close on the promo IS the trigger for publish to complete.
+        // Pinterest will show "Your Pin has been published!" toast after the close click.
+        // Wait for the toast to appear (usually within 1-3 seconds).
+        await new Promise(r => setTimeout(r, 3000));
+        
+        // Take a screenshot to see the page state after dismissing the promo
+        try {
+          const _scDir = path.join(process.cwd(), 'public', 'logs');
+          await page.screenshot({ path: path.join(_scDir, `after_promo_dismiss_${Date.now()}.png`), fullPage: true });
+        } catch (_e) {}
+        
+        // Check if we can see the "Your Pin has been published!" toast
+        const toastResult = await page.evaluate(() => {
+          const bodyText = (document.body.innerText || '').toLowerCase();
+          const successPhrases = ['your pin has been published', 'pin has been published', 'pin saved', 'pin created', 'your pin is live'];
+          for (const phrase of successPhrases) {
+            if (bodyText.includes(phrase)) {
+              // Try to find the "View" button to get the actual pin URL
+              const viewLinks = Array.from(document.querySelectorAll('a'));
+              const viewLink = viewLinks.find(el => {
+                const t = (el.innerText || '').toLowerCase().trim();
+                return t === 'view' || t === 'view pin';
+              });
+              return { found: true, phrase, pinUrl: viewLink?.href || null };
+            }
+          }
+          
+          // Check if URL changed to a pin page
+          if (window.location.href.includes('/pin/') && !window.location.href.includes('pin-creation-tool')) {
+            return { found: true, phrase: 'url_changed', pinUrl: window.location.href };
+          }
+          
+          return { found: false, bodyText: bodyText.substring(0, 200) };
+        });
+        
+        console.log(`[Bot] Toast check after promo dismiss: ${JSON.stringify(toastResult)}`);
+        
+        if (toastResult.found) {
+          console.log(`[Bot] ✅ Publication confirmed via toast! Pin URL: ${toastResult.pinUrl}`);
+          published = true;
+          finalUrl = toastResult.pinUrl || finalUrl;
+        } else {
+          // Toast not seen yet — maybe it appeared between the promo and now
+          // Fall through to the regular polling loop below
+          console.log('[Bot] Toast not visible yet — will continue polling...');
+        }
+        
+        break; // Stop checking for promo regardless
+      }
+      
+      // Check if URL already changed (publish succeeded without a promo)
+      const currentUrl = await page.url();
+      if (currentUrl.includes('/pin/') && !currentUrl.includes('pin-creation-tool')) {
+        console.log('[Bot] ✅ Publish succeeded during promo watch (URL changed)!');
+        promoHandled = true;
+        published = true;
+        finalUrl = currentUrl;
+        break;
+      }
+    }
+    
+    // Wait a tiny bit before verification
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+
+    // 7. Verify Success
+    console.log('[Bot] Verifying publication...');
+    
+    // Take a screenshot
+    try {
+        const scDir = path.join(process.cwd(), 'public', 'logs');
+        if (!fs.existsSync(scDir)) fs.mkdirSync(scDir, { recursive: true });
+        const scPath = path.join(scDir, `after_publish_click_${Date.now()}.png`);
+        await page.screenshot({ path: scPath, fullPage: true });
+        console.log(`[Bot] 📸 Debug screenshot after publish saved to: ${scPath}`);
+    } catch (e) {}
+
+    // Update finalUrl from current page
+    if (!finalUrl) finalUrl = await page.url();
+    
+    if (!published) {
+      // SECOND: Poll for 60 seconds looking for success indicators
+      console.log('[Bot] Polling for success (up to 60s)...');
+      for (let i = 0; i < 15; i++) {
+          await new Promise(resolve => setTimeout(resolve, 4000));
+          finalUrl = await page.url();
+          console.log(`[Bot] Verification attempt ${i+1} | URL: ${finalUrl}`);
+
+          const check = await page.evaluate(() => {
+            const url = window.location.href;
+            const bodyText = (document.body.innerText || '').toLowerCase();
+            
+            // 1. Instant Success: URL changed to a Pin URL (e.g. /pin/12345/)
+            if (url.includes('/pin/') && !url.includes('pin-creation-tool')) return { success: true, pinUrl: url };
+
+            // 2. Success toast/keywords
+            const successPhrases = ['your pin has been published', 'pin has been published', 'pin saved', 'pin created', 'see it now', 'your pin is live'];
+            for (const phrase of successPhrases) {
+              if (bodyText.includes(phrase)) {
+                const viewBtn = Array.from(document.querySelectorAll('a')).find(el => (el.innerText || '').toLowerCase().trim() === 'view');
+                return { success: true, pinUrl: viewBtn?.href || url };
+              }
+            }
+
+            return { success: false };
+          });
+
+          if (check.success) {
+              published = true;
+              finalUrl = check.pinUrl || finalUrl;
+              break;
+          }
+      }
     }
 
     if (!published) {
       console.error('[Bot] ❌ Verification timed out. Pin was NOT published. Fake-success detected.');
-      // Take a debug screenshot
+      // Take a debug screenshot and dump DOM
       try {
           const scDir = path.join(process.cwd(), 'public', 'logs');
           if (!fs.existsSync(scDir)) fs.mkdirSync(scDir, { recursive: true });
           const scPath = path.join(scDir, `fail_verification_${Date.now()}.png`);
-          await page.screenshot({ path: scPath });
-          console.log(`[Bot] 📸 Debug screenshot saved to: ${scPath}`);
+          const htmlPath = path.join(scDir, `fail_verification_${Date.now()}.html`);
+          await page.screenshot({ path: scPath, fullPage: true });
+          const dom = await page.evaluate(() => document.documentElement.outerHTML);
+          require('fs').writeFileSync(htmlPath, dom);
+          console.log(`[Bot] 📸 Debug screenshot and DOM saved to: ${scDir}`);
       } catch (e) {}
       
       throw new Error('Verification failed. Pin was NOT published to the live account (Fake-success detected).');

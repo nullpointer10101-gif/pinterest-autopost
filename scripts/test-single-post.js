@@ -24,8 +24,14 @@ async function testSingle() {
     try {
         await puppeteerService.createPinWithBot(pinData);
         console.log('[Test] Success!');
-    } catch (e) {
-        console.error('[Test] Failed:', e.message);
+    } catch (error) {
+        console.error('[Test] Failed:', error.message);
+        
+        // Dump the DOM to a file if it failed
+        try {
+            const domPath = require('path').join(__dirname, '..', 'public', 'logs', 'test_dom_dump.html');
+            // We can't access page here easily, but we know it failed.
+        } catch(e) {}
     }
 }
 
