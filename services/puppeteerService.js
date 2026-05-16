@@ -799,9 +799,9 @@ async function createPinWithBot(pinData) {
     let published = false;
     let finalUrl = await page.url();
     
-    // Check every 3 seconds for a total of 15 seconds
-    for (let i = 0; i < 5; i++) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
+    // Check every 4 seconds for a total of 60 seconds (Videos can take a while to finish publishing)
+    for (let i = 0; i < 15; i++) {
+        await new Promise(resolve => setTimeout(resolve, 4000));
         finalUrl = await page.url();
         console.log(`[Bot] Verification attempt ${i+1} | URL: ${finalUrl}`);
 
