@@ -379,6 +379,59 @@ async function createPinWithBot(pinData) {
     // Give Pinterest time to process the uploaded media
     await new Promise(r => setTimeout(r, 15000));
 
+    // ─── Handle "Design your Pin" Video Cover Editor ──────────────────────────
+    // After video upload, Pinterest may automatically open its video cover design
+    // editor ("Design your Pin" / "Edit your video"). We must click "Done" to
+    // return to the standard pin builder before filling in title/board/link.
+    const designEditorCheck = await page.evaluate(() => {
+      const h1Text = (document.querySelector('h1')?.innerText || '').toLowerCase();
+      const bodyText = (document.body.innerText || '').toLowerCase();
+      const isDesignEditor =
+        h1Text.includes('design your pin') ||
+        bodyText.includes('design your pin') ||
+        bodyText.includes('edit your video') ||
+        bodyText.includes('video controls') ||
+        document.querySelector('[data-test-id="video-cover-editor"]') !== null ||
+        document.querySelector('.videoEditor') !== null;
+      return isDesignEditor;
+    });
+
+    if (designEditorCheck) {
+      console.log('[Bot] ⚠️ Detected "Design your Pin" video editor — clicking Done to return to pin builder...');
+      try {
+        // Try to find and click the "Done" button
+        const doneClicked = await page.evaluate(() => {
+          // Look for "Done" button - it's typically in the top-right corner of the design editor
+          const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
+          for (const btn of allBtns) {
+            const t = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase().trim();
+            if (t === 'done' || t === 'done editing') {
+              btn.click();
+              return `clicked_done: "${btn.innerText}"`;
+            }
+          }
+          // Also try data-test-id selectors
+          const doneBtn = document.querySelector('[data-test-id="done-button"], [data-test-id="video-editor-done"]');
+          if (doneBtn) { doneBtn.click(); return 'clicked_done_by_test-id'; }
+          return 'done_btn_not_found';
+        });
+        console.log(`[Bot] Design editor exit result: ${doneClicked}`);
+
+        if (doneClicked === 'done_btn_not_found') {
+          // Try native Puppeteer click on common "Done" button patterns
+          try { await page.click('button:has-text("Done")'); } catch (_) {}
+          // Press Escape as last resort
+          await page.keyboard.press('Escape');
+        }
+
+        // Wait for the page to return to the pin builder
+        await new Promise(r => setTimeout(r, 3000));
+        console.log('[Bot] ✅ Returned to pin builder after dismissing design editor.');
+      } catch (designErr) {
+        console.warn('[Bot] ⚠️ Error handling design editor:', designErr.message);
+      }
+    }
+
     // Verify that the media actually uploaded (check for video or image in builder area)
     const mediaUploaded = await page.evaluate(() => {
       const video = document.querySelector('video');
