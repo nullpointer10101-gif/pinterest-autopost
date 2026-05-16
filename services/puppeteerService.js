@@ -474,12 +474,12 @@ async function createPinWithBot(pinData) {
       let boardSelected = false;
       for (let attempt = 0; attempt < 5; attempt++) {
         boardSelected = await page.evaluate(() => {
-          // Look for board items in any list/menu that appears after clicking
+          // Look strictly for board rows to avoid clicking 'Drafts' in the sidebar
           const candidateSelectors = [
             '[data-test-id="board-row"]',
-            '[role="option"]',
-            '[role="menuitem"]',
-            '[role="listitem"]',
+            '[data-test-id="board-row"] button',
+            'div[role="listbox"] [role="option"]',
+            'div[data-test-id="storyboard-selector-board-dropdown"] [role="button"]'
           ];
           for (const sel of candidateSelectors) {
             const items = Array.from(document.querySelectorAll(sel));
@@ -754,13 +754,10 @@ async function createPinWithBot(pinData) {
       for (const btn of buttons) {
         const text = (btn.innerText || '').toLowerCase().trim();
         const isVisible = btn.offsetParent !== null;
-        if (isVisible && (text === 'publish' || text === 'save' || text.includes('publish') || text.includes('save'))) {
-          // Exclude buttons like "Save from URL" or "Save to board" if possible, but click if it's the only one
-          if (text !== 'save from url') {
-            btn.scrollIntoView({ block: 'center' });
-            btn.click();
-            return `clicked_text_${text}`;
-          }
+        if (isVisible && !btn.disabled && (text === 'publish' || text === 'save')) {
+          btn.scrollIntoView({ block: 'center' });
+          btn.click();
+          return `clicked_text_${text}`;
         }
       }
       return 'not found';

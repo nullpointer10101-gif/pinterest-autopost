@@ -9,18 +9,15 @@ const puppeteerService = require('../services/puppeteerService');
 async function testSingle() {
     console.log('[Test] Running single test upload with Cover image...');
 
-    // A dummy video and a dummy thumbnail
-    const videoUrl = 'https://videos.pexels.com/video-files/853889/853889-hd_1920_1080_25fps.mp4';
-    const thumbnailUrl = 'https://images.pexels.com/photos/1761279/pexels-photo-1761279.jpeg';
+    const imageUrl = 'https://images.pexels.com/photos/1761279/pexels-photo-1761279.jpeg';
 
     const pinData = {
-        title: 'Test Pin With Cover',
-        description: 'This is a test pin to verify cover image uploading.',
+        title: 'Test Pin Instant',
+        description: 'This is a test pin to verify publishing.',
         alt_text: 'Test Alt Text',
         link: 'https://example.com',
         media_source: {
-            url: videoUrl,
-            thumbnailUrl: thumbnailUrl
+            url: imageUrl
         }
     };
 
