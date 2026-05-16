@@ -740,35 +740,7 @@ async function createPinWithBot(pinData) {
       await new Promise(r => setTimeout(r, 800));
     } catch (e) {}
 
-    // 6.5. Select Board
-    console.log('[Bot] Selecting Board...');
-    try {
-      const boardDropdown = await page.$('[data-test-id="board-dropdown-select-button"]');
-      if (boardDropdown) {
-        await boardDropdown.click();
-        await new Promise(r => setTimeout(r, 2000));
-        // Find and click the first board in the dropdown
-        const firstBoard = await page.evaluateHandle(() => {
-          const items = Array.from(document.querySelectorAll('[data-test-id="board-row"], [data-test-id="board-dropdown-item"], div[role="button"]'));
-          // Find the first button/row that looks like a board item
-          for(const item of items) {
-             const text = (item.innerText || '').toLowerCase();
-             if(text && text !== 'create board') return item;
-          }
-          return null;
-        });
-        
-        if (firstBoard) {
-          const isElement = await page.evaluate(el => el instanceof HTMLElement, firstBoard);
-          if (isElement) {
-             await firstBoard.click();
-             await new Promise(r => setTimeout(r, 1000));
-          }
-        }
-      }
-    } catch(e) {
-      console.log('[Bot] Board selection error:', e.message);
-    }
+    // 6.5. Select Board (Removed to prevent resetting fields)
 
     // 7. Final Publish
     console.log('[Bot] Clicking Publish button...');
