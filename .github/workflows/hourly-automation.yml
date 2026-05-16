@@ -2,8 +2,8 @@ name: Unlimited Pinterest Automation (Public Mode)
 
 on:
   schedule:
-    - cron: '14 * * * *'
-    - cron: '44 * * * *'
+    # Executes exactly every hour
+    - cron: '0 * * * *'
 # Prevent multiple automation missions or fire-posts from running at the same time
 concurrency:
   group: fire-post
@@ -61,12 +61,19 @@ jobs:
           PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
           PINTEREST_REFRESH_TOKEN: ${{ secrets.PINTEREST_REFRESH_TOKEN }}
           PINTEREST_APP_ID: ${{ secrets.PINTEREST_APP_ID }}
+          # Scraper & Affiliate Auth
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          INSTAGRAM_SESSION_COOKIE: ${{ secrets.INSTAGRAM_SESSION_COOKIE }}
+          EARNKARO_SESSION_COOKIE: ${{ secrets.EARNKARO_SESSION_COOKIE }}
+          # AI Config
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ secrets.AI_MODEL }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           APP_STATE_KEY: ${{ secrets.APP_STATE_KEY || 'pinterest_autopost_state_v1' }}
+          APP_IG_TRACKER_STATE_KEY: ${{ secrets.APP_IG_TRACKER_STATE_KEY || 'ig_tracker_state_v1' }}
           GEMINI_API_KEY: ${{ secrets.AI_API_KEY }}
           # 3-Layer AI Fallback
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}

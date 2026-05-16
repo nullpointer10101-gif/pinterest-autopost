@@ -346,7 +346,19 @@ async function createPinWithBot(pinData) {
     });
 
     console.log('[Bot] Logged in. Navigating to Pin Builder...');
-    await page.goto('https://www.pinterest.com/pin-creation-tool/', { waitUntil: 'networkidle2', timeout: 45000 });
+    // Retry navigation up to 3 times in case Pinterest is slow
+    let navSuccess = false;
+    for (let navAttempt = 1; navAttempt <= 3; navAttempt++) {
+      try {
+        await page.goto('https://www.pinterest.com/pin-creation-tool/', { waitUntil: 'networkidle2', timeout: 90000 });
+        navSuccess = true;
+        break;
+      } catch (navErr) {
+        console.warn(`[Bot] Nav attempt ${navAttempt}/3 failed: ${navErr.message}`);
+        if (navAttempt === 3) throw navErr;
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
 
     // 3. Upload Media
     console.log('[Bot] Uploading media file...');
@@ -537,16 +549,34 @@ async function createPinWithBot(pinData) {
         await new Promise(r => setTimeout(r, 1000));
 
         const coverBtnSelectors = [
-          '[data-test-id="pin-builder-media"] button[aria-label*="Edit" i]',
           'button[data-test-id="pin-draft-cover-image-button"]',
+          '[data-test-id="pin-builder-media"] button[aria-label*="Edit" i]',
           'button[data-test-id="change-cover-btn"]',
           'button[aria-label*="Edit" i]',
           '[data-test-id="edit-pin-button"]',
-          'button[data-test-id="edit-media-button"]'
+          'button[data-test-id="edit-media-button"]',
+          'button[aria-label*="cover" i]'
         ];
         let coverBtn = null;
         for (const sel of coverBtnSelectors) {
           try { coverBtn = await page.$(sel); if (coverBtn) { console.log(`[Bot] Edit button found: ${sel}`); break; } } catch {}
+        }
+        
+        // Fallback: search by text
+        if (!coverBtn) {
+          coverBtn = await page.evaluateHandle(() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            for (const b of btns) {
+              const t = (b.innerText || '').toLowerCase();
+              if (t.includes('edit cover') || t.includes('edit video') || t.includes('change cover')) {
+                return b;
+              }
+            }
+            return null;
+          });
+          const isElement = await page.evaluate(el => el instanceof HTMLElement, coverBtn);
+          if (!isElement) coverBtn = null;
+          if (coverBtn) console.log(`[Bot] Edit button found via text search.`);
         }
 
         if (coverBtn) {
@@ -610,8 +640,11 @@ async function createPinWithBot(pinData) {
       'input[id*="pin-draft-link"]',
       '[data-test-id="pin-draft-link"] input',
       '[data-test-id="pin-draft-link"] textarea',
+      '[data-test-id="add-link-button"]',
       'input[placeholder*="link" i]',
       'input[aria-label*="link" i]',
+      'textarea[placeholder*="link" i]',
+      'textarea[aria-label*="link" i]',
       'input[placeholder*="url" i]',
       'input[placeholder*="destination" i]',
       'input[id*="link"]'
@@ -707,17 +740,56 @@ async function createPinWithBot(pinData) {
       await new Promise(r => setTimeout(r, 800));
     } catch (e) {}
 
+    // 6.5. Select Board
+    console.log('[Bot] Selecting Board...');
+    try {
+      const boardDropdown = await page.$('[data-test-id="board-dropdown-select-button"]');
+      if (boardDropdown) {
+        await boardDropdown.click();
+        await new Promise(r => setTimeout(r, 2000));
+        // Find and click the first board in the dropdown
+        const firstBoard = await page.evaluateHandle(() => {
+          const items = Array.from(document.querySelectorAll('[data-test-id="board-row"], [data-test-id="board-dropdown-item"], div[role="button"]'));
+          // Find the first button/row that looks like a board item
+          for(const item of items) {
+             const text = (item.innerText || '').toLowerCase();
+             if(text && text !== 'create board') return item;
+          }
+          return null;
+        });
+        
+        if (firstBoard) {
+          const isElement = await page.evaluate(el => el instanceof HTMLElement, firstBoard);
+          if (isElement) {
+             await firstBoard.click();
+             await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+      }
+    } catch(e) {
+      console.log('[Bot] Board selection error:', e.message);
+    }
+
     // 7. Final Publish
     console.log('[Bot] Clicking Publish button...');
     await page.mouse.click(10, 10);
     await new Promise(r => setTimeout(r, 1000));
 
     const publishResult = await page.evaluate(() => {
-      // 1. Try precise pwt-publish-button first
-      const pubBtn = document.querySelector('button[data-test-id="pwt-publish-button"]');
-      if (pubBtn && pubBtn.offsetParent !== null && !pubBtn.disabled) {
-        pubBtn.click();
-        return 'clicked_pwt_publish_button';
+      // 1. Try precise selectors first
+      const selectors = [
+        'button[data-test-id="pwt-publish-button"]',
+        'button[data-test-id="publish-button"]',
+        'button[data-test-id="board-dropdown-save-button"]',
+        '[data-test-id="pwt-publish-button"] button'
+      ];
+      
+      for (const sel of selectors) {
+        const pubBtn = document.querySelector(sel);
+        if (pubBtn && pubBtn.offsetParent !== null && !pubBtn.disabled) {
+          pubBtn.click();
+          return `clicked_${sel}`;
+        }
       }
 
       // 2. Try general button search
@@ -725,10 +797,13 @@ async function createPinWithBot(pinData) {
       for (const btn of buttons) {
         const text = (btn.innerText || '').toLowerCase().trim();
         const isVisible = btn.offsetParent !== null;
-        if (isVisible && (text === 'save' || text === 'publish' || text === 'create' || text === 'done')) {
-          btn.scrollIntoView({ block: 'center' });
-          btn.click();
-          return `clicked_${text}`;
+        if (isVisible && (text === 'publish' || text === 'save' || text === 'create' || text === 'done' || text.includes('publish') || text.includes('save'))) {
+          // Exclude buttons like "Save from URL" or "Save to board" if possible, but click if it's the only one
+          if (text !== 'save from url') {
+            btn.scrollIntoView({ block: 'center' });
+            btn.click();
+            return `clicked_text_${text}`;
+          }
         }
       }
       return 'not found';
@@ -777,22 +852,15 @@ async function createPinWithBot(pinData) {
           const url = window.location.href;
           const bodyText = (document.body.innerText || '').toLowerCase();
           
-          // 1. Instant Success: URL changed to a Pin URL
-          if (url.includes('/pin/')) return true;
+          // 1. Instant Success: URL changed to a Pin URL (e.g. /pin/12345/)
+          if (url.includes('/pin/') && !url.includes('pin-creation-tool')) return true;
 
           // 2. Success Keywords
-          const keywords = ['pin saved', 'published', 'pin created', 'great job', 'see it now', 'your pin', 'is live', 'done'];
+          const keywords = ['pin saved', 'published', 'pin created', 'see it now'];
           if (keywords.some(k => bodyText.includes(k))) return true;
 
-          // 3. Button Check: Is the publish button GONE? (Means it was clicked and accepted)
-          const publishBtn = Array.from(document.querySelectorAll('button')).find(btn => {
-            const t = (btn.innerText || '').toLowerCase();
-            return t === 'publish' || t === 'save';
-          });
-          
-          // If the button is gone or hidden, it's likely a success
-          if (!publishBtn || publishBtn.offsetParent === null) return true;
-
+          // DO NOT rely solely on the publish button missing because if it's disabled or we failed to find it initially, this will trigger a false positive.
+          // Wait for the URL change or clear success message.
           return false;
         });
 
@@ -803,22 +871,24 @@ async function createPinWithBot(pinData) {
     }
 
     if (!published) {
-      console.warn('[Bot] ⚠️ Verification timed out. Assuming success (Pinterest may have posted it).');
-      // Take a debug screenshot anyway
+      console.error('[Bot] ❌ Verification timed out. Pin was NOT published. Fake-success detected.');
+      // Take a debug screenshot
       try {
           const scDir = path.join(process.cwd(), 'public', 'logs');
           if (!fs.existsSync(scDir)) fs.mkdirSync(scDir, { recursive: true });
-          const scPath = path.join(scDir, `fail_${Date.now()}.png`);
+          const scPath = path.join(scDir, `fail_verification_${Date.now()}.png`);
           await page.screenshot({ path: scPath });
           console.log(`[Bot] 📸 Debug screenshot saved to: ${scPath}`);
       } catch (e) {}
+      
+      throw new Error('Verification failed. Pin was NOT published to the live account (Fake-success detected).');
     }
 
     console.log('[Bot] ✅ Pin published successfully!');
     return {
       success: true,
       pin: { 
-        id: `bot_${Date.now()}`,
+        id: finalUrl.match(/\/pin\/(\d+)/) ? finalUrl.match(/\/pin\/(\d+)/)[1] : `bot_${Date.now()}`,
         url: finalUrl
       }
     };

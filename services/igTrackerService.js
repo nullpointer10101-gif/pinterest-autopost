@@ -14,8 +14,8 @@ try {
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 const IG_SESSION_COOKIE = process.env.INSTAGRAM_SESSION_COOKIE || '';
-// Extract csrftoken from cookie string for API header
 const IG_CSRF = (IG_SESSION_COOKIE.match(/csrftoken=([^;]+)/) || [])[1] || '';
+const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN || '';
 const MAX_SEEN_PER_CHANNEL = 50;
 
 
@@ -538,16 +538,73 @@ async function fetchViaRapidAPI(username) {
 }
 
 /**
+ * Method 4: Apify Instagram Scraper (Highly Reliable, Free Tier)
+ * Uses the official Apify API to fetch profile reels.
+ */
+async function fetchViaApify(username) {
+  if (!APIFY_API_TOKEN) return [];
+  try {
+    console.log(`[IG-Tracker] Fetching via Apify for @${username}...`);
+    // Using apify/instagram-profile-scraper
+    const runRes = await axios.post(
+      `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${APIFY_API_TOKEN}`,
+      {
+        usernames: [username],
+      },
+      { timeout: 90000 } // Apify can take a bit to spin up and scrape
+    );
+
+    const items = runRes.data || [];
+    if (items.length === 0 || !items[0].latestPosts) return [];
+
+    return items[0].latestPosts.slice(0, 5).map(item => {
+      const isVideo = item.type === 'Video' || item.isVideo;
+      return {
+        shortcode: item.shortCode,
+        url: item.url || `https://www.instagram.com/reel/${item.shortCode}/`,
+        mediaUrl: item.videoUrl || item.displayUrl,
+        thumbnailUrl: item.displayUrl,
+        caption: item.caption || '',
+        username,
+        mediaType: isVideo ? 'video' : 'image',
+      };
+    }).filter(r => r.shortcode && r.mediaUrl);
+  } catch (err) {
+    console.log(`[IG-Tracker] Apify failed for @${username}: ${err.message}`);
+    return [];
+  }
+}
+
+/**
  * Fetch latest reels for a given username.
- * Priority: Session API → Puppeteer stealth → Unofficial API → Picuki → RapidAPI
+ * Priority: Apify → RapidAPI → Session API → Puppeteer stealth → Unofficial API → Picuki
  */
 async function fetchLatestReels(username) {
   console.log(`[IG-Tracker] Fetching reels for @${username}...`);
 
   let finalReels = [];
 
-  // Method 0: Instagram internal API with session cookie (fastest, most reliable)
-  if (IG_SESSION_COOKIE) {
+  // Method 0: Apify (Most reliable, won't flag account)
+  if (APIFY_API_TOKEN) {
+    const reels = await fetchViaApify(username);
+    if (reels.length > 0) {
+      console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Apify for @${username}`);
+      finalReels = reels;
+    }
+  }
+
+  // Method 1: RapidAPI
+  if (finalReels.length === 0 && RAPIDAPI_KEY) {
+    let reels = await fetchViaRapidAPI(username);
+    if (reels.length > 0) {
+      console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via RapidAPI for @${username}`);
+      finalReels = reels;
+    }
+  }
+
+  // Method 2: Instagram internal API with session cookie (Risky - triggers 'automation found')
+  if (finalReels.length === 0 && IG_SESSION_COOKIE && !APIFY_API_TOKEN && !RAPIDAPI_KEY) {
+    console.log(`[IG-Tracker] ⚠️ WARNING: Using personal session cookie. This may trigger Instagram anti-bot systems.`);
     const reels = await fetchViaSessionApi(username);
     if (reels.length > 0) {
       console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Session API for @${username}`);
@@ -555,7 +612,7 @@ async function fetchLatestReels(username) {
     }
   }
 
-  // Method 1: Puppeteer stealth (no login needed)
+  // Method 3: Puppeteer stealth (no login needed, but fails on serverless)
   if (finalReels.length === 0) {
     let reels = await fetchViaPuppeteer(username);
     if (reels.length > 0) {
@@ -564,7 +621,7 @@ async function fetchLatestReels(username) {
     }
   }
 
-  // Method 2: Instagram unofficial API
+  // Method 4: Instagram unofficial API
   if (finalReels.length === 0) {
     let reels = await fetchViaUnofficialApi(username);
     if (reels.length > 0) {
@@ -573,7 +630,7 @@ async function fetchLatestReels(username) {
     }
   }
 
-  // Method 3: Picuki mirror
+  // Method 5: Picuki mirror
   if (finalReels.length === 0) {
     let reels = await fetchViaPicuki(username);
     if (reels.length > 0) {
@@ -582,17 +639,8 @@ async function fetchLatestReels(username) {
     }
   }
 
-  // Method 4: RapidAPI
   if (finalReels.length === 0) {
-    let reels = await fetchViaRapidAPI(username);
-    if (reels.length > 0) {
-      console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via RapidAPI for @${username}`);
-      finalReels = reels;
-    }
-  }
-
-  if (finalReels.length === 0) {
-    console.warn(`[IG-Tracker] ⚠️ Could not fetch reels for @${username}`);
+    console.warn(`[IG-Tracker] ⚠️ Could not fetch reels for @${username}. All methods failed.`);
     return [];
   }
 

@@ -309,8 +309,16 @@ async function processInstagramReels(options = {}) {
       reels = await igTrackerService.scanForNewReels();
     }
 
-    if (limit > 0) {
-      reels = reels.slice(0, limit);
+    if (limit > 0 && !username) {
+      // Apply limit per channel (e.g., top 3 per target account)
+      const grouped = {};
+      for (const r of reels) {
+        if (!grouped[r.username]) grouped[r.username] = [];
+        if (grouped[r.username].length < limit) {
+          grouped[r.username].push(r);
+        }
+      }
+      reels = Object.values(grouped).flat();
     } else if (username && force) {
       // User specifically requested TOP 3 for newly added channels
       reels = reels.slice(0, 3);
@@ -525,7 +533,7 @@ async function processInstagramReels(options = {}) {
           shortcode: reel.shortcode, 
           status: 'queued',
           scheduledAfter: scheduledAfter || 'instant',
-          affiliateUrl: affiliateUrl || 'none',
+          affiliateUrl: affiliateLinks.length > 0 ? affiliateLinks[0].url : 'none',
         });
         queuedIndex++;
 

@@ -60,7 +60,18 @@ async function tryAICompletion(options) {
     
     // Layer 2: Secondary (Groq)
     try {
-      return await secondaryClient.chat.completions.create({ ...options, model: secondaryConfig.model });
+      // Groq (Llama) does not support multimodal array content, so we extract only text
+      const groqOptions = { ...options, model: secondaryConfig.model };
+      if (groqOptions.messages) {
+        groqOptions.messages = groqOptions.messages.map(m => {
+          if (Array.isArray(m.content)) {
+            const textPart = m.content.find(part => part.type === 'text');
+            return { ...m, content: textPart ? textPart.text : '' };
+          }
+          return m;
+        });
+      }
+      return await secondaryClient.chat.completions.create(groqOptions);
     } catch (err2) {
       if (!tertiaryClient) throw err2;
 

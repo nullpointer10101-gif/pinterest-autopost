@@ -2,8 +2,8 @@ name: 📸 IG-to-Pinterest Affiliate Pipeline
 
 on:
   schedule:
-    # Run every hour at :15 to ensure fresh content is captured quickly
-    - cron: '15 * * * *'
+    # Disabled cron to prevent conflicts with the unified hourly-automation.yml pipeline.
+    # - cron: '15 * * * *'
   workflow_dispatch:
 
 jobs:
