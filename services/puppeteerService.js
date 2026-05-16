@@ -769,7 +769,7 @@ async function createPinWithBot(pinData) {
       for (const btn of buttons) {
         const text = (btn.innerText || '').toLowerCase().trim();
         const isVisible = btn.offsetParent !== null;
-        if (isVisible && (text === 'publish' || text === 'save' || text === 'create' || text === 'done' || text.includes('publish') || text.includes('save'))) {
+        if (isVisible && (text === 'publish' || text === 'save' || text.includes('publish') || text.includes('save'))) {
           // Exclude buttons like "Save from URL" or "Save to board" if possible, but click if it's the only one
           if (text !== 'save from url') {
             btn.scrollIntoView({ block: 'center' });
