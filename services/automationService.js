@@ -446,7 +446,7 @@ async function processInstagramReels(options = {}) {
         // ═══════════════════════════════════════════════════════════════
         console.log(`[Automation] 🖼️ Step 2b: Selecting best product thumbnail...`);
         const { selectBestThumbnailSafe } = getThumbnailService();
-        const bestThumbnailUrl = await selectBestThumbnailSafe(reel, productName || '');
+        const bestThumbnailUrl = await selectBestThumbnailSafe(reel, mainProductName || '');
         const thumbnailChanged = bestThumbnailUrl !== (reel.thumbnailUrl || reel.mediaUrl);
         if (thumbnailChanged) {
           console.log(`[Automation] ✅ Smart thumbnail selected (frame extraction succeeded).`);
