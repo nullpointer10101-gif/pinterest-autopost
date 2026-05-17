@@ -49,7 +49,7 @@ if (!IS_SERVERLESS) {
 
 async function runUpstashCommand(command) {
   const res = await axios.post(UPSTASH_URL, command, {
-    timeout: 15_000,
+    timeout: 3000,
     headers: {
       Authorization: `Bearer ${UPSTASH_TOKEN}`,
       'Content-Type': 'application/json',
