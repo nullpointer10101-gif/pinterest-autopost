@@ -218,7 +218,7 @@ router.get('/:shortcode', async (req, res) => {
         radial-gradient(circle at 15% 50%, rgba(244,63,94,0.08), transparent 30%),
         radial-gradient(circle at 85% 20%, rgba(139,92,246,0.08), transparent 30%);
     }
-    .container { max-width: 480px; margin: 0 auto; padding-bottom: 80px; }
+    .container { width: 100%; max-width: 480px; margin: 0 auto; padding-bottom: 80px; }
 
     /* Header */
     .store-header {
@@ -285,7 +285,7 @@ router.get('/:shortcode', async (req, res) => {
 
     /* Product Grid */
     .product-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 12px;
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 12px;
     }
     .product-card {
       background: var(--card-bg); border: 1px solid var(--card-border);
@@ -344,6 +344,65 @@ router.get('/:shortcode', async (req, res) => {
     /* Empty state */
     .empty-state {
       grid-column: 1/-1; text-align: center; padding: 50px 20px; color: var(--muted);
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .store-header {
+        padding: 14px 12px;
+        gap: 8px;
+        font-size: 14px;
+        letter-spacing: 2px;
+      }
+      .store-header svg { width: 16px; height: 16px; }
+      .section-title {
+        padding: 0 14px;
+        margin: 22px 0 12px;
+      }
+      .section-title h2 { font-size: 1.05rem; }
+      .count-badge {
+        font-size: 0.68rem;
+        padding: 4px 10px;
+      }
+      .product-grid {
+        padding: 0 10px;
+        gap: 10px;
+      }
+      .product-body { padding: 12px; }
+      .product-name { font-size: 0.76rem; }
+      .product-price {
+        font-size: 0.95rem;
+        margin-bottom: 10px;
+      }
+      .shop-btn {
+        font-size: 0.72rem;
+        letter-spacing: 1px;
+        padding: 10px 0;
+      }
+    }
+
+    @media (max-width: 390px) {
+      .store-header {
+        padding: 12px 10px;
+        gap: 6px;
+        font-size: 12px;
+        letter-spacing: 1.5px;
+      }
+      .header-dot { width: 6px; height: 6px; }
+      .section-title {
+        padding: 0 12px;
+        margin: 18px 0 10px;
+      }
+      .product-grid {
+        grid-template-columns: 1fr;
+        padding: 0 12px;
+        gap: 12px;
+      }
+      .product-name {
+        font-size: 0.84rem;
+        -webkit-line-clamp: 3;
+      }
+      .shop-btn { font-size: 0.76rem; }
     }
   </style>
 </head>
