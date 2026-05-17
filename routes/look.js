@@ -360,7 +360,7 @@ router.get('/:shortcode', async (req, res) => {
     <div class="video-wrap" id="video-wrap">
       ${thumbnailUrl ? `<img class="video-poster" id="video-poster" src="${thumbnailUrl}" alt="Loading video...">` : ''}
       <div class="video-loading" id="video-loading"><div class="spinner"></div></div>
-      <video id="main-video" muted autoplay loop playsinline preload="auto"
+      <video id="main-video" controls muted playsinline preload="auto"
         style="opacity:0;transition:opacity 0.5s ease;"
         onerror="window._videoFailed=true;document.getElementById('video-loading').style.display='none'">
       </video>
@@ -389,16 +389,19 @@ router.get('/:shortcode', async (req, res) => {
       if (!src) return false;
       video.src = src;
       video.load();
-      video.play().then(() => {
+      
+      video.addEventListener('canplay', () => {
         video.style.opacity = '1';
         if (poster) poster.style.opacity = '0';
         loading.style.display = 'none';
-      }).catch(() => {
+      }, { once: true });
+      
+      video.addEventListener('error', () => {
         loading.style.display = 'none';
-        // Video can't play — show static poster
         video.style.opacity = '0';
         if (poster) poster.style.opacity = '1';
-      });
+      }, { once: true });
+
       return true;
     }
 
