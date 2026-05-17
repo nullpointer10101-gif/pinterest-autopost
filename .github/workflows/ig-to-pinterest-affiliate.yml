@@ -59,3 +59,5 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_FALLBACK_API_KEY: ${{ secrets.GEMINI_FALLBACK_API_KEY }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          SERPER_API_KEY_BACKUP: ${{ secrets.SERPER_API_KEY_BACKUP }}
