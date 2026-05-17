@@ -367,17 +367,92 @@ async function createPinWithBot(pinData) {
       await page.screenshot({ path: path.join(_scDir, `page_loaded_${Date.now()}.png`), fullPage: false });
     } catch (_e) {}
 
-    // 3. Upload Media
+    // 3. Upload Media (with retry)
     console.log('[Bot] Uploading media file...');
-    const fileInputSelector = 'input[type="file"]';
-    await page.waitForSelector(fileInputSelector, { timeout: 20000 });
-    const fileInputs = await page.$$(fileInputSelector);
-    const fileInput = fileInputs[fileInputs.length - 1]; // Use last file input (most likely the upload one)
-    await fileInput.uploadFile(mediaPath);
 
-    console.log('[Bot] Waiting for media upload and processing...');
-    // Give Pinterest time to process the uploaded media
-    await new Promise(r => setTimeout(r, 15000));
+    const checkMediaUploaded = async () => {
+      return page.evaluate(() => {
+        const video = document.querySelector('video');
+        // Check for image in builder area OR a processing spinner/progress bar
+        const img = document.querySelector(
+          '[data-test-id="pin-builder-media"] img, [data-test-id="pin-draft-media"] img, [data-test-id="story-pin-image-block"] img, [data-test-id="story-pin-video-block"] img, .story-pin-image-block img'
+        );
+        const spinner = document.querySelector(
+          '[data-test-id="media-upload-progress"], .spinnerContainer, [role="progressbar"], [data-test-id="upload-progress"]'
+        );
+        const hasProcessingText = (document.body.innerText || '').toLowerCase().includes('processing');
+        const chooseFileText = (document.body.innerText || '').includes('Choose a file');
+        const draftLimitText = (document.body.innerText || '').includes('reached the limit of 50 drafts');
+        if (draftLimitText) return 'draft_limit_reached';
+        if (video || img) return 'has_media';
+        if (spinner || hasProcessingText) return 'processing';
+        if (chooseFileText) return 'no_media';
+        return 'unknown';
+      });
+    };
+
+    let mediaUploaded = 'no_media';
+    for (let uploadAttempt = 1; uploadAttempt <= 3; uploadAttempt++) {
+      console.log(`[Bot] Upload attempt ${uploadAttempt}/3...`);
+
+      try {
+        const fileInputSelector = 'input[type="file"]';
+        await page.waitForSelector(fileInputSelector, { timeout: 20000 });
+        const fileInputs = await page.$$(fileInputSelector);
+        const fileInput = fileInputs[fileInputs.length - 1];
+        await fileInput.uploadFile(mediaPath);
+        console.log('[Bot] uploadFile() called — polling for processing indicator...');
+      } catch (uploadErr) {
+        console.warn(`[Bot] uploadFile() error on attempt ${uploadAttempt}: ${uploadErr.message}`);
+      }
+
+      // Poll up to 40 seconds for the media to appear or processing to start
+      let pollStatus = 'no_media';
+      for (let p = 0; p < 20; p++) {
+        await new Promise(r => setTimeout(r, 2000));
+        pollStatus = await checkMediaUploaded();
+        console.log(`[Bot] Upload poll ${p + 1}/20: ${pollStatus}`);
+        if (pollStatus === 'has_media') break;
+        if (pollStatus === 'processing') {
+          // Processing started — wait longer for it to complete
+          console.log('[Bot] Upload processing detected — waiting for completion...');
+          for (let pp = 0; pp < 15; pp++) {
+            await new Promise(r => setTimeout(r, 3000));
+            pollStatus = await checkMediaUploaded();
+            console.log(`[Bot] Processing poll ${pp + 1}/15: ${pollStatus}`);
+            if (pollStatus === 'has_media') break;
+          }
+          break;
+        }
+      }
+
+      mediaUploaded = pollStatus;
+      if (mediaUploaded === 'has_media') {
+        console.log('[Bot] ✅ Media upload confirmed!');
+        break;
+      }
+
+      // Take a debug screenshot before retry
+      try {
+        const _scDir = path.join(process.cwd(), 'public', 'logs');
+        if (!fs.existsSync(_scDir)) fs.mkdirSync(_scDir, { recursive: true });
+        await page.screenshot({ path: path.join(_scDir, `upload_fail_${Date.now()}.png`), fullPage: true });
+      } catch (_e) {}
+
+      if (uploadAttempt < 3) {
+        console.log(`[Bot] ⚠️ Upload not detected (${mediaUploaded}) — reloading page and retrying...`);
+        // Reload the pin creation page for a clean retry
+        await page.goto('https://www.pinterest.com/pin-creation-tool/', { waitUntil: 'networkidle2', timeout: 60000 });
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+
+    if (mediaUploaded === 'draft_limit_reached') {
+      throw new Error(`[Bot] ❌ Pinterest account has reached the maximum limit of 50 drafts. Please delete drafts manually before posting.`);
+    }
+    if (mediaUploaded !== 'has_media') {
+      throw new Error(`[Bot] ❌ Media upload failed after 3 attempts (status: ${mediaUploaded}). Aborting to prevent fake-success.`);
+    }
 
     // ─── Handle "Design your Pin" Video Cover Editor ──────────────────────────
     // After video upload, Pinterest may automatically open its video cover design
@@ -399,9 +474,7 @@ async function createPinWithBot(pinData) {
     if (designEditorCheck) {
       console.log('[Bot] ⚠️ Detected "Design your Pin" video editor — clicking Done to return to pin builder...');
       try {
-        // Try to find and click the "Done" button
         const doneClicked = await page.evaluate(() => {
-          // Look for "Done" button - it's typically in the top-right corner of the design editor
           const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
           for (const btn of allBtns) {
             const t = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase().trim();
@@ -410,46 +483,20 @@ async function createPinWithBot(pinData) {
               return `clicked_done: "${btn.innerText}"`;
             }
           }
-          // Also try data-test-id selectors
           const doneBtn = document.querySelector('[data-test-id="done-button"], [data-test-id="video-editor-done"]');
           if (doneBtn) { doneBtn.click(); return 'clicked_done_by_test-id'; }
           return 'done_btn_not_found';
         });
         console.log(`[Bot] Design editor exit result: ${doneClicked}`);
-
         if (doneClicked === 'done_btn_not_found') {
-          // Try native Puppeteer click on common "Done" button patterns
           try { await page.click('button:has-text("Done")'); } catch (_) {}
-          // Press Escape as last resort
           await page.keyboard.press('Escape');
         }
-
-        // Wait for the page to return to the pin builder
         await new Promise(r => setTimeout(r, 3000));
         console.log('[Bot] ✅ Returned to pin builder after dismissing design editor.');
       } catch (designErr) {
         console.warn('[Bot] ⚠️ Error handling design editor:', designErr.message);
       }
-    }
-
-    // Verify that the media actually uploaded (check for video or image in builder area)
-    const mediaUploaded = await page.evaluate(() => {
-      const video = document.querySelector('video');
-      const img = document.querySelector('[data-test-id="pin-builder-media"] img, [data-test-id="pin-draft-media"] img');
-      const uploadArea = document.querySelector('.Upload, [data-test-id="media-upload-area"]');
-      const chooseFileText = (document.body.innerText || '').includes('Choose a file');
-      if (video || img) return 'has_media';
-      if (chooseFileText || uploadArea) return 'no_media_still_showing_upload_prompt';
-      return 'unknown';
-    });
-    console.log(`[Bot] Media upload status: ${mediaUploaded}`);
-    if (mediaUploaded !== 'has_media') {
-      // Take a debug screenshot
-      try {
-        const _scDir = path.join(process.cwd(), 'public', 'logs');
-        await page.screenshot({ path: path.join(_scDir, `upload_fail_${Date.now()}.png`), fullPage: true });
-      } catch (_e) {}
-      console.error('[Bot] ❌ Media upload likely failed — no video/image found on the page.');
     }
 
     // 4. Fill in Details
@@ -807,10 +854,7 @@ async function createPinWithBot(pinData) {
     // 6. Dismiss any popups/banners before publishing
     console.log('[Bot] Dismissing any popups or banners...');
     try {
-      // Press Escape first to close any overlay
-      await page.keyboard.press('Escape');
-      await new Promise(r => setTimeout(r, 500));
-      
+      // Don't press Escape as it cancels board selection!
       await page.evaluate(() => {
         // Aggressively close any overlay/modal/banner including Pinterest extension promos
         const dismissed = [];
