@@ -691,11 +691,12 @@ async function createPinWithBot(pinData) {
         const coverBtnSelectors = [
           'button[data-test-id="pin-draft-cover-image-button"]',
           '[data-test-id="pin-builder-media"] button[aria-label*="Edit" i]',
+          '[data-test-id="story-pin-video-block"] button[aria-label*="Edit" i]',
+          '[data-test-id="story-pin-image-block"] button[aria-label*="Edit" i]',
+          '.story-pin-video-block button[aria-label*="Edit" i]',
           'button[data-test-id="change-cover-btn"]',
-          'button[aria-label*="Edit" i]',
           '[data-test-id="edit-pin-button"]',
-          'button[data-test-id="edit-media-button"]',
-          'button[aria-label*="cover" i]'
+          'button[data-test-id="edit-media-button"]'
         ];
         let coverBtn = null;
         for (const sel of coverBtnSelectors) {
@@ -753,8 +754,11 @@ async function createPinWithBot(pinData) {
               await page.keyboard.press('Escape');
               await new Promise(r => setTimeout(r, 1000));
               await page.evaluate(() => {
-                  const closeBtn = document.querySelector('[aria-label="Cancel"], [aria-label="Close"], [data-test-id="cancel-button"], [data-test-id="done-button"]');
-                  if (closeBtn) closeBtn.click();
+                  const modal = document.querySelector('div[role="dialog"], .Modal');
+                  if (modal) {
+                    const closeBtn = modal.querySelector('[aria-label="Cancel"], [aria-label="Close"], [data-test-id="cancel-button"], [data-test-id="done-button"]');
+                    if (closeBtn) closeBtn.click();
+                  }
               });
             }
           } else {
@@ -762,8 +766,11 @@ async function createPinWithBot(pinData) {
             await page.keyboard.press('Escape');
             await new Promise(r => setTimeout(r, 1000));
             await page.evaluate(() => {
-                const closeBtn = document.querySelector('[aria-label="Cancel"], [aria-label="Close"], [data-test-id="cancel-button"], [data-test-id="done-button"]');
-                if (closeBtn) closeBtn.click();
+                const modal = document.querySelector('div[role="dialog"], .Modal');
+                if (modal) {
+                  const closeBtn = modal.querySelector('[aria-label="Cancel"], [aria-label="Close"], [data-test-id="cancel-button"], [data-test-id="done-button"]');
+                  if (closeBtn) closeBtn.click();
+                }
             });
           }
           await new Promise(r => setTimeout(r, 2000));
@@ -787,10 +794,13 @@ async function createPinWithBot(pinData) {
 
     const linkSelectors = [
       'textarea#storyboard-selector-link',
+      '[data-test-id="storyboard-selector-link"]',
       'input[id*="pin-draft-link"]',
       '[data-test-id="pin-draft-link"] input',
       '[data-test-id="pin-draft-link"] textarea',
       '[data-test-id="add-link-button"]',
+      '[data-test-id="story-pin-link"]',
+      '[data-test-id="pin-builder-link"]',
       'input[placeholder*="link" i]',
       'input[aria-label*="link" i]',
       'textarea[placeholder*="link" i]',
