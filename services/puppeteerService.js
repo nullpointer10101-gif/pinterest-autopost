@@ -332,7 +332,12 @@ async function createPinWithBot(pinData) {
   let page;
   try {
     page = await browser.newPage();
-    page.on('console', msg => console.log(`[Bot-Browser] ${msg.text()}`));
+    page.on('console', msg => {
+        const text = msg.text();
+        if (!text.includes('preloaded using link preload but not used')) {
+            console.log(`[Bot-Browser] ${text}`);
+        }
+    });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
     
     // Set the Pinterest session cookie
@@ -1130,6 +1135,12 @@ async function createPinWithBot(pinData) {
     // Update finalUrl from current page
     if (!finalUrl) finalUrl = await page.url();
     
+    // Dump page text to see if there are any errors shown by Pinterest
+    try {
+        const pageText = await page.evaluate(() => document.body.innerText.replace(/\n+/g, ' | '));
+        console.log(`[Bot] PAGE TEXT AFTER PUBLISH: ${pageText.substring(0, 800)}`);
+    } catch(e) {}
+
     if (!published) {
       // SECOND: Poll for 60 seconds looking for success indicators
       console.log('[Bot] Polling for success (up to 60s)...');
