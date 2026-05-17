@@ -246,7 +246,7 @@ async function downloadVideo(url, filepath) {
 
 // ─── Main Puppeteer Bot ────────────────────────────────────────────────────────
 async function createPinWithBot(pinData) {
-  const { title, description, alt_text, link, media_source } = pinData;
+  const { title, description, alt_text, link, media_source, boardName } = pinData;
   const sessionCookie = await getActiveSessionCookie();
 
   if (!sessionCookie) {
@@ -567,27 +567,23 @@ async function createPinWithBot(pinData) {
     // so we must fill it last to guarantee it survives to publish.
 
     // 5. Select Board
-    // 5. Select Board
-    console.log('[Bot] Selecting board...');
+    console.log(`[Bot] Selecting board${boardName ? ': "' + boardName + '"' : ' (first available)'}...`);
     try {
       const boardClicked = await page.evaluate(() => {
-        // Find and click the board dropdown precisely
         const candidateSelectors = [
           '[data-test-id="board-dropdown-select-button"]',
           '[data-test-id="board-dropdown-select-button"] button',
           'div[data-test-id="storyboard-selector-board-dropdown"] button',
           'div[role="button"][aria-haspopup="listbox"]'
         ];
-        
         for (const sel of candidateSelectors) {
-            const btn = document.querySelector(sel);
-            if (btn && btn.offsetParent !== null) {
-                btn.click();
-                return `clicked_precise_${sel}`;
-            }
+          const btn = document.querySelector(sel);
+          if (btn && btn.offsetParent !== null) {
+            btn.click();
+            return `clicked_precise_${sel}`;
+          }
         }
-        
-        // Fallback: look for button containing "choose a board" or similar placeholder
+        // Fallback: look for button containing "choose a board" placeholder
         const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
         for (const btn of buttons) {
           const text = (btn.innerText || '').toLowerCase().trim();
@@ -596,24 +592,24 @@ async function createPinWithBot(pinData) {
             return `clicked_text_${text}`;
           }
         }
-        
         return 'not_found';
       });
       console.log(`[Bot] Board dropdown click result: ${boardClicked}`);
       
       await new Promise(r => setTimeout(r, 3000));
-      
+
       const debugItems = await page.evaluate(() => {
         const items = Array.from(document.querySelectorAll('[role="option"], [role="menuitem"], [role="listitem"], [data-test-id="board-row"], button, div[role="button"]'));
         return items.map(i => i.innerText).filter(t => t && t.trim().length > 0).join(' | ');
       });
       console.log(`[Bot] DEBUG ALL ITEMS AFTER DROPDOWN CLICK: ${debugItems.substring(0, 500)}`);
 
-      // Step 2: Select the first available board from the dropdown list
+      // Step 2: Select the target board — by name first, then fallback to first available
+      const targetBoard = (boardName || '').trim().toLowerCase();
       let boardSelected = false;
+      
       for (let attempt = 0; attempt < 5; attempt++) {
-        boardSelected = await page.evaluate(() => {
-          // Look strictly for board rows to avoid clicking 'Drafts' in the sidebar
+        boardSelected = await page.evaluate((targetBoard) => {
           const candidateSelectors = [
             '[data-test-id="board-row"]',
             '[data-test-id="board-row"] button',
@@ -624,34 +620,40 @@ async function createPinWithBot(pinData) {
             'div[role="listbox"] [role="listitem"]',
             '[data-test-id="storyboard-selector-board-dropdown"] div[role="button"]'
           ];
+
+          const allBoardItems = [];
           for (const sel of candidateSelectors) {
             const items = Array.from(document.querySelectorAll(sel));
             for (const item of items) {
               const text = (item.innerText || '').trim().toLowerCase();
               const isVisible = item.offsetParent !== null;
-              // Skip "search", "create new board", "create pin", or empty items
               if (isVisible && text.length > 1 && !text.includes('search') && !text.includes('create') && !text.startsWith('choose')) {
-                item.scrollIntoView({ block: 'nearest' });
-                item.click();
-                return `selected:${text.slice(0, 40)}`;
+                allBoardItems.push({ el: item, text });
               }
             }
           }
-          
-          // Absolute fallback if candidate selectors didn't catch the board but it's clearly a button in a popup
-          const popupBtns = Array.from(document.querySelectorAll('div[role="dialog"] button, div[role="dialog"] div[role="button"], div[role="listbox"] button'));
-          for (const item of popupBtns) {
-            const text = (item.innerText || '').trim().toLowerCase();
-            const isVisible = item.offsetParent !== null;
-            if (isVisible && text.length > 1 && !text.includes('search') && !text.includes('create') && !text.startsWith('choose')) {
-              item.scrollIntoView({ block: 'nearest' });
-              item.click();
-              return `selected:${text.slice(0, 40)}`;
+
+          if (allBoardItems.length === 0) return false;
+
+          // 1st priority: exact or partial name match
+          if (targetBoard) {
+            for (const { el, text } of allBoardItems) {
+              if (text.includes(targetBoard) || targetBoard.includes(text.split('\n')[0])) {
+                el.scrollIntoView({ block: 'nearest' });
+                el.click();
+                return `selected_targeted:${text.slice(0, 40)}`;
+              }
             }
+            console.warn('[Bot] Target board not found by name, using first available.');
           }
-          return false;
-        });
-        
+
+          // Fallback: click first valid board
+          const first = allBoardItems[0];
+          first.el.scrollIntoView({ block: 'nearest' });
+          first.el.click();
+          return `selected_first:${first.text.slice(0, 40)}`;
+        }, targetBoard);
+
         if (boardSelected) {
           console.log(`[Bot] ✅ Board selected: ${boardSelected}`);
           break;
@@ -674,6 +676,7 @@ async function createPinWithBot(pinData) {
     } catch (e) {
       console.log('[Bot] Board selection error:', e.message);
     }
+
 
     // ─── 5a-bis. Wait for Video Processing ───────────
     console.log('[Bot] Additional wait for video processing...');

@@ -2,6 +2,7 @@ const aiService = require('./aiService');
 const historyService = require('./historyService');
 const flipkartSearchService = require('./flipkartSearchService');
 const earnKaroService = require('./earnKaroService');
+const { selectBoard } = require('./boardSelectorService');
 
 let createPinWithBot = null;
 try {
@@ -570,11 +571,30 @@ async function processNextInQueue() {
       throw new Error('Puppeteer browser bot is not available in this runtime. Ensure this runs in GitHub Actions.');
     }
 
+    // ── Board Selection ─────────────────────────────────────────────────────
+    // Build all product signals we have and let boardSelectorService score them.
+    // We always pass something — even the AI title is useful as a keyword source.
+    const boardSignals = {
+      productName: mainProductName || title,
+      exactMatchQuery: mainProductName || '',
+      outfitName: outfitName || '',
+      // Use title/description as fallback keyword sources
+      titleSignal: title,
+      items: affiliateLinks.map(l => ({ type: l.type, query: l.name })),
+    };
+    const boardForPost = selectBoard(boardSignals);
+    if (boardForPost) {
+      console.log(`[Queue] 📌 Board selected: "${boardForPost}"`);
+    } else {
+      console.log('[Queue] 📌 No specific board — Pinterest will use default.');
+    }
+
     result = await createPinWithBot({
       title,
       description,
       alt_text: altText,
       link: finalLink,
+      boardName: boardForPost,
       media_source: {
         url: mediaUrl,
         // Pass smart thumbnail so the bot can upload it as the pin cover image
