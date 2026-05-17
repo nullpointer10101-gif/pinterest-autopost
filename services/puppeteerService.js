@@ -538,110 +538,105 @@ async function createPinWithBot(pinData) {
     if (designEditorCheck) {
       console.log('[Bot] 🎬 "Design your Pin" editor detected — setting cover thumbnail...');
       try {
-        // ── Debug: screenshot the cover editor so we can see what's on screen ──
+        // ── Debug: screenshot the cover editor ──
         try {
           const _scDir = path.join(process.cwd(), 'public', 'logs');
           await page.screenshot({ path: path.join(_scDir, `cover_editor_${Date.now()}.png`), fullPage: true });
           console.log('[Bot] 📸 Cover editor screenshot saved.');
         } catch (_e) {}
 
-        // ── Strategy 1: Direct file input upload (most reliable) ──────────────
-        let coverUploaded = false;
-        if (coverPath && fs.existsSync(coverPath)) {
-          const uploadBtnClicked = await page.evaluate(() => {
-            const allEls = Array.from(document.querySelectorAll('button, [role="button"], label, a, div[role="button"]'));
-            const keywords = ['upload cover', 'upload image', 'choose cover', 'add cover', 'custom cover', 'upload a cover', 'change cover'];
-            for (const el of allEls) {
-              const t = (el.innerText || el.getAttribute('aria-label') || el.getAttribute('for') || '').toLowerCase();
-              for (const kw of keywords) {
-                if (t.includes(kw)) {
-                  el.click();
-                  return t.trim().substring(0, 40);
-                }
-              }
-            }
-            return null;
-          });
-          if (uploadBtnClicked) {
-            console.log(`[Bot] Clicked upload button: "${uploadBtnClicked}"`);
-            await new Promise(r => setTimeout(r, 2000));
-          }
+        // ══════════════════════════════════════════════════════════════════
+        // Pinterest shows a "Pick a cover" modal with a grid of video
+        // frame thumbnails that load asynchronously (spinner first).
+        // We must:
+        //   1. Wait for the frame images to appear
+        //   2. Click a frame from the MIDDLE of the grid
+        //   3. Click "Done"
+        // ══════════════════════════════════════════════════════════════════
 
-          await page.evaluate(() => {
-            document.querySelectorAll('input[type="file"]').forEach(el => {
-              el.style.opacity = '1';
-              el.style.display = 'block';
-              el.style.position = 'fixed';
-              el.style.top = '0';
-              el.style.left = '0';
-              el.style.zIndex = '99999';
-              el.style.width = '100px';
-              el.style.height = '100px';
+        // Step 1 — Wait for frame thumbnails to load (up to 15 seconds)
+        console.log('[Bot] Waiting for cover frame thumbnails to load...');
+        let framesLoaded = false;
+        for (let wait = 0; wait < 15; wait++) {
+          framesLoaded = await page.evaluate(() => {
+            // Look for <img> elements inside the "Pick a cover" modal
+            const modal = document.querySelector('[role="dialog"], [aria-modal="true"]')
+                         || document.body;
+            const imgs = Array.from(modal.querySelectorAll('img'));
+            // Filter to actual frame thumbnails (small, inside the modal)
+            const frameThumbs = imgs.filter(img => {
+              const rect = img.getBoundingClientRect();
+              const src = img.src || '';
+              return rect.width > 30 && rect.width < 300 && rect.height > 30
+                     && !src.includes('avatar') && !src.includes('profile')
+                     && img.complete && img.naturalWidth > 0;
             });
+            return frameThumbs.length >= 3;
           });
-
-          const fileInputs = await page.$$('input[type="file"]');
-          console.log(`[Bot] Found ${fileInputs.length} file input(s) in cover editor.`);
-
-          if (fileInputs.length > 0) {
-            const targetInput = fileInputs[fileInputs.length - 1];
-            try {
-              await targetInput.uploadFile(coverPath);
-              console.log('[Bot] ✅ Cover image uploaded via file input!');
-              coverUploaded = true;
-              await new Promise(r => setTimeout(r, 3000));
-            } catch (uploadErr) {
-              console.log(`[Bot] ⚠️ File input upload failed: ${uploadErr.message}`);
-            }
+          if (framesLoaded) {
+            console.log(`[Bot] ✅ Frame thumbnails loaded after ${wait + 1}s.`);
+            break;
           }
+          await new Promise(r => setTimeout(r, 1000));
         }
 
-        // ── Strategy 2: Mouse-drag the timeline slider ────────────────
-        if (!coverUploaded) {
-          console.log('[Bot] No file upload succeeded — dragging timeline slider with mouse...');
-          const sliderDragged = await page.evaluate(() => {
-            const slider = document.querySelector('[role="slider"], input[type="range"], [data-test-id="video-scrubber"], [data-test-id="timeline-scrubber"]');
-            if (!slider) return 'no_slider_found';
-            const rect = slider.getBoundingClientRect();
-            return JSON.stringify({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+        if (framesLoaded) {
+          // Step 2 — Click a frame from the middle of the grid
+          const clickResult = await page.evaluate(() => {
+            const modal = document.querySelector('[role="dialog"], [aria-modal="true"]')
+                         || document.body;
+            const imgs = Array.from(modal.querySelectorAll('img'));
+            const frameThumbs = imgs.filter(img => {
+              const rect = img.getBoundingClientRect();
+              const src = img.src || '';
+              return rect.width > 30 && rect.width < 300 && rect.height > 30
+                     && !src.includes('avatar') && !src.includes('profile')
+                     && img.complete && img.naturalWidth > 0;
+            });
+
+            if (frameThumbs.length === 0) return 'no_frames';
+
+            // Click frame at ~60% through the grid
+            const targetIndex = Math.min(
+              Math.floor(frameThumbs.length * 0.6),
+              frameThumbs.length - 1
+            );
+            const target = frameThumbs[targetIndex];
+
+            // Click the parent container (Pinterest wraps imgs in clickable divs)
+            const clickTarget = target.closest('[role="button"], button, div[tabindex], label') || target.parentElement || target;
+            clickTarget.click();
+            target.click();
+
+            return `clicked_frame_${targetIndex + 1}_of_${frameThumbs.length}`;
           });
 
-          if (sliderDragged !== 'no_slider_found') {
-            try {
-              const rect = JSON.parse(sliderDragged);
-              const startX = rect.x + 5;
-              const startY = rect.y + rect.height / 2;
-              const endX = rect.x + rect.width * 0.5;
-              
-              await page.mouse.move(startX, startY);
-              await page.mouse.down();
-              const steps = 10;
-              for (let i = 1; i <= steps; i++) {
-                const currentX = startX + (endX - startX) * (i / steps);
-                await page.mouse.move(currentX, startY);
-                await new Promise(r => setTimeout(r, 50));
-              }
-              await page.mouse.up();
-              console.log('[Bot] ✅ Slider dragged to ~50% of video via mouse.');
-              await new Promise(r => setTimeout(r, 1500));
-            } catch (dragErr) {
-              console.log(`[Bot] ⚠️ Mouse drag failed: ${dragErr.message}`);
-            }
-          } else {
-            console.log('[Bot] No slider element found. Trying keyboard arrows...');
-            try {
-              for (let t = 0; t < 5; t++) {
-                await page.keyboard.press('Tab');
-                await new Promise(r => setTimeout(r, 200));
-              }
-              for (let k = 0; k < 20; k++) {
-                await page.keyboard.press('ArrowRight');
-                await new Promise(r => setTimeout(r, 80));
-              }
-              console.log('[Bot] ✅ Pressed ArrowRight 20 times after tabbing.');
-            } catch (kbErr) {
-              console.log(`[Bot] ⚠️ Keyboard fallback failed: ${kbErr.message}`);
-            }
+          console.log(`[Bot] 📷 Cover frame selection: ${clickResult}`);
+          await new Promise(r => setTimeout(r, 1500));
+
+          // Debug screenshot after selection
+          try {
+            const _scDir = path.join(process.cwd(), 'public', 'logs');
+            await page.screenshot({ path: path.join(_scDir, `cover_after_select_${Date.now()}.png`), fullPage: true });
+          } catch (_e) {}
+        } else {
+          // Frames didn't load — try clicking the modal center area
+          console.log('[Bot] ⚠️ Frame thumbnails did not load in time. Trying to click modal center...');
+
+          const modalClicked = await page.evaluate(() => {
+            const modal = document.querySelector('[role="dialog"], [aria-modal="true"]');
+            if (!modal) return false;
+            const rect = modal.getBoundingClientRect();
+            const clickX = rect.x + rect.width * 0.65;
+            const clickY = rect.y + rect.height * 0.4;
+            const el = document.elementFromPoint(clickX, clickY);
+            if (el) { el.click(); return true; }
+            return false;
+          });
+
+          if (modalClicked) {
+            console.log('[Bot] Clicked modal center area as fallback.');
+            await new Promise(r => setTimeout(r, 1000));
           }
         }
 
