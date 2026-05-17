@@ -459,50 +459,150 @@ async function createPinWithBot(pinData) {
       throw new Error(`[Bot] ❌ Media upload failed after 3 attempts (status: ${mediaUploaded}). Aborting to prevent fake-success.`);
     }
 
-    // ─── Handle "Design your Pin" Video Cover Editor ──────────────────────────
-    // After video upload, Pinterest may automatically open its video cover design
-    // editor ("Design your Pin" / "Edit your video"). We must click "Done" to
-    // return to the standard pin builder before filling in title/board/link.
+    // ─── Handle "Design your Pin" / Cover Editor ──────────────────────────────
+    // After video upload Pinterest opens a video cover editor. We USE this modal
+    // to set the cover instead of dismissing it and trying to reopen it later.
+    // Flow: detect modal → try upload button → fall back to slider → click Done.
     const designEditorCheck = await page.evaluate(() => {
       const h1Text = (document.querySelector('h1')?.innerText || '').toLowerCase();
       const bodyText = (document.body.innerText || '').toLowerCase();
-      const isDesignEditor =
+      return (
         h1Text.includes('design your pin') ||
         bodyText.includes('design your pin') ||
         bodyText.includes('edit your video') ||
         bodyText.includes('video controls') ||
         document.querySelector('[data-test-id="video-cover-editor"]') !== null ||
-        document.querySelector('.videoEditor') !== null;
-      return isDesignEditor;
+        document.querySelector('.videoEditor') !== null
+      );
     });
 
     if (designEditorCheck) {
-      console.log('[Bot] ⚠️ Detected "Design your Pin" video editor — clicking Done to return to pin builder...');
+      console.log('[Bot] 🎬 "Design your Pin" editor detected — setting cover thumbnail...');
       try {
-        const doneClicked = await page.evaluate(() => {
-          const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
+        // ── Strategy 1: Look for "Upload cover image" button inside the modal ──
+        const uploadCoverClicked = await page.evaluate(() => {
+          const allBtns = Array.from(document.querySelectorAll('button, [role="button"], label'));
           for (const btn of allBtns) {
-            const t = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase().trim();
-            if (t === 'done' || t === 'done editing') {
+            const t = (btn.innerText || btn.getAttribute('aria-label') || btn.getAttribute('for') || '').toLowerCase();
+            if (
+              t.includes('upload cover') ||
+              t.includes('upload image') ||
+              t.includes('choose an image') ||
+              t.includes('add cover') ||
+              t.includes('custom cover')
+            ) {
               btn.click();
-              return `clicked_done: "${btn.innerText}"`;
+              return `clicked: "${btn.innerText || btn.getAttribute('aria-label')}"`;
             }
           }
-          const doneBtn = document.querySelector('[data-test-id="done-button"], [data-test-id="video-editor-done"]');
-          if (doneBtn) { doneBtn.click(); return 'clicked_done_by_test-id'; }
+          return null;
+        });
+
+        if (uploadCoverClicked && coverPath && fs.existsSync(coverPath)) {
+          console.log(`[Bot] Found upload button: ${uploadCoverClicked}`);
+          await new Promise(r => setTimeout(r, 1500));
+
+          // Now find the file input that appeared (could be anywhere in DOM — Pinterest uses hidden inputs)
+          const fileInputs = await page.$$('input[type="file"]');
+          if (fileInputs.length > 0) {
+            const targetInput = fileInputs[fileInputs.length - 1];
+            await targetInput.uploadFile(coverPath);
+            console.log('[Bot] ✅ Cover image uploaded via "Upload cover image" button.');
+            await new Promise(r => setTimeout(r, 3000));
+          } else {
+            // Try making the input visible and using it
+            await page.evaluate(() => {
+              document.querySelectorAll('input[type="file"]').forEach(el => {
+                el.style.opacity = '1';
+                el.style.display = 'block';
+                el.style.position = 'fixed';
+                el.style.top = '0';
+                el.style.left = '0';
+                el.style.zIndex = '99999';
+              });
+            });
+            const fileInputs2 = await page.$$('input[type="file"]');
+            if (fileInputs2.length > 0) {
+              await fileInputs2[fileInputs2.length - 1].uploadFile(coverPath);
+              console.log('[Bot] ✅ Cover uploaded via revealed hidden input.');
+              await new Promise(r => setTimeout(r, 3000));
+            } else {
+              console.log('[Bot] ⚠️ No file input found after clicking upload button.');
+            }
+          }
+        } else {
+          // ── Strategy 2: Slider-based frame picker — seek to 30% mark ──────────
+          console.log('[Bot] No upload button found — using timeline slider to pick a clear frame...');
+          const sliderMoved = await page.evaluate(() => {
+            const slider = document.querySelector(
+              '[role="slider"], input[type="range"], [data-test-id="video-scrubber"], [data-test-id="timeline-scrubber"]'
+            );
+            if (!slider) return false;
+            // Set value to 30% of the range
+            const min = parseFloat(slider.getAttribute('min') || '0');
+            const max = parseFloat(slider.getAttribute('max') || '100');
+            const target = min + (max - min) * 0.30;
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(slider, target);
+            slider.dispatchEvent(new Event('input', { bubbles: true }));
+            slider.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+          });
+
+          if (sliderMoved) {
+            console.log('[Bot] ✅ Slider moved to 30% frame.');
+            await new Promise(r => setTimeout(r, 1500));
+          } else {
+            // Try using arrow keys on focused slider
+            try {
+              await page.focus('[role="slider"], input[type="range"]');
+              for (let k = 0; k < 3; k++) {
+                await page.keyboard.press('ArrowRight');
+                await new Promise(r => setTimeout(r, 200));
+              }
+              console.log('[Bot] ✅ Advanced slider via arrow keys.');
+            } catch {}
+          }
+        }
+
+        // ── Click "Done" to exit the editor and return to pin builder ──────────
+        await new Promise(r => setTimeout(r, 1000));
+        const doneClicked = await page.evaluate(() => {
+          const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
+          // Priority: "Done" > "Apply" > "Save" > "Continue"
+          const labels = ['done', 'done editing', 'apply', 'save', 'continue'];
+          for (const label of labels) {
+            for (const btn of allBtns) {
+              const t = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase().trim();
+              if (t === label && btn.offsetParent !== null) {
+                btn.click();
+                return `clicked_done: "${label}"`;
+              }
+            }
+          }
+          const doneBtn = document.querySelector(
+            '[data-test-id="done-button"], [data-test-id="video-editor-done"], [data-test-id="storyboard-done-button"]'
+          );
+          if (doneBtn && doneBtn.offsetParent !== null) {
+            doneBtn.click();
+            return 'clicked_done_by_test-id';
+          }
           return 'done_btn_not_found';
         });
-        console.log(`[Bot] Design editor exit result: ${doneClicked}`);
+
+        console.log(`[Bot] Cover editor exit: ${doneClicked}`);
         if (doneClicked === 'done_btn_not_found') {
-          try { await page.click('button:has-text("Done")'); } catch (_) {}
+          try { await page.click('button:has-text("Done")'); } catch {}
           await page.keyboard.press('Escape');
         }
         await new Promise(r => setTimeout(r, 3000));
-        console.log('[Bot] ✅ Returned to pin builder after dismissing design editor.');
+        console.log('[Bot] ✅ Returned to pin builder after cover setup.');
       } catch (designErr) {
-        console.warn('[Bot] ⚠️ Error handling design editor:', designErr.message);
+        console.warn('[Bot] ⚠️ Error in cover editor flow:', designErr.message);
+        await page.keyboard.press('Escape');
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
+
 
     // 4. Fill in Details
     console.log('[Bot] Filling details...');
@@ -681,109 +781,6 @@ async function createPinWithBot(pinData) {
     // ─── 5a-bis. Wait for Video Processing ───────────
     console.log('[Bot] Additional wait for video processing...');
     await new Promise(r => setTimeout(r, 10000));
-
-    // ─── 5b. Upload Smart Cover Thumbnail ───────
-    if (coverPath && fs.existsSync(coverPath)) {
-      console.log('[Bot] 🖼️ Uploading AI-selected cover thumbnail...');
-      try {
-        // Hover over the video to reveal the edit/cover button
-        try { await page.hover('[data-test-id="pin-builder-media"]'); } catch(e) {}
-        try { await page.hover('video'); } catch(e) {}
-        await new Promise(r => setTimeout(r, 1000));
-
-        const coverBtnSelectors = [
-          'button[data-test-id="pin-draft-cover-image-button"]',
-          '[data-test-id="pin-builder-media"] button[aria-label*="Edit" i]',
-          '[data-test-id="story-pin-video-block"] button[aria-label*="Edit" i]',
-          '[data-test-id="story-pin-image-block"] button[aria-label*="Edit" i]',
-          '.story-pin-video-block button[aria-label*="Edit" i]',
-          'button[data-test-id="change-cover-btn"]',
-          '[data-test-id="edit-pin-button"]',
-          'button[data-test-id="edit-media-button"]'
-        ];
-        let coverBtn = null;
-        for (const sel of coverBtnSelectors) {
-          try { coverBtn = await page.$(sel); if (coverBtn) { console.log(`[Bot] Edit button found: ${sel}`); break; } } catch {}
-        }
-        
-        // Fallback: search by text
-        if (!coverBtn) {
-          coverBtn = await page.evaluateHandle(() => {
-            const btns = Array.from(document.querySelectorAll('button'));
-            for (const b of btns) {
-              const t = (b.innerText || '').toLowerCase();
-              if (t.includes('edit cover') || t.includes('edit video') || t.includes('change cover')) {
-                return b;
-              }
-            }
-            return null;
-          });
-          const isElement = await page.evaluate(el => el instanceof HTMLElement, coverBtn);
-          if (!isElement) coverBtn = null;
-          if (coverBtn) console.log(`[Bot] Edit button found via text search.`);
-        }
-
-        if (coverBtn) {
-          await coverBtn.click();
-          await new Promise(r => setTimeout(r, 2000));
-
-          // Find the file input strictly inside the Edit modal
-          const modalInputs = await page.$$('div[role="dialog"] input[type="file"], .Modal input[type="file"]');
-          
-          if (modalInputs.length > 0) {
-            console.log(`[Bot] Found ${modalInputs.length} file inputs in modal. Uploading cover...`);
-            await modalInputs[modalInputs.length - 1].uploadFile(coverPath);
-            await new Promise(r => setTimeout(r, 3000));
-
-            // Confirm/apply the cover
-            const applyResult = await page.evaluate(() => {
-              const btns = Array.from(document.querySelectorAll('div[role="dialog"] button, .Modal button'));
-              const apply = btns.find(b => {
-                const t = (b.innerText || '').toLowerCase();
-                return b.offsetParent !== null && (t === 'apply' || t === 'done' || t === 'save');
-              });
-              if (apply) { apply.click(); return true; }
-              
-              const doneBtn = document.querySelector('[data-test-id="done-button"]');
-              if (doneBtn) { doneBtn.click(); return true; }
-              
-              return false;
-            });
-
-            if (applyResult) {
-              console.log('[Bot] ✅ Cover uploaded and applied.');
-            } else {
-              console.log('[Bot] ⚠️ No Apply/Done button found in modal, pressing Escape.');
-              await page.keyboard.press('Escape');
-              await new Promise(r => setTimeout(r, 1000));
-              await page.evaluate(() => {
-                  const modal = document.querySelector('div[role="dialog"], .Modal');
-                  if (modal) {
-                    const closeBtn = modal.querySelector('[aria-label="Cancel"], [aria-label="Close"], [data-test-id="cancel-button"], [data-test-id="done-button"]');
-                    if (closeBtn) closeBtn.click();
-                  }
-              });
-            }
-          } else {
-            console.log('[Bot] ⚠️ No file input found in the edit modal to upload cover.');
-            await page.keyboard.press('Escape');
-            await new Promise(r => setTimeout(r, 1000));
-            await page.evaluate(() => {
-                const modal = document.querySelector('div[role="dialog"], .Modal');
-                if (modal) {
-                  const closeBtn = modal.querySelector('[aria-label="Cancel"], [aria-label="Close"], [data-test-id="cancel-button"], [data-test-id="done-button"]');
-                  if (closeBtn) closeBtn.click();
-                }
-            });
-          }
-          await new Promise(r => setTimeout(r, 2000));
-        } else {
-          console.log('[Bot] ℹ️ No Edit button found — Pinterest will use auto-selected frame.');
-        }
-      } catch (e) {
-        console.log('[Bot] Cover upload warning (non-fatal):', e.message);
-      }
-    }
 
     // ─── 5c. Fill Destination Link (AFTER board selection) ─────────────────
     // CRITICAL: This MUST happen after the board dropdown is closed.
