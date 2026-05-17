@@ -48,15 +48,29 @@ if (!IS_SERVERLESS) {
 // ── Upstash REST helper ───────────────────────────────────────────────────────
 
 async function runUpstashCommand(command) {
-  const res = await axios.post(UPSTASH_URL, command, {
-    timeout: 3000,
-    headers: {
-      Authorization: `Bearer ${UPSTASH_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  if (res.data?.error) throw new Error(`Upstash error: ${res.data.error}`);
-  return res.data?.result ?? null;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const res = await fetch(UPSTASH_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${UPSTASH_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(command),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+
+    const data = await res.json();
+    if (data?.error) throw new Error(`Upstash error: ${data.error}`);
+    return data?.result ?? null;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Upstash request timed out');
+    throw err;
+  }
 }
 
 // ── Local file helpers ────────────────────────────────────────────────────────

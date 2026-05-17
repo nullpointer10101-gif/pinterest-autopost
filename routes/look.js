@@ -15,24 +15,40 @@ const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
 async function cacheGet(key) {
   if (!UPSTASH_URL || !UPSTASH_TOKEN) return null;
   try {
-    const res = await axios.post(UPSTASH_URL, ['GET', key], {
-      timeout: 4000,
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(UPSTASH_URL, {
+      method: 'POST',
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['GET', key]),
+      signal: controller.signal
     });
-    const raw = res.data?.result;
+    clearTimeout(timeoutId);
+    const data = await res.json();
+    const raw = data?.result;
     if (!raw) return null;
     return JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
-  } catch { return null; }
+  } catch (err) {
+    console.error('[Look cacheGet error]', err.message);
+    return null;
+  }
 }
 
 async function cacheSet(key, value) {
   if (!UPSTASH_URL || !UPSTASH_TOKEN) return;
   try {
-    await axios.post(UPSTASH_URL, ['SET', key, JSON.stringify(value), 'EX', CACHE_TTL_SECONDS], {
-      timeout: 4000,
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    await fetch(UPSTASH_URL, {
+      method: 'POST',
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['SET', key, JSON.stringify(value), 'EX', CACHE_TTL_SECONDS]),
+      signal: controller.signal
     });
-  } catch {}
+    clearTimeout(timeoutId);
+  } catch (err) {
+    console.error('[Look cacheSet error]', err.message);
+  }
 }
 
 
