@@ -62,87 +62,92 @@ const primaryClient = createClient(primaryConfig);
 const secondaryClient = createClient(secondaryConfig);
 const tertiaryClient = createClient(tertiaryConfig);
 
-async function tryAICompletion(options, imageData = null) {
-  if (!primaryClient && !githubVisionClient) throw new Error('No AI client configured');
-  
-  // ── VISION PATH: Use GitHub Models (gpt-4o-mini) which supports images ────────
+// ─── Dedicated Task Routers ───────────────────────────────────────────────────
+
+/**
+ * VISION tasks: Identify product/outfit from video frame image.
+ * Route: GitHub Models (gpt-4o-mini) → Groq text-only fallback
+ */
+async function tryVisionCompletion(options, imageData) {
   if (imageData && githubVisionClient) {
     try {
       const systemMsg = options.messages.find(m => m.role === 'system')?.content || '';
       const userMsg = options.messages.find(m => m.role === 'user')?.content || '';
-      
-      let userText = userMsg;
-      if (Array.isArray(userMsg)) {
-        const textPart = userMsg.find(p => p.type === 'text');
-        userText = textPart ? textPart.text : '';
-      }
-
-      const visionMessages = [
-        { role: 'system', content: systemMsg },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: userText },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${imageData.mimeType || 'image/jpeg'};base64,${imageData.base64}`
-              }
-            }
-          ]
-        }
-      ];
+      let userText = Array.isArray(userMsg)
+        ? (userMsg.find(p => p.type === 'text')?.text || '')
+        : userMsg;
 
       console.log('[AI] Using GitHub Models (gpt-4o-mini) for vision analysis...');
-      const visionResponse = await githubVisionClient.chat.completions.create({
+      const res = await githubVisionClient.chat.completions.create({
         model: githubVisionConfig.model,
-        messages: visionMessages,
-        temperature: options.temperature || 0.7,
+        messages: [
+          { role: 'system', content: systemMsg },
+          { role: 'user', content: [
+            { type: 'text', text: userText },
+            { type: 'image_url', image_url: { url: `data:${imageData.mimeType || 'image/jpeg'};base64,${imageData.base64}` } }
+          ]}
+        ],
+        temperature: options.temperature || 0.5,
         max_tokens: options.max_tokens || 400
       });
       console.log('[AI] ✅ GitHub Vision analysis successful!');
-      return visionResponse;
+      return res;
     } catch (visionErr) {
       console.warn(`[AI] GitHub Vision failed (${visionErr.message}). Falling back to text-only...`);
-      // Fall through to text-only pipeline
     }
   }
+  // Vision failed or no image — route to text pipeline
+  return tryTextCompletion(options);
+}
 
-  // ── TEXT PATH: Use Groq (primary) → Gemini (fallbacks) ───────────────────────
-  // Strip image content from messages for text-only models
-  const textOptions = { ...options };
-  if (textOptions.messages) {
-    textOptions.messages = textOptions.messages.map(m => {
+/**
+ * TEXT tasks: Generate Pinterest titles, descriptions, hashtags, engagement comments.
+ * Route: Groq (primary) → Gemini (fallback) → Gemini 2nd key
+ */
+async function tryTextCompletion(options) {
+  // Always strip any image content from messages
+  const textOptions = {
+    ...options,
+    messages: options.messages.map(m => {
       if (Array.isArray(m.content)) {
-        const textPart = m.content.find(part => part.type === 'text');
+        const textPart = m.content.find(p => p.type === 'text');
         return { ...m, content: textPart ? textPart.text : '' };
       }
       return m;
-    });
-  }
+    })
+  };
 
-  // Layer 1: Primary (Groq)
+  // Layer 1: Groq
   if (primaryClient) {
     try {
       return await primaryClient.chat.completions.create({ ...textOptions, model: primaryConfig.model });
     } catch (err1) {
-      if (!secondaryClient) throw err1;
-      console.warn(`[AI] Primary (Groq) failed (${err1.message}). Trying Layer 2 (Gemini)...`);
+      console.warn(`[AI] Groq failed (${err1.message}). Trying Gemini...`);
     }
   }
-
-  // Layer 2: Secondary (Gemini)
+  // Layer 2: Gemini primary
   if (secondaryClient) {
     try {
       return await secondaryClient.chat.completions.create({ ...textOptions, model: secondaryConfig.model });
     } catch (err2) {
-      if (!tertiaryClient) throw err2;
-      console.warn(`[AI] Layer 2 failed (${err2.message}). Trying Layer 3 (Gemini Fallback)...`);
+      console.warn(`[AI] Gemini failed (${err2.message}). Trying Gemini fallback key...`);
     }
   }
+  // Layer 3: Gemini fallback key
+  if (tertiaryClient) {
+    return await tertiaryClient.chat.completions.create({ ...textOptions, model: tertiaryConfig.model });
+  }
+  throw new Error('[AI] All text AI providers exhausted.');
+}
 
-  // Layer 3: Tertiary (Gemini 2nd Key)
-  return await tertiaryClient.chat.completions.create({ ...textOptions, model: tertiaryConfig.model });
+/**
+ * Legacy unified router — kept for backward compatibility.
+ * Routes image requests to vision path, text requests to text path.
+ */
+async function tryAICompletion(options, imageData = null) {
+  if (!primaryClient && !githubVisionClient) throw new Error('No AI client configured');
+  if (imageData) return tryVisionCompletion(options, imageData);
+  return tryTextCompletion(options);
 }
 
 // ─── Regex Fallback (no API key) ─────────────────────────────────────────────
@@ -253,7 +258,8 @@ Rules:
  * based on what it SEES in the image, not the caption.
  */
 async function generatePinterestContent({ caption = '', username = 'creator', mediaType = 'video', imageData = null }) {
-  if (!primaryClient) {
+  // TEXT task → always routed to Groq
+  if (!primaryClient && !githubVisionClient) {
     console.warn('[AI] No AI API key configured — using fallback generator');
     return fallbackGenerate({ caption, username });
   }
