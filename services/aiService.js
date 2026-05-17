@@ -1,4 +1,5 @@
 const OpenAI = require('openai');
+const { extractFrameFromVideo } = require('./frameExtractorService');
 
 function getPrimaryAIConfig() {
   const apiKey = process.env.GEMINI_API_KEY || process.env.AI_API_KEY || '';
@@ -201,11 +202,11 @@ async function generatePinterestContent({ caption = '', username = 'creator', me
  * Analyses an Instagram caption to determine if a physical shoppable product
  * is featured. Returns { found, productName, flipkartQuery, category } or { found: false }.
  */
-async function identifyProduct({ caption = '', username = '', thumbnailUrl = '' }) {
+async function identifyProduct({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '' }) {
   let retries = 3;
   while (retries >= 0) {
     try {
-      return await identifyProductInternal({ caption, username, thumbnailUrl });
+      return await identifyProductInternal({ caption, username, thumbnailUrl, mediaUrl });
     } catch (err) {
       if (err.message.includes('429') && retries > 0) {
         console.warn(`[AI] identifyProduct rate limited (429). Retrying in 35s... (${retries} left)`);
@@ -254,6 +255,48 @@ function cleanCaption(caption) {
   return cleaned;
 }
 
+/**
+ * Get the best possible image for AI visual analysis.
+ * Priority: (1) Video frame at 30% → (2) Thumbnail → (3) null
+ * Returns { base64, mimeType } or null.
+ */
+async function getImageForAI(mediaUrl, thumbnailUrl) {
+  // 1. Try video frame extraction (most accurate — clear mid-video product shot)
+  if (mediaUrl) {
+    try {
+      const frame = await extractFrameFromVideo(mediaUrl);
+      if (frame) {
+        console.log('[AI] ✅ Using extracted video frame for product identification.');
+        return frame;
+      }
+    } catch (e) {
+      console.warn('[AI] Video frame extraction failed:', e.message);
+    }
+  }
+
+  // 2. Fall back to thumbnail
+  if (thumbnailUrl) {
+    try {
+      const fetch = require('node-fetch');
+      const imgRes = await fetch(thumbnailUrl, { timeout: 10000 });
+      if (imgRes.ok) {
+        const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
+        if (mimeType.startsWith('image/')) {
+          const buffer = Buffer.from(await imgRes.arrayBuffer());
+          console.log('[AI] Using thumbnail as image source (video frame unavailable).');
+          return { base64: buffer.toString('base64'), mimeType };
+        }
+      }
+    } catch (e) {
+      console.warn('[AI] Thumbnail download failed:', e.message);
+    }
+  }
+
+  console.warn('[AI] No image available for visual identification.');
+  return null;
+}
+
+
 function heuristicIdentifyProduct(caption) {
   const cleaned = cleanCaption(caption);
   const productKeywords = ['sneakers', 'shirt', 'jeans', 'pants', 'watch', 'jacket', 'tshirt', 't-shirt', 'hoodie', 'shorts', 'kurta', 'saree', 'shoes', 'sandals', 'phone', 'gadget', 'perfume', 'bag', 'cap', 'hat'];
@@ -279,13 +322,12 @@ function heuristicIdentifyProduct(caption) {
   };
 }
 
-async function identifyProductInternal({ caption = '', username = '', thumbnailUrl = '' }) {
+async function identifyProductInternal({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '' }) {
   if (!primaryClient) {
     return heuristicIdentifyProduct(caption);
   }
 
   const usefulCaption = cleanCaption(caption);
-  const hasImage = !!thumbnailUrl;
 
   const systemPrompt = 'You are an expert AI visual product identifier for affiliate marketing. Your PRIMARY source is the IMAGE — identify the exact product shown visually. The caption is ONLY secondary context and should be IGNORED if it is a generic CTA like "comment link" or "link in bio". Return only valid JSON.';
 
@@ -311,32 +353,15 @@ If no product visible → Return: { "found": false }
 
 Return ONLY the JSON object.`;
 
-  const userMessageContent = [];
-  userMessageContent.push({ type: 'text', text: textPrompt });
-  
-  if (thumbnailUrl) {
-    try {
-      const fetch = require('node-fetch'); // Ensure fetch is available
-      const imgRes = await fetch(thumbnailUrl);
-      if (imgRes.ok) {
-        const arrayBuffer = await imgRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const base64 = buffer.toString('base64');
-        const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
-        if (mimeType.startsWith('image/')) {
-          userMessageContent.push({
-            type: 'image_url',
-            image_url: { url: `data:${mimeType};base64,${base64}` }
-          });
-        } else {
-          console.warn(`[AI] Skipped image for identifyProduct because it's not an image (${mimeType})`);
-        }
-      } else {
-        console.warn(`[AI] Failed to download image for AI: ${imgRes.statusText}`);
-      }
-    } catch (e) {
-      console.warn(`[AI] Error downloading image for AI: ${e.message}`);
-    }
+  const userMessageContent = [{ type: 'text', text: textPrompt }];
+
+  // Get best image: video frame first, thumbnail fallback
+  const imageData = await getImageForAI(mediaUrl, thumbnailUrl);
+  if (imageData) {
+    userMessageContent.push({
+      type: 'image_url',
+      image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` }
+    });
   }
 
   const options = {
@@ -380,7 +405,7 @@ Return ONLY the JSON object.`;
  * Analyses an Instagram caption and image to extract a full "Shop The Look" outfit.
  * Returns { found: true, outfitName, items: [{ type, query }] } or { found: false }.
  */
-async function identifyOutfit({ caption = '', username = '', thumbnailUrl = '' }) {
+async function identifyOutfit({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '' }) {
   if (!primaryClient) {
     return { found: false };
   }
@@ -411,30 +436,15 @@ Return ONLY this JSON:
 
 Return ONLY valid JSON.`;
 
-  const userMessageContent = [];
-  userMessageContent.push({ type: 'text', text: textPrompt });
-  
-  if (thumbnailUrl) {
-    try {
-      const fetch = require('node-fetch');
-      const imgRes = await fetch(thumbnailUrl);
-      if (imgRes.ok) {
-        const arrayBuffer = await imgRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const base64 = buffer.toString('base64');
-        const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
-        if (mimeType.startsWith('image/')) {
-          userMessageContent.push({
-            type: 'image_url',
-            image_url: { url: `data:${mimeType};base64,${base64}` }
-          });
-        } else {
-          console.warn(`[AI] Skipped image for identifyOutfit because it's not an image (${mimeType})`);
-        }
-      }
-    } catch (e) {
-      console.warn(`[AI] Error downloading image for identifyOutfit: ${e.message}`);
-    }
+  const userMessageContent = [{ type: 'text', text: textPrompt }];
+
+  // Get best image: video frame first, thumbnail fallback
+  const imageData = await getImageForAI(mediaUrl, thumbnailUrl);
+  if (imageData) {
+    userMessageContent.push({
+      type: 'image_url',
+      image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` }
+    });
   }
 
   const options = {

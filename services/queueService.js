@@ -445,7 +445,8 @@ async function processNextInQueue() {
       const outfitData = await aiService.identifyOutfit({
         caption: item.caption || '',
         username: item.username || '',
-        thumbnailUrl: item.thumbnailUrl || mediaUrl
+        thumbnailUrl: item.thumbnailUrl || '',
+        mediaUrl: mediaUrl || ''
       });
       
       if (outfitData.found && outfitData.items) {
@@ -478,7 +479,8 @@ async function processNextInQueue() {
         const productData = await aiService.identifyProduct({
           caption: item.caption || '',
           username: item.username || '',
-          thumbnailUrl: item.thumbnailUrl || mediaUrl
+          thumbnailUrl: item.thumbnailUrl || '',
+          mediaUrl: mediaUrl || ''
         });
         
         if (productData.found) {

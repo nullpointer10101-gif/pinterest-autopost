@@ -59,7 +59,7 @@ router.get('/:shortcode', async (req, res) => {
       console.log(`[Look] No stored products for ${shortcode} — running live search...`);
       try {
         // Try outfit first
-        const outfitData = await aiService.identifyOutfit({ caption, username, thumbnailUrl });
+        const outfitData = await aiService.identifyOutfit({ caption, username, thumbnailUrl, mediaUrl });
         const itemsToSearch = (outfitData.found && outfitData.items?.length > 0)
           ? outfitData.items
           : null;
@@ -89,7 +89,7 @@ router.get('/:shortcode', async (req, res) => {
 
         // If outfit search failed, try single product
         if (outfit.length === 0) {
-          const productData = await aiService.identifyProduct({ caption, username, thumbnailUrl });
+          const productData = await aiService.identifyProduct({ caption, username, thumbnailUrl, mediaUrl });
           if (productData.found) {
             const queries = {
               exactMatchQuery: productData.exactMatchQuery,
