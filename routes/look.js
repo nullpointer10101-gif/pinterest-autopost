@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const queueService = require('../services/queueService');
 const historyService = require('../services/historyService');
+const aiService = require('../services/aiService');
+const flipkartSearchService = require('../services/flipkartSearchService');
+const earnKaroService = require('../services/earnKaroService');
 
 router.get('/:shortcode', async (req, res) => {
   try {
@@ -29,21 +32,93 @@ router.get('/:shortcode', async (req, res) => {
       `);
     }
 
-    const outfit = lookData.productInfo?.outfit || [];
-    
-    if (outfit.length === 0 && lookData.productInfo?.affiliateUrl) {
+    // Normalize fields — queue items and history items have different shapes
+    const caption = lookData.caption || lookData.reelData?.caption || lookData.aiContent?.description || '';
+    const username = lookData.username || lookData.reelData?.username || '';
+    const thumbnailUrl = lookData.thumbnailUrl || lookData.reelData?.thumbnailUrl || '';
+    const mediaUrl = lookData.mediaUrl || lookData.reelData?.thumbnailUrl || '';
+
+    let outfit = [];
+
+    // 1. Best case: productInfo.outfit already populated (AI ran during posting)
+    if (lookData.productInfo?.outfit?.length > 0) {
+      outfit = lookData.productInfo.outfit;
+    }
+    // 2. Single affiliateUrl stored directly on productInfo
+    else if (lookData.productInfo?.affiliateUrl) {
       outfit.push({
         type: 'Main Piece',
         name: lookData.productInfo.name || 'Featured Item',
         url: lookData.productInfo.affiliateUrl,
-        image: lookData.thumbnailUrl,
+        image: thumbnailUrl,
         originalPrice: null
       });
     }
+    // 3. No products stored — run live AI + Flipkart + EarnKaro pipeline on the fly
+    else {
+      console.log(`[Look] No stored products for ${shortcode} — running live search...`);
+      try {
+        // Try outfit first
+        const outfitData = await aiService.identifyOutfit({ caption, username, thumbnailUrl });
+        const itemsToSearch = (outfitData.found && outfitData.items?.length > 0)
+          ? outfitData.items
+          : null;
 
-    const title = lookData.title || lookData.productInfo?.name || 'Shop The Look';
-    const videoUrl = lookData.mediaUrl;
-    const fallbackImage = lookData.thumbnailUrl;
+        if (itemsToSearch) {
+          for (const outItem of itemsToSearch) {
+            const queries = {
+              exactMatchQuery: outItem.query,
+              similarMatchQuery: outItem.query,
+              broadMatchQuery: outItem.query.split(' ').slice(0, 3).join(' ')
+            };
+            const fp = await flipkartSearchService.findProduct(queries, outItem.query);
+            if (fp) {
+              const ek = await earnKaroService.makeAffiliateLink(fp.url);
+              if (ek?.affiliateUrl) {
+                outfit.push({
+                  type: outItem.type || 'Item',
+                  name: fp.title,
+                  url: ek.affiliateUrl,
+                  image: fp.image || thumbnailUrl,
+                  originalPrice: fp.price
+                });
+              }
+            }
+          }
+        }
+
+        // If outfit search failed, try single product
+        if (outfit.length === 0) {
+          const productData = await aiService.identifyProduct({ caption, username, thumbnailUrl });
+          if (productData.found) {
+            const queries = {
+              exactMatchQuery: productData.exactMatchQuery,
+              similarMatchQuery: productData.similarMatchQuery,
+              broadMatchQuery: productData.broadMatchQuery
+            };
+            const fp = await flipkartSearchService.findProduct(queries, productData.productName);
+            if (fp) {
+              const ek = await earnKaroService.makeAffiliateLink(fp.url);
+              if (ek?.affiliateUrl) {
+                outfit.push({
+                  type: 'Main Piece',
+                  name: fp.title,
+                  url: ek.affiliateUrl,
+                  image: fp.image || thumbnailUrl,
+                  originalPrice: fp.price
+                });
+              }
+            }
+          }
+        }
+      } catch (aiErr) {
+        console.warn(`[Look] Live product search failed for ${shortcode}:`, aiErr.message);
+      }
+    }
+
+    const title = lookData.title || lookData.aiContent?.title || lookData.productInfo?.name || 'Shop The Look';
+    const fallbackImage = thumbnailUrl;
+
 
     let itemsHtml = '';
     for (const item of outfit) {
@@ -65,6 +140,16 @@ router.get('/:shortcode', async (req, res) => {
               </button>
             </div>
           </a>
+        </div>
+      `;
+    }
+
+    if (outfit.length === 0) {
+      itemsHtml = `
+        <div style="grid-column:1/-1; text-align:center; padding:40px 20px; color:var(--text-muted);">
+          <div style="font-size:2rem; margin-bottom:12px;">🛍️</div>
+          <p style="font-size:1rem; font-weight:500; margin-bottom:8px;">Products Coming Soon</p>
+          <p style="font-size:0.85rem;">We're curating the best affiliate links for this look.</p>
         </div>
       `;
     }
@@ -324,7 +409,7 @@ router.get('/:shortcode', async (req, res) => {
     </div>
     
     <div class="video-section">
-      <video src="${videoUrl}" poster="${fallbackImage}" controls autoplay loop muted playsinline></video>
+      <video src="${mediaUrl}" poster="${fallbackImage}" controls autoplay loop muted playsinline></video>
     </div>
     
     <div class="shop-title-container">
