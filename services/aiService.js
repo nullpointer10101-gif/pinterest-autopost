@@ -135,8 +135,21 @@ async function tryTextCompletion(options) {
   }
   // Layer 3: Gemini fallback key
   if (tertiaryClient) {
-    return await tertiaryClient.chat.completions.create({ ...textOptions, model: tertiaryConfig.model });
+    try {
+      return await tertiaryClient.chat.completions.create({ ...textOptions, model: tertiaryConfig.model });
+    } catch (err3) {
+      console.warn(`[AI] Gemini fallback failed (${err3.message}). Trying GitHub Models...`);
+    }
   }
+  // Layer 4: GitHub Models (gpt-4o-mini)
+  if (githubVisionClient) {
+    try {
+      return await githubVisionClient.chat.completions.create({ ...textOptions, model: githubVisionConfig.model });
+    } catch (err4) {
+      console.warn(`[AI] GitHub Models text fallback failed (${err4.message}).`);
+    }
+  }
+
   throw new Error('[AI] All text AI providers exhausted.');
 }
 

@@ -60,8 +60,9 @@ jobs:
           APP_IG_TRACKER_STATE_KEY: ${{ secrets.APP_IG_TRACKER_STATE_KEY || 'ig_tracker_state_v1' }}
           EARNKARO_SESSION_COOKIE: ${{ secrets.EARNKARO_SESSION_COOKIE }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL || 'https://pinterest-autopost.vercel.app' }}
-          GOOGLE_CSE_KEY: ${{ secrets.GOOGLE_CSE_KEY }}
-          GOOGLE_CSE_CX: ${{ secrets.GOOGLE_CSE_CX }}
+          # GOOGLE_CSE_KEY: ${{ secrets.GOOGLE_CSE_KEY }}  # reserved for future
+          # GOOGLE_CSE_CX: ${{ secrets.GOOGLE_CSE_CX }}  # reserved for future
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
 
       - name: Upload Debug Screenshots
         if: always()
