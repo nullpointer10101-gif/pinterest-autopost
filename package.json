@@ -12,6 +12,7 @@
     "axios": "^1.6.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "duck-duck-scrape": "^2.2.7",
     "express": "^4.18.2",
     "form-data": "^4.0.0",
     "instagram-url-direct": "^2.0.7",

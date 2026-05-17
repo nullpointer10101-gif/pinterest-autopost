@@ -113,38 +113,22 @@ function calculateSimilarity(target, candidate) {
   return matches / targetWords.length;
 }
 
+const { findProductUrls } = require('./productSearch');
+
 /**
  * Search Flipkart for a product query. Returns a list of products.
  */
 async function searchFlipkart(query) {
-  const encoded = encodeURIComponent(query);
-  const searchUrl = `https://www.flipkart.com/search?q=${encoded}&sort=popularity`;
-
-  console.log(`[Flipkart] Searching: "${query}"`);
-
   try {
-    const res = await axios.get(searchUrl, {
-      headers: FLIPKART_HEADERS,
-      timeout: 8000,
-      maxRedirects: 3,
-    });
-
-    const html = res.data;
-
-    // Primary: JSON-LD (most stable)
-    let products = extractFromJsonLd(html);
-
-    // Fallback: HTML link scraping
-    if (products.length === 0) {
-      products = extractFromHtmlLinks(html);
-    }
-
-    if (products.length === 0) {
-      console.warn('[Flipkart] No products found for query:', query);
-      return [];
-    }
+    const products = await findProductUrls(query, { platform: 'flipkart', strictMatch: true });
     
-    return products;
+    // Add null price since search APIs don't easily return precise product prices
+    return products.map(p => ({
+      title: p.title,
+      url: p.url,
+      price: null, 
+      image: null
+    }));
   } catch (err) {
     console.error('[Flipkart] Search failed:', err.message);
     return [];

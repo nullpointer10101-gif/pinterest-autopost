@@ -80,3 +80,5 @@ jobs:
           GEMINI_FALLBACK_API_KEY: ${{ secrets.GEMINI_FALLBACK_API_KEY }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GOOGLE_CSE_KEY: ${{ secrets.GOOGLE_CSE_KEY }}
+          GOOGLE_CSE_CX: ${{ secrets.GOOGLE_CSE_CX }}
