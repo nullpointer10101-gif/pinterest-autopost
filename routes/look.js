@@ -5,6 +5,36 @@ const historyService = require('../services/historyService');
 const aiService = require('../services/aiService');
 const flipkartSearchService = require('../services/flipkartSearchService');
 const earnKaroService = require('../services/earnKaroService');
+const axios = require('axios');
+
+// ── Upstash cache helpers ─────────────────────────────────────────────────────
+const CACHE_TTL_SECONDS = 60 * 60 * 24; // 24 hours
+const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL   || '';
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
+
+async function cacheGet(key) {
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) return null;
+  try {
+    const res = await axios.post(UPSTASH_URL, ['GET', key], {
+      timeout: 4000,
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+    });
+    const raw = res.data?.result;
+    if (!raw) return null;
+    return JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
+  } catch { return null; }
+}
+
+async function cacheSet(key, value) {
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) return;
+  try {
+    await axios.post(UPSTASH_URL, ['SET', key, JSON.stringify(value), 'EX', CACHE_TTL_SECONDS], {
+      timeout: 4000,
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+    });
+  } catch {}
+}
+
 
 router.get('/:shortcode', async (req, res) => {
   try {
@@ -39,10 +69,12 @@ router.get('/:shortcode', async (req, res) => {
     const mediaUrl = lookData.mediaUrl || lookData.reelData?.thumbnailUrl || '';
 
     let outfit = [];
+    const cacheKey = `look_outfit_${shortcode}`;
 
     // 1. Best case: productInfo.outfit already populated (AI ran during posting)
     if (lookData.productInfo?.outfit?.length > 0) {
       outfit = lookData.productInfo.outfit;
+      console.log(`[Look] ✅ Using stored outfit (${outfit.length} items) for ${shortcode}`);
     }
     // 2. Single affiliateUrl stored directly on productInfo
     else if (lookData.productInfo?.affiliateUrl) {
@@ -54,65 +86,78 @@ router.get('/:shortcode', async (req, res) => {
         originalPrice: null
       });
     }
-    // 3. No products stored — run live AI + Flipkart + EarnKaro pipeline on the fly
+    // 3. Check Upstash cache before running an expensive live search
     else {
-      console.log(`[Look] No stored products for ${shortcode} — running live search...`);
-      try {
-        // Try outfit first
-        const outfitData = await aiService.identifyOutfit({ caption, username, thumbnailUrl, mediaUrl });
-        const itemsToSearch = (outfitData.found && outfitData.items?.length > 0)
-          ? outfitData.items
-          : null;
+      const cached = await cacheGet(cacheKey);
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        outfit = cached;
+        console.log(`[Look] ⚡ Cache hit for ${shortcode} (${outfit.length} items)`);
+      } else {
+        // 4. Cache miss — run full live AI + Flipkart + EarnKaro pipeline
+        console.log(`[Look] No stored products for ${shortcode} — running live search...`);
+        try {
+          // Try outfit first
+          const outfitData = await aiService.identifyOutfit({ caption, username, thumbnailUrl, mediaUrl });
+          const itemsToSearch = (outfitData.found && outfitData.items?.length > 0)
+            ? outfitData.items
+            : null;
 
-        if (itemsToSearch) {
-          for (const outItem of itemsToSearch) {
-            const queries = {
-              exactMatchQuery: outItem.query,
-              similarMatchQuery: outItem.query,
-              broadMatchQuery: outItem.query.split(' ').slice(0, 3).join(' ')
-            };
-            const fp = await flipkartSearchService.findProduct(queries, outItem.query);
-            if (fp) {
-              const ek = await earnKaroService.makeAffiliateLink(fp.url);
-              if (ek?.affiliateUrl) {
-                outfit.push({
-                  type: outItem.type || 'Item',
-                  name: fp.title,
-                  url: ek.affiliateUrl,
-                  image: fp.image || thumbnailUrl,
-                  originalPrice: fp.price
-                });
+          if (itemsToSearch) {
+            for (const outItem of itemsToSearch) {
+              const queries = {
+                exactMatchQuery: outItem.query,
+                similarMatchQuery: outItem.query,
+                broadMatchQuery: outItem.query.split(' ').slice(0, 3).join(' ')
+              };
+              const fp = await flipkartSearchService.findProduct(queries, outItem.query);
+              if (fp) {
+                const ek = await earnKaroService.makeAffiliateLink(fp.url);
+                if (ek?.affiliateUrl) {
+                  outfit.push({
+                    type: outItem.type || 'Item',
+                    name: fp.title,
+                    url: ek.affiliateUrl,
+                    image: fp.image || thumbnailUrl,
+                    originalPrice: fp.price
+                  });
+                }
               }
             }
           }
-        }
 
-        // If outfit search failed, try single product
-        if (outfit.length === 0) {
-          const productData = await aiService.identifyProduct({ caption, username, thumbnailUrl, mediaUrl });
-          if (productData.found) {
-            const queries = {
-              exactMatchQuery: productData.exactMatchQuery,
-              similarMatchQuery: productData.similarMatchQuery,
-              broadMatchQuery: productData.broadMatchQuery
-            };
-            const fp = await flipkartSearchService.findProduct(queries, productData.productName);
-            if (fp) {
-              const ek = await earnKaroService.makeAffiliateLink(fp.url);
-              if (ek?.affiliateUrl) {
-                outfit.push({
-                  type: 'Main Piece',
-                  name: fp.title,
-                  url: ek.affiliateUrl,
-                  image: fp.image || thumbnailUrl,
-                  originalPrice: fp.price
-                });
+          // If outfit search failed, try single product
+          if (outfit.length === 0) {
+            const productData = await aiService.identifyProduct({ caption, username, thumbnailUrl, mediaUrl });
+            if (productData.found) {
+              const queries = {
+                exactMatchQuery: productData.exactMatchQuery,
+                similarMatchQuery: productData.similarMatchQuery,
+                broadMatchQuery: productData.broadMatchQuery
+              };
+              const fp = await flipkartSearchService.findProduct(queries, productData.productName);
+              if (fp) {
+                const ek = await earnKaroService.makeAffiliateLink(fp.url);
+                if (ek?.affiliateUrl) {
+                  outfit.push({
+                    type: 'Main Piece',
+                    name: fp.title,
+                    url: ek.affiliateUrl,
+                    image: fp.image || thumbnailUrl,
+                    originalPrice: fp.price
+                  });
+                }
               }
             }
           }
+
+          // Cache results if we found anything (24h TTL)
+          if (outfit.length > 0) {
+            await cacheSet(cacheKey, outfit);
+            console.log(`[Look] 💾 Cached ${outfit.length} products for ${shortcode}`);
+          }
+        } catch (aiErr) {
+          console.warn(`[Look] Live product search failed for ${shortcode}:`, aiErr.message);
         }
-      } catch (aiErr) {
-        console.warn(`[Look] Live product search failed for ${shortcode}:`, aiErr.message);
       }
     }
 
