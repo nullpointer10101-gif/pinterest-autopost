@@ -47,10 +47,73 @@ const primaryClient = createClient(primaryConfig);
 const secondaryClient = createClient(secondaryConfig);
 const tertiaryClient = createClient(tertiaryConfig);
 
-async function tryAICompletion(options) {
+async function tryAICompletion(options, imageData = null) {
   if (!primaryClient) throw new Error("No primary AI client configured");
   
-  // Layer 1: Primary (Gemini)
+  // If we have an image and we are using Gemini, use the native REST API to avoid 
+  // the OpenAI SDK adapter 400 errors with large base64 inline_data
+  if (imageData && primaryConfig.isGemini && primaryConfig.apiKey) {
+      try {
+          const fetch = require('node-fetch');
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${primaryConfig.model}:generateContent?key=${primaryConfig.apiKey}`;
+          
+          const systemMsg = options.messages.find(m => m.role === 'system')?.content || '';
+          const userMsg = options.messages.find(m => m.role === 'user')?.content || '';
+          
+          // Note: if userMsg is an array (from previous logic), extract just the text part
+          let userText = userMsg;
+          if (Array.isArray(userMsg)) {
+              const textPart = userMsg.find(p => p.type === 'text');
+              userText = textPart ? textPart.text : '';
+          }
+
+          const payload = {
+            system_instruction: { parts: [{ text: systemMsg }] },
+            contents: [{
+              role: "user",
+              parts: [
+                { text: userText },
+                {
+                  inline_data: {
+                    mime_type: imageData.mimeType || 'image/jpeg',
+                    data: imageData.base64
+                  }
+                }
+              ]
+            }],
+            generationConfig: {
+              temperature: options.temperature || 0.7,
+              maxOutputTokens: options.max_tokens || 400
+            }
+          };
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Gemini Native API Error: ${res.status} - ${errText}`);
+          }
+
+          const data = await res.json();
+          const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          
+          // Return in OpenAI format to keep the rest of the code compatible
+          return {
+              choices: [{
+                  message: { content: responseText }
+              }]
+          };
+      } catch (nativeErr) {
+          console.warn(`[AI] Native Gemini fallback failed: ${nativeErr.message}`);
+          // Fall through to regular try-catch if the native attempt fails
+      }
+  }
+
+  // Layer 1: Primary (Gemini via OpenAI SDK)
   try {
     return await primaryClient.chat.completions.create({ ...options, model: primaryConfig.model });
   } catch (err1) {
@@ -162,7 +225,7 @@ Rules:
   let retries = 2;
   while (retries >= 0) {
     try {
-      const response = await tryAICompletion(options);
+      const response = await tryAICompletion(options, imageData);
       const raw = response.choices[0].message.content.trim();
       const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
       const parsed = JSON.parse(cleaned);
@@ -241,6 +304,7 @@ function cleanCaption(caption) {
   const spamPatterns = [
     /comment\s+["']?link["']?.{0,40}(dm|inbox|bio|below|above)/gi,
     /comment\s+["'\u201c\u201d]?link["'\u201c\u201d]?\s+to\s+get/gi,
+    /comment\s+["'\u201c\u201d]?link["'\u201c\u201d]?.*?(dm|inbox)/gi,
     /comment\s+["'\u201c\u201d]?link["'\u201c\u201d]/gi,
     /link in (my )?bio/gi,
     /shop link in bio/gi,
@@ -386,7 +450,7 @@ Return ONLY the JSON object.`;
     max_tokens: 150,
   };
   
-  const response = await tryAICompletion(options);
+  const response = await tryAICompletion(options, resolvedImage);
   const raw = response.choices[0].message.content.trim();
   // Strip markdown code fences if present
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -465,7 +529,7 @@ Return ONLY valid JSON.`;
   };
   
   try {
-    const response = await tryAICompletion(options);
+    const response = await tryAICompletion(options, resolvedImageOutfit);
     const raw = response.choices[0].message.content.trim();
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
     const parsed = JSON.parse(cleaned);
