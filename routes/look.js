@@ -43,14 +43,23 @@ router.get('/:shortcode/products', async (req, res) => {
 
     const queue = await queueService.getQueue();
     let lookData = queue.find(item => item.shortcode === shortcode);
+    
+    // Always fetch history to supplement missing data (like productInfo which queue doesn't store directly)
+    const history = await historyService.getAll();
+    const historyData = history.find(item =>
+      item.shortcode === shortcode ||
+      item.reelData?.shortcode === shortcode ||
+      (item.url || '').includes(`/${shortcode}`)
+    );
 
-    if (!lookData) {
-      const history = await historyService.getAll();
-      lookData = history.find(item =>
-        item.shortcode === shortcode ||
-        item.reelData?.shortcode === shortcode ||
-        (item.url || '').includes(`/${shortcode}`)
-      );
+    if (historyData) {
+      if (!lookData) lookData = historyData;
+      else {
+        // Merge missing productInfo from history if queue item doesn't have it
+        if (!lookData.productInfo && historyData.productInfo) {
+          lookData.productInfo = historyData.productInfo;
+        }
+      }
     }
 
     if (!lookData) return res.json({ found: false, outfit: [] });
@@ -79,44 +88,50 @@ router.get('/:shortcode/products', async (req, res) => {
         outfit = cached;
       } else {
         try {
-          const outfitData = await aiService.identifyOutfit({ caption, username, thumbnailUrl, mediaUrl });
-          const itemsToSearch = (outfitData.found && outfitData.items?.length > 0) ? outfitData.items : null;
+          await Promise.race([
+            new Promise(async (resolve) => {
+              const outfitData = await aiService.identifyOutfit({ caption, username, thumbnailUrl, mediaUrl });
+              const itemsToSearch = (outfitData.found && outfitData.items?.length > 0) ? outfitData.items : null;
 
-          if (itemsToSearch) {
-            for (const outItem of itemsToSearch) {
-              const queries = {
-                exactMatchQuery: outItem.query,
-                similarMatchQuery: outItem.query,
-                broadMatchQuery: outItem.query.split(' ').slice(0, 3).join(' ')
-              };
-              const fp = await flipkartSearchService.findProduct(queries, outItem.query);
-              if (fp) {
-                const ek = await earnKaroService.makeAffiliateLink(fp.url);
-                if (ek?.affiliateUrl) {
-                  outfit.push({ type: outItem.type || 'Item', name: fp.title, url: ek.affiliateUrl, image: fp.image || thumbnailUrl, originalPrice: fp.price });
+              if (itemsToSearch) {
+                await Promise.allSettled(itemsToSearch.map(async (outItem) => {
+                  const queries = {
+                    exactMatchQuery: outItem.query,
+                    similarMatchQuery: outItem.query,
+                    broadMatchQuery: outItem.query.split(' ').slice(0, 3).join(' ')
+                  };
+                  const fp = await flipkartSearchService.findProduct(queries, outItem.query);
+                  if (fp) {
+                    const ek = await earnKaroService.makeAffiliateLink(fp.url);
+                    if (ek?.affiliateUrl) {
+                      outfit.push({ type: outItem.type || 'Item', name: fp.title, url: ek.affiliateUrl, image: fp.image || thumbnailUrl, originalPrice: fp.price });
+                    }
+                  }
+                }));
+              }
+
+              if (outfit.length === 0) {
+                const productData = await aiService.identifyProduct({ caption, username, thumbnailUrl, mediaUrl });
+                if (productData.found) {
+                  const fp = await flipkartSearchService.findProduct({
+                    exactMatchQuery: productData.exactMatchQuery,
+                    similarMatchQuery: productData.similarMatchQuery,
+                    broadMatchQuery: productData.broadMatchQuery
+                  }, productData.productName);
+                  if (fp) {
+                    const ek = await earnKaroService.makeAffiliateLink(fp.url);
+                    if (ek?.affiliateUrl) {
+                      outfit.push({ type: 'Main Piece', name: fp.title, url: ek.affiliateUrl, image: fp.image || thumbnailUrl, originalPrice: fp.price });
+                    }
+                  }
                 }
               }
-            }
-          }
 
-          if (outfit.length === 0) {
-            const productData = await aiService.identifyProduct({ caption, username, thumbnailUrl, mediaUrl });
-            if (productData.found) {
-              const fp = await flipkartSearchService.findProduct({
-                exactMatchQuery: productData.exactMatchQuery,
-                similarMatchQuery: productData.similarMatchQuery,
-                broadMatchQuery: productData.broadMatchQuery
-              }, productData.productName);
-              if (fp) {
-                const ek = await earnKaroService.makeAffiliateLink(fp.url);
-                if (ek?.affiliateUrl) {
-                  outfit.push({ type: 'Main Piece', name: fp.title, url: ek.affiliateUrl, image: fp.image || thumbnailUrl, originalPrice: fp.price });
-                }
-              }
-            }
-          }
-
-          if (outfit.length > 0) await cacheSet(cacheKey, outfit);
+              if (outfit.length > 0) await cacheSet(cacheKey, outfit);
+              resolve();
+            }),
+            new Promise(resolve => setTimeout(resolve, 8500))
+          ]);
         } catch (aiErr) {
           console.warn(`[Look] Live product search failed for ${shortcode}:`, aiErr.message);
         }
@@ -135,16 +150,22 @@ router.get('/:shortcode', async (req, res) => {
   try {
     const { shortcode } = req.params;
     
-    const queue = await queueService.getQueue();
-    let lookData = queue.find(item => item.shortcode === shortcode);
-    
-    if (!lookData) {
-      const history = await historyService.getAll();
-      lookData = history.find(item => 
-        item.shortcode === shortcode || 
-        item.reelData?.shortcode === shortcode || 
-        (item.url || '').includes(`/${shortcode}`)
-      );
+    // Always fetch history to supplement missing data (like productInfo which queue doesn't store directly)
+    const history = await historyService.getAll();
+    const historyData = history.find(item =>
+      item.shortcode === shortcode ||
+      item.reelData?.shortcode === shortcode ||
+      (item.url || '').includes(`/${shortcode}`)
+    );
+
+    if (historyData) {
+      if (!lookData) lookData = historyData;
+      else {
+        // Merge missing productInfo from history if queue item doesn't have it
+        if (!lookData.productInfo && historyData.productInfo) {
+          lookData.productInfo = historyData.productInfo;
+        }
+      }
     }
     
     if (!lookData) {

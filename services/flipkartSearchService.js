@@ -125,7 +125,7 @@ async function searchFlipkart(query) {
   try {
     const res = await axios.get(searchUrl, {
       headers: FLIPKART_HEADERS,
-      timeout: 15000,
+      timeout: 8000,
       maxRedirects: 3,
     });
 
