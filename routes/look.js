@@ -108,25 +108,25 @@ router.get('/:shortcode/products', async (req, res) => {
 router.get('/:shortcode', async (req, res) => {
   try {
     const { shortcode } = req.params;
-    
-    // Always fetch history to supplement missing data (like productInfo which queue doesn't store directly)
+
+    // ── 1. Load data from queue + history (same logic as /products route) ───
+    const queue = await queueService.getQueue();
+    let lookData = queue.find(item => item.shortcode === shortcode) || null;
+
     const history = await historyService.getAll();
     const historyData = history.find(item =>
       item.shortcode === shortcode ||
       item.reelData?.shortcode === shortcode ||
-      (item.url || '').includes(`/${shortcode}`)
+      (item.url || '').includes(shortcode)
     );
 
     if (historyData) {
       if (!lookData) lookData = historyData;
-      else {
-        // Merge missing productInfo from history if queue item doesn't have it
-        if (!lookData.productInfo && historyData.productInfo) {
-          lookData.productInfo = historyData.productInfo;
-        }
+      else if (!lookData.productInfo && historyData.productInfo) {
+        lookData.productInfo = historyData.productInfo;
       }
     }
-    
+
     if (!lookData) {
       return res.status(404).send(`
         <html>
@@ -137,12 +137,25 @@ router.get('/:shortcode', async (req, res) => {
       `);
     }
 
+    // ── 2. Pre-fetch outfit products (embedded in HTML — no slow second call) ─
+    let outfit = [];
+    if (lookData.productInfo?.outfit?.length > 0) {
+      outfit = lookData.productInfo.outfit;
+    } else if (lookData.productInfo?.affiliateUrl) {
+      outfit = [{ type: 'Main Piece', name: lookData.productInfo.name || 'Featured Item', url: lookData.productInfo.affiliateUrl, image: null, originalPrice: null }];
+    } else {
+      const cacheKey = `look_outfit_${shortcode}`;
+      const cached = await cacheGet(cacheKey);
+      if (cached && Array.isArray(cached) && cached.length > 0) outfit = cached;
+    }
+
     // Normalize fields for meta/title only — no heavy AI work here
     const title = lookData.title || lookData.aiContent?.title || lookData.productInfo?.name || 'Shop The Look';
     const thumbnailUrl = lookData.thumbnailUrl || lookData.reelData?.thumbnailUrl || '';
     const mediaUrl = lookData.mediaUrl || lookData.reelData?.thumbnailUrl || '';
 
     // Serve instant HTML shell — products are loaded client-side via /products endpoint
+
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -211,55 +224,39 @@ router.get('/:shortcode', async (req, res) => {
     <div class="shop-title-container">
       <div class="shop-title">
         Curated Outfit
-        <span class="item-count" id="item-count">Loading...</span>
+        <span class="item-count" id="item-count">${outfit.length} Items</span>
       </div>
     </div>
     <div class="product-grid" id="product-grid">
-      <!-- Skeleton placeholders while loading -->
-      <div class="skeleton-card"><div class="skeleton skeleton-img"></div><div class="skeleton skeleton-text"></div><div class="skeleton skeleton-text-short"></div><div class="skeleton skeleton-btn"></div></div>
-      <div class="skeleton-card"><div class="skeleton skeleton-img"></div><div class="skeleton skeleton-text"></div><div class="skeleton skeleton-text-short"></div><div class="skeleton skeleton-btn"></div></div>
-      <p class="loading-msg">Finding the best products for this look...</p>
     </div>
   </div>
 
   <script>
-    (async function() {
-      const shortcode = '${shortcode}';
+    (function() {
+      const outfit = ${JSON.stringify(outfit)};
       const grid = document.getElementById('product-grid');
-      const counter = document.getElementById('item-count');
       const fallbackImg = '${thumbnailUrl}';
 
-      try {
-        const res = await fetch('/look/' + shortcode + '/products');
-        const data = await res.json();
-        const outfit = data.outfit || [];
-
-        if (outfit.length === 0) {
-          grid.innerHTML = \`<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--text-muted)"><div style="font-size:2rem;margin-bottom:12px">🛍️</div><p style="font-size:1rem;font-weight:500;margin-bottom:8px">Products Coming Soon</p><p style="font-size:0.85rem">We're curating the best affiliate links for this look.</p></div>\`;
-          counter.textContent = '0 Items';
-          return;
-        }
-
-        counter.textContent = outfit.length + ' Items';
-        grid.innerHTML = outfit.map(item => \`
-          <div class="product-card">
-            <a href="\${item.url}" target="_blank" rel="noopener noreferrer">
-              <div class="img-wrapper">
-                <img src="\${item.image || fallbackImg}" alt="\${item.name}" onerror="this.src='\${fallbackImg}'">
-                <div class="glass-badge">\${item.type}</div>
-              </div>
-              <div class="product-info">
-                <h3 class="product-name">\${item.name}</h3>
-                <div class="price">\${item.originalPrice ? '₹' + item.originalPrice : 'View Price'}</div>
-                <button class="buy-button"><span>Shop Item</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></button>
-              </div>
-            </a>
-          </div>
-        \`).join('');
-      } catch(err) {
-        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)">Could not load products. Please refresh.</div>';
-        counter.textContent = '0 Items';
+      if (outfit.length === 0) {
+        grid.innerHTML = \`<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--text-muted)"><div style="font-size:2rem;margin-bottom:12px">🛍️</div><p style="font-size:1rem;font-weight:500;margin-bottom:8px">Products Coming Soon</p><p style="font-size:0.85rem">We're curating the best affiliate links for this look.</p></div>\`;
+        return;
       }
+
+      grid.innerHTML = outfit.map(item => \`
+        <div class="product-card">
+          <a href="\${item.url}" target="_blank" rel="noopener noreferrer">
+            <div class="img-wrapper">
+              <img src="\${item.image || fallbackImg}" alt="\${item.name}" onerror="this.src='\${fallbackImg}'">
+              <div class="glass-badge">\${item.type}</div>
+            </div>
+            <div class="product-info">
+              <h3 class="product-name">\${item.name}</h3>
+              <div class="price">\${item.originalPrice ? '₹' + item.originalPrice : 'View Price'}</div>
+              <button class="buy-button"><span>Shop Item</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg></button>
+            </div>
+          </a>
+        </div>
+      \`).join('');
     })();
   </script>
 </body>
