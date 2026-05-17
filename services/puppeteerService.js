@@ -746,10 +746,20 @@ async function createPinWithBot(pinData) {
             } else {
               console.log('[Bot] ⚠️ No Apply/Done button found in modal, pressing Escape.');
               await page.keyboard.press('Escape');
+              await new Promise(r => setTimeout(r, 1000));
+              await page.evaluate(() => {
+                  const closeBtn = document.querySelector('[aria-label="Cancel"], [aria-label="Close"], [data-test-id="cancel-button"], [data-test-id="done-button"]');
+                  if (closeBtn) closeBtn.click();
+              });
             }
           } else {
             console.log('[Bot] ⚠️ No file input found in the edit modal to upload cover.');
             await page.keyboard.press('Escape');
+            await new Promise(r => setTimeout(r, 1000));
+            await page.evaluate(() => {
+                const closeBtn = document.querySelector('[aria-label="Cancel"], [aria-label="Close"], [data-test-id="cancel-button"], [data-test-id="done-button"]');
+                if (closeBtn) closeBtn.click();
+            });
           }
           await new Promise(r => setTimeout(r, 2000));
         } else {
