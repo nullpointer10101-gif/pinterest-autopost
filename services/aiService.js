@@ -1,23 +1,36 @@
 const OpenAI = require('openai');
 const { extractFrameFromVideo } = require('./frameExtractorService');
 
+// ─── GitHub Models (Vision) — gpt-4o-mini, free with GitHub token ─────────────
+function getGitHubVisionConfig() {
+  const apiKey = process.env.GITHUB_TOKEN || '';
+  if (!apiKey) return null;
+  return {
+    apiKey,
+    baseURL: 'https://models.inference.ai.azure.com',
+    model: 'gpt-4o-mini',
+    supportsVision: true
+  };
+}
+
+// ─── Groq — fast text model, free ─────────────────────────────────────────────
 function getPrimaryAIConfig() {
+  const apiKey = process.env.GROQ_API_KEY || '';
+  return {
+    apiKey,
+    baseURL: 'https://api.groq.com/openai/v1',
+    model: 'llama-3.3-70b-versatile'
+  };
+}
+
+function getSecondaryAIConfig() {
   const apiKey = process.env.GEMINI_API_KEY || process.env.AI_API_KEY || '';
+  if (!apiKey) return null;
   return {
     apiKey,
     baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
     model: 'gemini-2.0-flash',
     isGemini: true
-  };
-}
-
-function getSecondaryAIConfig() {
-  const apiKey = process.env.GROQ_API_KEY || '';
-  if (!apiKey) return null;
-  return {
-    apiKey,
-    baseURL: 'https://api.groq.com/openai/v1',
-    model: 'llama-3.3-70b-versatile'
   };
 }
 
@@ -32,6 +45,7 @@ function getTertiaryAIConfig() {
   };
 }
 
+const githubVisionConfig = getGitHubVisionConfig();
 const primaryConfig = getPrimaryAIConfig();
 const secondaryConfig = getSecondaryAIConfig();
 const tertiaryConfig = getTertiaryAIConfig();
@@ -43,107 +57,92 @@ function createClient(config) {
   return new OpenAI(clientOptions);
 }
 
+const githubVisionClient = createClient(githubVisionConfig);
 const primaryClient = createClient(primaryConfig);
 const secondaryClient = createClient(secondaryConfig);
 const tertiaryClient = createClient(tertiaryConfig);
 
 async function tryAICompletion(options, imageData = null) {
-  if (!primaryClient) throw new Error("No primary AI client configured");
+  if (!primaryClient && !githubVisionClient) throw new Error('No AI client configured');
   
-  // If we have an image and we are using Gemini, use the native REST API to avoid 
-  // the OpenAI SDK adapter 400 errors with large base64 inline_data
-  if (imageData && primaryConfig.isGemini && primaryConfig.apiKey) {
-      try {
-          const fetch = require('node-fetch');
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${primaryConfig.model}:generateContent?key=${primaryConfig.apiKey}`;
-          
-          const systemMsg = options.messages.find(m => m.role === 'system')?.content || '';
-          const userMsg = options.messages.find(m => m.role === 'user')?.content || '';
-          
-          // Note: if userMsg is an array (from previous logic), extract just the text part
-          let userText = userMsg;
-          if (Array.isArray(userMsg)) {
-              const textPart = userMsg.find(p => p.type === 'text');
-              userText = textPart ? textPart.text : '';
-          }
-
-          const payload = {
-            system_instruction: { parts: [{ text: systemMsg }] },
-            contents: [{
-              role: "user",
-              parts: [
-                { text: userText },
-                {
-                  inline_data: {
-                    mime_type: imageData.mimeType || 'image/jpeg',
-                    data: imageData.base64
-                  }
-                }
-              ]
-            }],
-            generationConfig: {
-              temperature: options.temperature || 0.7,
-              maxOutputTokens: options.max_tokens || 400
-            }
-          };
-
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-
-          if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Gemini Native API Error: ${res.status} - ${errText}`);
-          }
-
-          const data = await res.json();
-          const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          
-          // Return in OpenAI format to keep the rest of the code compatible
-          return {
-              choices: [{
-                  message: { content: responseText }
-              }]
-          };
-      } catch (nativeErr) {
-          console.warn(`[AI] Native Gemini fallback failed: ${nativeErr.message}`);
-          // Fall through to regular try-catch if the native attempt fails
-      }
-  }
-
-  // Layer 1: Primary (Gemini via OpenAI SDK)
-  try {
-    return await primaryClient.chat.completions.create({ ...options, model: primaryConfig.model });
-  } catch (err1) {
-    if (!secondaryClient) throw err1;
-
-    console.warn(`[AI] Primary API failed (${err1.message}). Trying Layer 2 (Groq)...`);
-    
-    // Layer 2: Secondary (Groq)
+  // ── VISION PATH: Use GitHub Models (gpt-4o-mini) which supports images ────────
+  if (imageData && githubVisionClient) {
     try {
-      // Groq (Llama) does not support multimodal array content, so we extract only text
-      const groqOptions = { ...options, model: secondaryConfig.model };
-      if (groqOptions.messages) {
-        groqOptions.messages = groqOptions.messages.map(m => {
-          if (Array.isArray(m.content)) {
-            const textPart = m.content.find(part => part.type === 'text');
-            return { ...m, content: textPart ? textPart.text : '' };
-          }
-          return m;
-        });
-      }
-      return await secondaryClient.chat.completions.create(groqOptions);
-    } catch (err2) {
-      if (!tertiaryClient) throw err2;
-
-      console.warn(`[AI] Layer 2 failed (${err2.message}). Trying Layer 3 (Gemini Fallback)...`);
+      const systemMsg = options.messages.find(m => m.role === 'system')?.content || '';
+      const userMsg = options.messages.find(m => m.role === 'user')?.content || '';
       
-      // Layer 3: Tertiary (Gemini 2nd Key)
-      return await tertiaryClient.chat.completions.create({ ...options, model: tertiaryConfig.model });
+      let userText = userMsg;
+      if (Array.isArray(userMsg)) {
+        const textPart = userMsg.find(p => p.type === 'text');
+        userText = textPart ? textPart.text : '';
+      }
+
+      const visionMessages = [
+        { role: 'system', content: systemMsg },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: userText },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${imageData.mimeType || 'image/jpeg'};base64,${imageData.base64}`
+              }
+            }
+          ]
+        }
+      ];
+
+      console.log('[AI] Using GitHub Models (gpt-4o-mini) for vision analysis...');
+      const visionResponse = await githubVisionClient.chat.completions.create({
+        model: githubVisionConfig.model,
+        messages: visionMessages,
+        temperature: options.temperature || 0.7,
+        max_tokens: options.max_tokens || 400
+      });
+      console.log('[AI] ✅ GitHub Vision analysis successful!');
+      return visionResponse;
+    } catch (visionErr) {
+      console.warn(`[AI] GitHub Vision failed (${visionErr.message}). Falling back to text-only...`);
+      // Fall through to text-only pipeline
     }
   }
+
+  // ── TEXT PATH: Use Groq (primary) → Gemini (fallbacks) ───────────────────────
+  // Strip image content from messages for text-only models
+  const textOptions = { ...options };
+  if (textOptions.messages) {
+    textOptions.messages = textOptions.messages.map(m => {
+      if (Array.isArray(m.content)) {
+        const textPart = m.content.find(part => part.type === 'text');
+        return { ...m, content: textPart ? textPart.text : '' };
+      }
+      return m;
+    });
+  }
+
+  // Layer 1: Primary (Groq)
+  if (primaryClient) {
+    try {
+      return await primaryClient.chat.completions.create({ ...textOptions, model: primaryConfig.model });
+    } catch (err1) {
+      if (!secondaryClient) throw err1;
+      console.warn(`[AI] Primary (Groq) failed (${err1.message}). Trying Layer 2 (Gemini)...`);
+    }
+  }
+
+  // Layer 2: Secondary (Gemini)
+  if (secondaryClient) {
+    try {
+      return await secondaryClient.chat.completions.create({ ...textOptions, model: secondaryConfig.model });
+    } catch (err2) {
+      if (!tertiaryClient) throw err2;
+      console.warn(`[AI] Layer 2 failed (${err2.message}). Trying Layer 3 (Gemini Fallback)...`);
+    }
+  }
+
+  // Layer 3: Tertiary (Gemini 2nd Key)
+  return await tertiaryClient.chat.completions.create({ ...textOptions, model: tertiaryConfig.model });
 }
 
 // ─── Regex Fallback (no API key) ─────────────────────────────────────────────
