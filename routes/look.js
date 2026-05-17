@@ -242,7 +242,10 @@ router.get('/:shortcode', async (req, res) => {
       <span>Shop The Look</span>
     </div>
     <div class="video-section">
-      <video src="${mediaUrl}" poster="${thumbnailUrl}" controls autoplay loop muted playsinline></video>
+      ${mediaUrl && mediaUrl.includes('cdninstagram') ? 
+        `<iframe src="https://www.instagram.com/reel/${shortcode}/embed/captioned" width="100%" height="100%" frameborder="0" scrolling="no" allowtransparency="true"></iframe>` :
+        `<video src="${mediaUrl}" poster="${thumbnailUrl}" controls autoplay loop muted playsinline onerror="this.outerHTML='<iframe src=\\'https://www.instagram.com/reel/${shortcode}/embed/captioned\\' width=\\'100%\\' height=\\'100%\\' frameborder=\\'0\\' scrolling=\\'no\\' allowtransparency=\\'true\\'></iframe>'"></video>`
+      }
     </div>
     <div class="shop-title-container">
       <div class="shop-title">
@@ -258,7 +261,8 @@ router.get('/:shortcode', async (req, res) => {
     (function() {
       const outfit = ${JSON.stringify(outfit)};
       const grid = document.getElementById('product-grid');
-      const fallbackImg = '${thumbnailUrl}';
+      // SVG placeholder that never expires
+      const fallbackImg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500" viewBox="0 0 400 500"><rect width="100%" height="100%" fill="%2318181b"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="48" fill="%233f3f46" font-weight="bold">Shop</text></svg>';
 
       if (outfit.length === 0) {
         grid.innerHTML = \`<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--text-muted)"><div style="font-size:2rem;margin-bottom:12px">🛍️</div><p style="font-size:1rem;font-weight:500;margin-bottom:8px">Products Coming Soon</p><p style="font-size:0.85rem">We're curating the best affiliate links for this look.</p></div>\`;
