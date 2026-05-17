@@ -497,18 +497,43 @@ async function createPinWithBot(pinData) {
     // After video upload Pinterest opens a video cover editor. We USE this modal
     // to set the cover instead of dismissing it and trying to reopen it later.
     // Flow: detect modal → try upload button → fall back to slider → click Done.
-    const designEditorCheck = await page.evaluate(() => {
-      const h1Text = (document.querySelector('h1')?.innerText || '').toLowerCase();
-      const bodyText = (document.body.innerText || '').toLowerCase();
-      return (
-        h1Text.includes('design your pin') ||
-        bodyText.includes('design your pin') ||
-        bodyText.includes('edit your video') ||
-        bodyText.includes('video controls') ||
-        document.querySelector('[data-test-id="video-cover-editor"]') !== null ||
-        document.querySelector('.videoEditor') !== null
-      );
-    });
+    let designEditorCheck = false;
+    for (let i = 0; i < 8; i++) {
+      designEditorCheck = await page.evaluate(() => {
+        const h1Text = (document.querySelector('h1')?.innerText || '').toLowerCase();
+        const bodyText = (document.body.innerText || '').toLowerCase();
+        return (
+          h1Text.includes('design your pin') ||
+          bodyText.includes('design your pin') ||
+          bodyText.includes('edit your video') ||
+          bodyText.includes('video controls') ||
+          document.querySelector('[data-test-id="video-cover-editor"]') !== null ||
+          document.querySelector('.videoEditor') !== null
+        );
+      });
+      if (designEditorCheck) break;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    
+    if (!designEditorCheck) {
+      console.log('[Bot] 🎬 "Design your Pin" didn\'t auto-open. Looking for "Edit Cover" button...');
+      const clickedEditCover = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, [role="button"]'));
+        for (const btn of btns) {
+          const t = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase();
+          if (t.includes('edit cover') || t.includes('edit video')) {
+            btn.click();
+            return true;
+          }
+        }
+        return false;
+      });
+      if (clickedEditCover) {
+        console.log('[Bot] 🎬 Clicked "Edit Cover", waiting 3s for modal...');
+        await new Promise(r => setTimeout(r, 3000));
+        designEditorCheck = true;
+      }
+    }
 
     if (designEditorCheck) {
       console.log('[Bot] 🎬 "Design your Pin" editor detected — setting cover thumbnail...');
