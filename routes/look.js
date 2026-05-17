@@ -157,8 +157,14 @@ router.get('/:shortcode', async (req, res) => {
     let outfit = [];
     if (lookData.productInfo?.outfit?.length > 0) {
       outfit = lookData.productInfo.outfit;
-    } else if (lookData.productInfo?.affiliateUrl) {
-      outfit = [{ type: 'Main Piece', name: lookData.productInfo.name || 'Featured Item', url: lookData.productInfo.affiliateUrl, image: null, originalPrice: null }];
+    } else if (lookData.productInfo?.affiliateUrl || lookData.affiliateLink) {
+      outfit = [{ 
+        type: 'Main Piece', 
+        name: lookData.productInfo?.name || lookData.aiContent?.title || 'Featured Item', 
+        url: lookData.productInfo?.affiliateUrl || lookData.affiliateLink, 
+        image: null, 
+        originalPrice: null 
+      }];
     } else {
       const cacheKey = `look_outfit_${shortcode}`;
       const cached = await cacheGet(cacheKey);
