@@ -3,7 +3,7 @@ const { extractFrameFromVideo } = require('./frameExtractorService');
 
 // ─── GitHub Models (Vision) — gpt-4o-mini, free with GitHub token ─────────────
 function getGitHubVisionConfig() {
-  const apiKey = process.env.GITHUB_TOKEN || '';
+  const apiKey = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '';
   if (!apiKey) return null;
   return {
     apiKey,
