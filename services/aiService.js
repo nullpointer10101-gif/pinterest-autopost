@@ -116,27 +116,63 @@ function fallbackGenerate({ caption, username }) {
 }
 
 // ─── Gemini Generation ────────────────────────────────────────────────────────
-async function generateWithAI({ caption, username, mediaType }) {
-  const systemPrompt = `You are the world's top Pinterest SEO and Viral Marketing Expert. Your goal is to turn Instagram Reels into high-traffic Pinterest Pins.
-  You understand Pinterest's search algorithm and user behavior. 
-  Rules for your writing:
-  1. TITLES: Use high-volume keywords. Start with the most important words. Use vertical bars | to separate phrases.
-  2. DESCRIPTIONS: Start with a powerful hook. Be extremely descriptive. Use "sensory" words (how it feels, looks, vibes). 
-  3. SEO: Naturally weave keywords throughout the text so it ranks in Pinterest search.
-  4. FORMAT: Return ONLY valid JSON. No conversational filler.`;
+/**
+ * Core generation function. Accepts either a caption or pre-loaded imageData (base64).
+ * When imageData is provided, the AI looks at the ACTUAL image/frame to generate
+ * content instead of relying on a garbage caption.
+ */
+async function generateWithAI({ caption, username, mediaType, imageData = null }) {
+  const cleanedCaption = cleanCaption ? cleanCaption(caption || '') : (caption || '');
 
-  const userPrompt = `Create a VIRAL Pinterest Pin from this Instagram content:
+  const systemPrompt = `You are the world's top Pinterest SEO and Viral Marketing Expert. Your goal is to create high-traffic Pinterest Pins.
+Rules:
+1. TITLES: Use high-volume keywords. Start with the PRODUCT NAME. Use vertical bars | to separate phrases. Max 100 chars.
+2. DESCRIPTIONS: Start with a powerful hook about the SPECIFIC PRODUCT shown. Be extremely descriptive of what's visible. Use "sensory" words. Embed 8-10 hashtags naturally.
+3. SEO: Weave keywords throughout. Focus on the actual product visible, NOT generic fashion terms.
+4. FORMAT: Return ONLY valid JSON. No conversational filler.`;
+
+  // Build the user message content — multimodal if image available
+  const userMessageContent = [];
+
+  if (imageData) {
+    // Image-first: let the AI see the product and write about WHAT IT SEES
+    userMessageContent.push({
+      type: 'text',
+      text: `Create a VIRAL Pinterest Pin for this fashion video from @${username}.
+
+IMPORTANT: Look at the image carefully. Write the title and description based on the SPECIFIC product you can see (color, style, type of clothing/item).
+${cleanedCaption ? `Context from caption: "${cleanedCaption.substring(0, 300)}"` : 'Caption is not useful — rely entirely on the image.'}
+
+Provide:
+- title: (Max 100 chars) [Product Name + Color/Style] | [Outfit Vibe] | [CTA]
+  Example: "Brown Baggy Corduroy Pants 👖 | Streetwear Casual Look | Shop Now"
+
+- description: (400-500 chars) Start with the specific product. Describe what you see: color, style, fit, vibe. Add styling tips. End with 8-10 relevant hashtags.
+
+- hashtags: 12-15 highly relevant tags based on the EXACT product visible.
+
+Return JSON: { "title": "...", "description": "...", "hashtags": ["#tag1", "#tag2"] }`
+    });
+    userMessageContent.push({
+      type: 'image_url',
+      image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` }
+    });
+  } else {
+    // Caption fallback
+    userMessageContent.push({
+      type: 'text',
+      text: `Create a VIRAL Pinterest Pin from this Instagram content:
 
 Creator: @${username}
 Media: ${mediaType || 'video'}
-Caption: ${caption || '(no caption)'}
+Caption: ${cleanedCaption || '(no caption)'}
 
-Please provide:
-- title: (Max 100 chars) SEO-Optimized. Format: [Main Item/Topic] | [Key Benefit/Style] | [Call to Action/Vibe]. 
+Provide:
+- title: (Max 100 chars) SEO-Optimized. Format: [Main Item/Topic] | [Key Benefit/Style] | [Call to Action/Vibe].
   Example: "Classic Brown Leather Jacket 🧥 | Fall Streetwear Outfit Inspo | Must-Have Layering"
 
-- description: (400-500 chars) Professional Blogger Style. 
-  Structure: 
+- description: (400-500 chars) Professional Blogger Style.
+  Structure:
   - [Hook Line]
   - [Detailed Product/Scene Description]
   - [Why it's unique/benefits]
@@ -145,15 +181,17 @@ Please provide:
 
 - hashtags: array of 12-15 highly relevant Pinterest trending tags.
 
-Return JSON: { "title": "...", "description": "...", "hashtags": ["#tag1", "#tag2"] }`;
+Return JSON: { "title": "...", "description": "...", "hashtags": ["#tag1", "#tag2"] }`
+    });
+  }
 
   const options = {
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
+      { role: 'user', content: userMessageContent },
     ],
     temperature: 0.7,
-    max_tokens: 350,
+    max_tokens: 400,
   };
 
   let retries = 2;
@@ -183,30 +221,36 @@ Return JSON: { "title": "...", "description": "...", "hashtags": ["#tag1", "#tag
 }
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
-async function generatePinterestContent({ caption = '', username = 'creator', mediaType = 'video' }) {
+/**
+ * Generate Pinterest title + description + hashtags.
+ * When imageData is passed (pre-extracted video frame), the AI writes content
+ * based on what it SEES in the image, not the caption.
+ */
+async function generatePinterestContent({ caption = '', username = 'creator', mediaType = 'video', imageData = null }) {
   if (!primaryClient) {
     console.warn('[AI] No AI API key configured — using fallback generator');
     return fallbackGenerate({ caption, username });
   }
 
   try {
-    return await generateWithAI({ caption, username, mediaType });
+    return await generateWithAI({ caption, username, mediaType, imageData });
   } catch (err) {
     console.warn(`[AI] Provider call failed, using fallback:`, err.message);
     return fallbackGenerate({ caption, username });
   }
 }
 
+
 // ─── Product Identifier (for IG Affiliate Tracker) ───────────────────────────
 /**
  * Analyses an Instagram caption to determine if a physical shoppable product
  * is featured. Returns { found, productName, flipkartQuery, category } or { found: false }.
  */
-async function identifyProduct({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '' }) {
+async function identifyProduct({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '', imageData = null }) {
   let retries = 3;
   while (retries >= 0) {
     try {
-      return await identifyProductInternal({ caption, username, thumbnailUrl, mediaUrl });
+      return await identifyProductInternal({ caption, username, thumbnailUrl, mediaUrl, imageData });
     } catch (err) {
       if (err.message.includes('429') && retries > 0) {
         console.warn(`[AI] identifyProduct rate limited (429). Retrying in 35s... (${retries} left)`);
@@ -260,7 +304,12 @@ function cleanCaption(caption) {
  * Priority: (1) Video frame at 30% → (2) Thumbnail → (3) null
  * Returns { base64, mimeType } or null.
  */
-async function getImageForAI(mediaUrl, thumbnailUrl) {
+async function getImageForAI(mediaUrl, thumbnailUrl, cachedImageData = null) {
+  // 0. Use pre-cached image if already extracted (avoids re-downloading)
+  if (cachedImageData) {
+    console.log('[AI] ✅ Using cached video frame.');
+    return cachedImageData;
+  }
   // 1. Try video frame extraction (most accurate — clear mid-video product shot)
   if (mediaUrl) {
     try {
@@ -322,7 +371,7 @@ function heuristicIdentifyProduct(caption) {
   };
 }
 
-async function identifyProductInternal({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '' }) {
+async function identifyProductInternal({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '', imageData = null }) {
   if (!primaryClient) {
     return heuristicIdentifyProduct(caption);
   }
@@ -355,12 +404,12 @@ Return ONLY the JSON object.`;
 
   const userMessageContent = [{ type: 'text', text: textPrompt }];
 
-  // Get best image: video frame first, thumbnail fallback
-  const imageData = await getImageForAI(mediaUrl, thumbnailUrl);
-  if (imageData) {
+  // Use cached frame if available, otherwise extract/download fresh
+  const resolvedImage = await getImageForAI(mediaUrl, thumbnailUrl, imageData);
+  if (resolvedImage) {
     userMessageContent.push({
       type: 'image_url',
-      image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` }
+      image_url: { url: `data:${resolvedImage.mimeType};base64,${resolvedImage.base64}` }
     });
   }
 
@@ -405,7 +454,7 @@ Return ONLY the JSON object.`;
  * Analyses an Instagram caption and image to extract a full "Shop The Look" outfit.
  * Returns { found: true, outfitName, items: [{ type, query }] } or { found: false }.
  */
-async function identifyOutfit({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '' }) {
+async function identifyOutfit({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '', imageData = null }) {
   if (!primaryClient) {
     return { found: false };
   }
@@ -438,12 +487,12 @@ Return ONLY valid JSON.`;
 
   const userMessageContent = [{ type: 'text', text: textPrompt }];
 
-  // Get best image: video frame first, thumbnail fallback
-  const imageData = await getImageForAI(mediaUrl, thumbnailUrl);
-  if (imageData) {
+  // Use cached frame if available, otherwise extract/download fresh
+  const resolvedImage = await getImageForAI(mediaUrl, thumbnailUrl, imageData);
+  if (resolvedImage) {
     userMessageContent.push({
       type: 'image_url',
-      image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` }
+      image_url: { url: `data:${resolvedImage.mimeType};base64,${resolvedImage.base64}` }
     });
   }
 

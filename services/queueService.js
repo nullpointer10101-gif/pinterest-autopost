@@ -411,19 +411,47 @@ async function processNextInQueue() {
   await saveQueue(freshQueue);
 
   try {
+    const mediaUrl = item.mediaUrl;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP 1: Extract a representative video frame ONCE.
+    // This frame is reused for BOTH content generation AND product ID so
+    // we never download the video twice.
+    // ═══════════════════════════════════════════════════════════════════════
+    let videoFrame = null;
+    if (mediaUrl) {
+      try {
+        const { extractFrameFromVideo } = require('./frameExtractorService');
+        videoFrame = await extractFrameFromVideo(mediaUrl);
+        if (videoFrame) console.log('[Queue] 🎬 Video frame cached for AI pipeline.');
+      } catch (e) {
+        console.warn('[Queue] Frame extraction failed (will use thumbnail):', e.message);
+      }
+    }
+
+    // Thumbnail fallback if no frame was extracted
+    const thumbnailForAI = videoFrame ? null : (item.thumbnailUrl || '');
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP 2: Generate Pinterest title + description based on the video frame.
+    // If we have a frame → AI writes content from what it SEES.
+    // If no frame → fall back to cleaned caption.
+    // ═══════════════════════════════════════════════════════════════════════
     let aiContent = item.aiContent;
-    if (!aiContent && item.caption) {
+    if (!aiContent) {
+      console.log('[Queue] 📝 Generating Pinterest content from video frame...');
       aiContent = await aiService.generatePinterestContent({
-        caption: item.caption,
+        caption: item.caption || '',
         username: item.username || 'unknown',
         mediaType: 'video',
+        imageData: videoFrame || null,
       });
     }
 
     const title = (aiContent?.title || item.title || 'Pinterest Post').substring(0, 100);
     let description = (aiContent?.description || item.description || '').substring(0, 800);
     const altText = (item.altText || '').substring(0, 500);
-    const mediaUrl = item.mediaUrl;
+
     
     // ═══════════════════════════════════════════════════════════════════════
     // AI PIPELINE: Multi-Product Curation & Affiliate Links
@@ -446,7 +474,8 @@ async function processNextInQueue() {
         caption: item.caption || '',
         username: item.username || '',
         thumbnailUrl: item.thumbnailUrl || '',
-        mediaUrl: mediaUrl || ''
+        mediaUrl: mediaUrl || '',
+        imageData: videoFrame || null
       });
       
       if (outfitData.found && outfitData.items) {
@@ -480,7 +509,8 @@ async function processNextInQueue() {
           caption: item.caption || '',
           username: item.username || '',
           thumbnailUrl: item.thumbnailUrl || '',
-          mediaUrl: mediaUrl || ''
+          mediaUrl: mediaUrl || '',
+          imageData: videoFrame || null
         });
         
         if (productData.found) {
