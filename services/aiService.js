@@ -117,8 +117,7 @@ async function tryAICompletion(options, imageData = null) {
   try {
     return await primaryClient.chat.completions.create({ ...options, model: primaryConfig.model });
   } catch (err1) {
-    const isRateLimit1 = err1.status === 429 || err1.status === 503 || err1.message.includes('429');
-    if (!isRateLimit1 || !secondaryClient) throw err1;
+    if (!secondaryClient) throw err1;
 
     console.warn(`[AI] Primary API failed (${err1.message}). Trying Layer 2 (Groq)...`);
     
