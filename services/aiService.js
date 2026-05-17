@@ -131,64 +131,29 @@ Rules:
 3. SEO: Weave keywords throughout. Focus on the actual product visible, NOT generic fashion terms.
 4. FORMAT: Return ONLY valid JSON. No conversational filler.`;
 
-  // Build the user message content — multimodal if image available
-  const userMessageContent = [];
-
+  // Build message — plain string for text-only (Gemini rejects array for text-only)
+  // array format only when we have an image to attach
+  let userContent;
   if (imageData) {
-    // Image-first: let the AI see the product and write about WHAT IT SEES
-    userMessageContent.push({
-      type: 'text',
-      text: `Create a VIRAL Pinterest Pin for this fashion video from @${username}.
-
-IMPORTANT: Look at the image carefully. Write the title and description based on the SPECIFIC product you can see (color, style, type of clothing/item).
-${cleanedCaption ? `Context from caption: "${cleanedCaption.substring(0, 300)}"` : 'Caption is not useful — rely entirely on the image.'}
-
-Provide:
-- title: (Max 100 chars) [Product Name + Color/Style] | [Outfit Vibe] | [CTA]
-  Example: "Brown Baggy Corduroy Pants 👖 | Streetwear Casual Look | Shop Now"
-
-- description: (400-500 chars) Start with the specific product. Describe what you see: color, style, fit, vibe. Add styling tips. End with 8-10 relevant hashtags.
-
-- hashtags: 12-15 highly relevant tags based on the EXACT product visible.
-
-Return JSON: { "title": "...", "description": "...", "hashtags": ["#tag1", "#tag2"] }`
-    });
-    userMessageContent.push({
-      type: 'image_url',
-      image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` }
-    });
+    userContent = [
+      {
+        type: 'text',
+        text: `Create a VIRAL Pinterest Pin for this fashion video from @${username}.\n\nIMPORTANT: Look at the image carefully. Write the title and description based on the SPECIFIC product you can see (color, style, type of clothing/item).\n${cleanedCaption ? `Context from caption: "${cleanedCaption.substring(0, 300)}"` : 'Caption is not useful — rely entirely on the image.'}\n\nProvide:\n- title: (Max 100 chars) [Product Name + Color/Style] | [Outfit Vibe] | [CTA]\n  Example: "Brown Baggy Corduroy Pants 👖 | Streetwear Casual Look | Shop Now"\n\n- description: (400-500 chars) Start with the specific product. Describe what you see: color, style, fit, vibe. Add styling tips. End with 8-10 relevant hashtags.\n\n- hashtags: 12-15 highly relevant tags based on the EXACT product visible.\n\nReturn JSON: { "title": "...", "description": "...", "hashtags": ["#tag1", "#tag2"] }`
+      },
+      {
+        type: 'image_url',
+        image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64}` }
+      }
+    ];
   } else {
-    // Caption fallback
-    userMessageContent.push({
-      type: 'text',
-      text: `Create a VIRAL Pinterest Pin from this Instagram content:
-
-Creator: @${username}
-Media: ${mediaType || 'video'}
-Caption: ${cleanedCaption || '(no caption)'}
-
-Provide:
-- title: (Max 100 chars) SEO-Optimized. Format: [Main Item/Topic] | [Key Benefit/Style] | [Call to Action/Vibe].
-  Example: "Classic Brown Leather Jacket 🧥 | Fall Streetwear Outfit Inspo | Must-Have Layering"
-
-- description: (400-500 chars) Professional Blogger Style.
-  Structure:
-  - [Hook Line]
-  - [Detailed Product/Scene Description]
-  - [Why it's unique/benefits]
-  - [Styling Tip or How to Use]
-  - [Final CTA with 8-10 trending hashtags naturally embedded]
-
-- hashtags: array of 12-15 highly relevant Pinterest trending tags.
-
-Return JSON: { "title": "...", "description": "...", "hashtags": ["#tag1", "#tag2"] }`
-    });
+    // Plain string — works with all Gemini/OpenAI models
+    userContent = `Create a VIRAL Pinterest Pin from this Instagram content:\n\nCreator: @${username}\nMedia: ${mediaType || 'video'}\nCaption: ${cleanedCaption || '(no caption)'}\n\nProvide:\n- title: (Max 100 chars) SEO-Optimized. Format: [Main Item/Topic] | [Key Benefit/Style] | [Call to Action/Vibe].\n  Example: "Classic Brown Leather Jacket 🧥 | Fall Streetwear Outfit Inspo | Must-Have Layering"\n\n- description: (400-500 chars) Professional Blogger Style.\n  Structure:\n  - [Hook Line]\n  - [Detailed Product/Scene Description]\n  - [Why it's unique/benefits]\n  - [Styling Tip or How to Use]\n  - [Final CTA with 8-10 trending hashtags naturally embedded]\n\n- hashtags: array of 12-15 highly relevant Pinterest trending tags.\n\nReturn JSON: { "title": "...", "description": "...", "hashtags": ["#tag1", "#tag2"] }`;
   }
 
   const options = {
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessageContent },
+      { role: 'user', content: userContent },
     ],
     temperature: 0.7,
     max_tokens: 400,
@@ -274,8 +239,9 @@ async function identifyProduct({ caption = '', username = '', thumbnailUrl = '',
 function cleanCaption(caption) {
   if (!caption) return '';
   const spamPatterns = [
-    /comment ["']?link["']?.{0,30}(dm|inbox|bio)/gi,
-    /comment.{0,10}(below|above|here|now).{0,20}(link|product|get)/gi,
+    /comment\s+["']?link["']?.{0,40}(dm|inbox|bio|below|above)/gi,
+    /comment\s+["'\u201c\u201d]?link["'\u201c\u201d]?\s+to\s+get/gi,
+    /comment\s+["'\u201c\u201d]?link["'\u201c\u201d]/gi,
     /link in (my )?bio/gi,
     /shop link in bio/gi,
     /dm (me|for|us) (the )?link/gi,
@@ -285,6 +251,9 @@ function cleanCaption(caption) {
     /\ud83d\udc46 follow @\w+.*/gi,
     /follow @\w+.*/gi,
     /💡 style tip:.*/gi,
+    /get (it|this|product|link) in (your )?(dm|inbox)/gi,
+    /drop.*emoji.*below/gi,
+    /type.*below.*(link|get|dm)/gi,
   ];
   let cleaned = caption;
   for (const pat of spamPatterns) {
@@ -402,21 +371,16 @@ If no product visible → Return: { "found": false }
 
 Return ONLY the JSON object.`;
 
-  const userMessageContent = [{ type: 'text', text: textPrompt }];
-
-  // Use cached frame if available, otherwise extract/download fresh
+  // Use image if available (array format) else plain string (avoids Gemini 400)
   const resolvedImage = await getImageForAI(mediaUrl, thumbnailUrl, imageData);
-  if (resolvedImage) {
-    userMessageContent.push({
-      type: 'image_url',
-      image_url: { url: `data:${resolvedImage.mimeType};base64,${resolvedImage.base64}` }
-    });
-  }
+  const userContentProduct = resolvedImage
+    ? [{ type: 'text', text: textPrompt }, { type: 'image_url', image_url: { url: `data:${resolvedImage.mimeType};base64,${resolvedImage.base64}` } }]
+    : textPrompt;
 
   const options = {
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessageContent },
+      { role: 'user', content: userContentProduct },
     ],
     temperature: 0.4,
     max_tokens: 150,
@@ -485,21 +449,16 @@ Return ONLY this JSON:
 
 Return ONLY valid JSON.`;
 
-  const userMessageContent = [{ type: 'text', text: textPrompt }];
-
-  // Use cached frame if available, otherwise extract/download fresh
-  const resolvedImage = await getImageForAI(mediaUrl, thumbnailUrl, imageData);
-  if (resolvedImage) {
-    userMessageContent.push({
-      type: 'image_url',
-      image_url: { url: `data:${resolvedImage.mimeType};base64,${resolvedImage.base64}` }
-    });
-  }
+  // Use image if available (array format) else plain string (avoids Gemini 400)
+  const resolvedImageOutfit = await getImageForAI(mediaUrl, thumbnailUrl, imageData);
+  const userContentOutfit = resolvedImageOutfit
+    ? [{ type: 'text', text: textPrompt }, { type: 'image_url', image_url: { url: `data:${resolvedImageOutfit.mimeType};base64,${resolvedImageOutfit.base64}` } }]
+    : textPrompt;
 
   const options = {
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessageContent },
+      { role: 'user', content: userContentOutfit },
     ],
     temperature: 0.5,
     max_tokens: 300,

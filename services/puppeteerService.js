@@ -877,6 +877,24 @@ async function createPinWithBot(pinData) {
       await page.keyboard.up('Control');
       await page.keyboard.press('Backspace');
       await page.keyboard.type(link, { delay: 20 });
+      
+      // Force React Native setter injection to guarantee it registers
+      await page.evaluate((el, val) => {
+         const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+         const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+         
+         if (el.tagName === 'INPUT' && nativeInputValueSetter) {
+             nativeInputValueSetter.call(el, val);
+         } else if (el.tagName === 'TEXTAREA' && nativeTextAreaValueSetter) {
+             nativeTextAreaValueSetter.call(el, val);
+         } else {
+             el.value = val;
+             if(el.isContentEditable) el.textContent = val;
+         }
+         el.dispatchEvent(new Event('input', { bubbles: true }));
+         el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, linkField, link);
+
       await page.keyboard.press('Tab'); // Commit the value
       return true;
     };
