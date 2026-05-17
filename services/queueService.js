@@ -557,6 +557,7 @@ async function processNextInQueue() {
     item.status = 'completed';
     item.method = method;
     item.result = result;
+    item.link = finalLink; // Ensure fire-post.js logs the correct link
     item.completedAt = new Date().toISOString();
 
     await historyService.add({

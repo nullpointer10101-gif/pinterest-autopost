@@ -863,7 +863,21 @@ async function createPinWithBot(pinData) {
             if (!currentVal || !currentVal.includes('http')) {
               console.log('[Bot] ⚠️ Link value missing after first attempt — retrying...');
               await fillLinkField();
-              await new Promise(r => setTimeout(r, 500));
+              await new Promise(r => setTimeout(r, 800));
+              
+              // Verify again
+              let linkField3 = null;
+              for (const sel of linkSelectors) {
+                try { linkField3 = await page.$(sel); if (linkField3) break; } catch {}
+              }
+              if (linkField3) {
+                 const newVal = await page.evaluate(el => el.value || el.innerText || '', linkField3);
+                 if (newVal && newVal.includes('http')) {
+                    console.log(`[Bot] ✅ Destination link confirmed on retry: ${newVal.substring(0, 80)}...`);
+                 } else {
+                    console.log(`[Bot] ❌ Link still missing after retry.`);
+                 }
+              }
             } else {
               console.log(`[Bot] ✅ Destination link confirmed: ${currentVal.substring(0, 80)}...`);
             }
