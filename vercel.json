@@ -7,10 +7,16 @@
       "config": {
         "includeFiles": [
           "public/**"
-        ]
+        ],
+        "maxDuration": 60
       }
     }
   ],
+  "functions": {
+    "server.js": {
+      "maxDuration": 60
+    }
+  },
   "routes": [
     {
       "src": "/(.*)",
