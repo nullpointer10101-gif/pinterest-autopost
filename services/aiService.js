@@ -285,12 +285,15 @@ Return ONLY the JSON object.`;
       if (imgRes.ok) {
         const arrayBuffer = await imgRes.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
-        const base64 = buffer.toString('base64');
         const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
-        userMessageContent.push({
-          type: 'image_url',
-          image_url: { url: `data:${mimeType};base64,${base64}` }
-        });
+        if (mimeType.startsWith('image/')) {
+          userMessageContent.push({
+            type: 'image_url',
+            image_url: { url: `data:${mimeType};base64,${base64}` }
+          });
+        } else {
+          console.warn(`[AI] Skipped image for identifyProduct because it's not an image (${mimeType})`);
+        }
       } else {
         console.warn(`[AI] Failed to download image for AI: ${imgRes.statusText}`);
       }
@@ -377,12 +380,15 @@ Return ONLY valid JSON.`;
       if (imgRes.ok) {
         const arrayBuffer = await imgRes.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
-        const base64 = buffer.toString('base64');
         const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
-        userMessageContent.push({
-          type: 'image_url',
-          image_url: { url: `data:${mimeType};base64,${base64}` }
-        });
+        if (mimeType.startsWith('image/')) {
+          userMessageContent.push({
+            type: 'image_url',
+            image_url: { url: `data:${mimeType};base64,${base64}` }
+          });
+        } else {
+          console.warn(`[AI] Skipped image for identifyOutfit because it's not an image (${mimeType})`);
+        }
       }
     } catch (e) {
       console.warn(`[AI] Error downloading image for identifyOutfit: ${e.message}`);

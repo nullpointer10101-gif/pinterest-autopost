@@ -473,6 +473,36 @@ async function processNextInQueue() {
             }
           }
         }
+      } else {
+        console.log(`[Queue] 🤖 Outfit not found. Trying single product identification...`);
+        const productData = await aiService.identifyProduct({
+          caption: item.caption || '',
+          username: item.username || '',
+          thumbnailUrl: item.thumbnailUrl || mediaUrl
+        });
+        
+        if (productData.found) {
+           console.log(`[Queue] 🎯 Found single product: "${productData.productName}"`);
+           const queries = {
+             exactMatchQuery: productData.exactMatchQuery,
+             similarMatchQuery: productData.similarMatchQuery,
+             broadMatchQuery: productData.broadMatchQuery
+           };
+           const fp = await flipkartSearchService.findProduct(queries, productData.productName);
+           if (fp) {
+             const ek = await earnKaroService.makeAffiliateLink(fp.url);
+             if (ek && ek.affiliateUrl) {
+               affiliateLinks.push({
+                 type: 'Main Piece',
+                 name: fp.title,
+                 url: ek.affiliateUrl,
+                 image: fp.image,
+                 originalPrice: fp.price
+               });
+               mainProductName = fp.title;
+             }
+           }
+        }
       }
       
       // If we found products, use storefront. Otherwise still use storefront as safe fallback.
@@ -547,7 +577,11 @@ async function processNextInQueue() {
       productInfo: affiliateLinks.length > 0 ? {
         name: outfitName || mainProductName || 'Curated Look',
         outfit: affiliateLinks
-      } : undefined,
+      } : (item.destinationLink ? {
+        name: 'Featured Item',
+        affiliateUrl: item.destinationLink,
+        outfit: []
+      } : undefined),
       pinterestPin: {
         id: item.id || result?.pin?.id || `pin_${Date.now()}`,
         url: result?.pin?.url || '#',
