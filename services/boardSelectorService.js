@@ -81,7 +81,12 @@ function selectBoard(productInfo) {
     ...(productInfo.items || []).map(i => i.query || ''),
   ].join(' ').toLowerCase();
 
-  if (!signals.trim()) return DEFAULT_BOARD;
+  if (!signals.trim()) {
+    console.log('[BoardSelector] ⚠️ No signals found in productInfo — cannot match board.');
+    return DEFAULT_BOARD;
+  }
+
+  console.log(`[BoardSelector] Signals: "${signals.substring(0, 200)}..."`);
 
   // Score each board by how many of its keywords appear in the signals
   let bestBoard = null;
@@ -111,7 +116,7 @@ function selectBoard(productInfo) {
     return bestBoard;
   }
 
-  console.log(`[BoardSelector] ℹ️ No specific board match — using default (${DEFAULT_BOARD || 'Pinterest picks'})`);
+  console.log(`[BoardSelector] ℹ️ No board matched (best score was 0) — using default`);
   return DEFAULT_BOARD;
 }
 

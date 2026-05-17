@@ -269,23 +269,57 @@ async function createPinWithBot(pinData) {
   let coverPath = null;
   if (ext === '.mp4') {
     try {
-      console.log('[Bot] Extracting a frame from the middle of the video for the Cover Image...');
+      console.log('[Bot] Extracting a frame from the video for the Cover Image...');
       coverPath = path.join(tempDir, `pin_cover_${Date.now()}.jpg`);
       const { execSync } = require('child_process');
-      // Extract a frame at 3 seconds in. If video is shorter, ffmpeg might fail, so we fallback to 1 sec.
+
+      // Get video duration first so we can seek to 30% (works for any length)
+      let duration = 0;
       try {
-        execSync(`ffmpeg -y -i "${mediaPath}" -ss 00:00:03 -vframes 1 "${coverPath}"`, { stdio: 'ignore' });
-        console.log('[Bot] ✅ Extracted 3-second frame using ffmpeg.');
+        const probeOut = execSync(
+          `ffprobe -v quiet -print_format json -show_streams "${mediaPath}"`,
+          { encoding: 'utf8', timeout: 10000 }
+        );
+        const probeData = JSON.parse(probeOut);
+        const vStream = (probeData.streams || []).find(s => s.codec_type === 'video');
+        duration = parseFloat(vStream?.duration || '0');
       } catch (e) {
-        console.log('[Bot] ⚠️ 3-second extraction failed (video too short?), trying 1-second...');
-        execSync(`ffmpeg -y -i "${mediaPath}" -ss 00:00:01 -vframes 1 "${coverPath}"`, { stdio: 'ignore' });
-        console.log('[Bot] ✅ Extracted 1-second frame using ffmpeg.');
+        console.warn('[Bot] ffprobe failed, will try fallback seek times:', e.message);
+      }
+
+      // Seek at 30%, then 15%, then 0.5s as last resort
+      const seekTimes = duration > 0
+        ? [
+            (duration * 0.30).toFixed(2),
+            (duration * 0.15).toFixed(2),
+            '0.5'
+          ]
+        : ['1.00', '0.50', '0.10'];
+
+      let frameExtracted = false;
+      for (const seek of seekTimes) {
+        try {
+          execSync(
+            `ffmpeg -y -ss ${seek} -i "${mediaPath}" -vframes 1 -q:v 2 "${coverPath}"`,
+            { stdio: 'pipe', timeout: 15000 }
+          );
+          const { statSync } = require('fs');
+          if (fs.existsSync(coverPath) && statSync(coverPath).size > 1000) {
+            console.log(`[Bot] ✅ Cover frame extracted at ${seek}s (duration: ${duration.toFixed(1)}s)`);
+            frameExtracted = true;
+            break;
+          }
+        } catch { /* try next */ }
+      }
+      if (!frameExtracted) {
+        console.warn('[Bot] ❌ All ffmpeg seek attempts failed.');
+        coverPath = null;
       }
     } catch (e) {
       console.warn('[Bot] ❌ Could not extract cover frame with ffmpeg:', e.message);
       coverPath = null;
     }
-    
+
     // Fallback to Instagram's provided thumbnail if ffmpeg failed
     const thumbnailSrc = media_source.thumbnailUrl || '';
     if (!coverPath && thumbnailSrc) {
@@ -859,24 +893,24 @@ async function createPinWithBot(pinData) {
             try { linkField2 = await page.$(sel); if (linkField2) break; } catch {}
           }
           if (linkField2) {
-            const currentVal = await page.evaluate(el => el.value || el.innerText || '', linkField2);
+            const currentVal = await page.evaluate(el => el.value || el.textContent || el.innerText || '', linkField2);
             if (!currentVal || !currentVal.includes('http')) {
               console.log('[Bot] ⚠️ Link value missing after first attempt — retrying...');
               await fillLinkField();
-              await new Promise(r => setTimeout(r, 800));
-              
+              await new Promise(r => setTimeout(r, 1200));
+
               // Verify again
               let linkField3 = null;
               for (const sel of linkSelectors) {
                 try { linkField3 = await page.$(sel); if (linkField3) break; } catch {}
               }
               if (linkField3) {
-                 const newVal = await page.evaluate(el => el.value || el.innerText || '', linkField3);
-                 if (newVal && newVal.includes('http')) {
-                    console.log(`[Bot] ✅ Destination link confirmed on retry: ${newVal.substring(0, 80)}...`);
-                 } else {
-                    console.log(`[Bot] ❌ Link still missing after retry.`);
-                 }
+                const newVal = await page.evaluate(el => el.value || el.textContent || el.innerText || '', linkField3);
+                if (newVal && newVal.includes('http')) {
+                  console.log(`[Bot] ✅ Destination link confirmed on retry: ${newVal.substring(0, 80)}...`);
+                } else {
+                  console.log(`[Bot] ❌ Link still missing after retry. Pinterest may apply it on publish anyway.`);
+                }
               }
             } else {
               console.log(`[Bot] ✅ Destination link confirmed: ${currentVal.substring(0, 80)}...`);

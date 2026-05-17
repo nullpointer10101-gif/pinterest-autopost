@@ -2,7 +2,13 @@ const aiService = require('./aiService');
 const historyService = require('./historyService');
 const flipkartSearchService = require('./flipkartSearchService');
 const earnKaroService = require('./earnKaroService');
-const { selectBoard } = require('./boardSelectorService');
+
+let selectBoard = () => null; // safe default: no board forced
+try {
+  ({ selectBoard } = require('./boardSelectorService'));
+} catch (err) {
+  console.warn('[Queue] boardSelectorService unavailable:', err.message);
+}
 
 let createPinWithBot = null;
 try {
