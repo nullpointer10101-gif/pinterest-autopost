@@ -1,0 +1,26 @@
+name: Test Flipkart
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: npm ci
+      - run: npx puppeteer browsers install chrome
+      - run: |
+          node -e "
+          const puppeteer = require('puppeteer');
+          (async () => {
+            const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+            console.log('Navigating...');
+            const res = await page.goto('https://www.flipkart.com/search?q=jeans', { waitUntil: 'domcontentloaded', timeout: 30000 });
+            console.log('Status:', res.status());
+            const html = await page.content();
+            console.log('HTML Length:', html.length);
+            console.log('Includes JSON-LD:', html.includes('application/ld+json'));
+            await browser.close();
+          })();
+          "
