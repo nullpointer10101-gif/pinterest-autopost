@@ -42,100 +42,79 @@ async function upstashSet(key, value, ttl = 86400) {
   } catch {}
 }
 
-// ── Product Image Proxy ────────────────────────────────────────────────────────
-// Resolves fktr.in → Flipkart URL → scrapes og:image
+// ── Product Image via Serper Image Search ────────────────────────────────────
+// Searches for product image using product name via Serper.dev images API
 router.get('/:shortcode/product-image', async (req, res) => {
-  const { url } = req.query;
-  if (!url) return res.json({ image: null });
+  const { url, name } = req.query;
+  if (!url && !name) return res.json({ image: null });
 
-  const cacheKey = `img:${Buffer.from(url).toString('base64').slice(0, 40)}`;
+  const cacheKey = `img2:${Buffer.from(url || name).toString('base64').slice(0, 40)}`;
   const cached = await upstashGet(cacheKey);
   if (cached) return res.json({ image: cached });
 
+  const SERPER_KEY = process.env.SERPER_API_KEY || '';
+  if (!SERPER_KEY) return res.json({ image: null });
+
   try {
-    // Step 1: Follow redirects (fktr.in → flipkart.com)
-    const controller = new AbortController();
-    const t1 = setTimeout(() => controller.abort(), 6000);
-    const redirect = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)' },
-      signal: controller.signal
+    // Use Serper.dev images API to get real product photo
+    const query = name || url;
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch('https://google.serper.dev/images', {
+      method: 'POST',
+      headers: { 'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: query + ' flipkart product', gl: 'in', hl: 'en', num: 5 }),
+      signal: ctrl.signal
     });
-    clearTimeout(t1);
-
-    const finalUrl = redirect.url;
-
-    // Step 2: Fetch Flipkart product page
-    const controller2 = new AbortController();
-    const t2 = setTimeout(() => controller2.abort(), 8000);
-    const page = await fetch(finalUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'en-IN,en;q=0.9',
-      },
-      signal: controller2.signal
-    });
-    clearTimeout(t2);
-
-    const html = await page.text();
-
-    // Try og:image first (most reliable)
-    const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-                 || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-    if (ogMatch && ogMatch[1]) {
-      const imageUrl = ogMatch[1];
-      await upstashSet(cacheKey, imageUrl, 60 * 60 * 24 * 7); // cache 7 days
-      return res.json({ image: imageUrl });
+    if (r.ok) {
+      const data = await r.json();
+      const images = data?.images || [];
+      // Pick first image from Flipkart or any valid product image
+      let imageUrl = null;
+      for (const img of images) {
+        const src = img.imageUrl || img.thumbnailUrl;
+        if (src && (src.includes('rukminim') || src.includes('flipkart') || src.includes('fkimg'))) {
+          imageUrl = src;
+          break;
+        }
+      }
+      // Fallback: just use first image result
+      if (!imageUrl && images[0]) imageUrl = images[0].imageUrl || images[0].thumbnailUrl || null;
+      if (imageUrl) {
+        await upstashSet(cacheKey, imageUrl, 60 * 60 * 24 * 7);
+        return res.json({ image: imageUrl });
+      }
     }
-
-    // Fallback: JSON-LD image
-    const jsonLdMatch = html.match(/"image"\s*:\s*"(https:\/\/[^"]+\.(jpg|jpeg|png|webp)[^"]*)"/i);
-    if (jsonLdMatch) {
-      const imageUrl = jsonLdMatch[1];
-      await upstashSet(cacheKey, imageUrl, 60 * 60 * 24 * 7);
-      return res.json({ image: imageUrl });
-    }
-
     return res.json({ image: null });
   } catch (err) {
-    console.warn('[Look] product-image proxy error:', err.message);
+    console.warn('[Look] product-image serper error:', err.message);
     return res.json({ image: null });
   }
 });
 
 // ── Fresh Video URL ────────────────────────────────────────────────────────────
-// Fetches fresh Instagram video URL via oEmbed
+// Fetches fresh Instagram video URL using instagram-url-direct package
 router.get('/:shortcode/fresh-video', async (req, res) => {
   const { shortcode } = req.params;
-  const cacheKey = `freshvid:${shortcode}`;
+  const cacheKey = `freshvid2:${shortcode}`;
   const cached = await upstashGet(cacheKey);
   if (cached) return res.json(cached);
 
   try {
-    // Try Instagram oEmbed to get thumbnail
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 5000);
-    const r = await fetch(
-      `https://www.instagram.com/reel/${shortcode}/?__a=1&__d=dis`,
-      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; facebookexternalhit/1.1)' }, signal: ctrl.signal }
-    );
-    clearTimeout(t);
-
-    if (r.ok) {
-      const data = await r.json();
-      const videoUrl = data?.graphql?.shortcode_media?.video_url || null;
-      const thumb    = data?.graphql?.shortcode_media?.display_url || null;
-      if (videoUrl) {
-        const result = { videoUrl, thumbnailUrl: thumb };
-        await upstashSet(cacheKey, result, 60 * 60 * 4); // cache 4 hours (Instagram URLs last ~4-6h)
-        return res.json(result);
-      }
+    const { instagramGetUrl } = require('instagram-url-direct');
+    const result = await instagramGetUrl(`https://www.instagram.com/reel/${shortcode}/`);
+    const videoUrl = result?.url_list?.[0] || null;
+    const thumbnail = result?.media_details?.[0]?.thumbnail || null;
+    if (videoUrl) {
+      const data = { videoUrl, thumbnailUrl: thumbnail };
+      // Cache for 3 hours — Instagram CDN URLs typically live 4-6h
+      await upstashSet(cacheKey, data, 60 * 60 * 3);
+      return res.json(data);
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[Look] fresh-video error:', err.message);
+  }
 
-  // No fresh URL available — client will use embed
   return res.json({ videoUrl: null, thumbnailUrl: null });
 });
 
@@ -493,10 +472,11 @@ router.get('/:shortcode', async (req, res) => {
           imgEl.onload = () => { imgEl.style.opacity = '1'; if (shimEl) shimEl.remove(); };
           imgEl.src = item.image;
         }
-      } else if (item.url) {
-        // Fetch from our proxy
-        const encodedUrl = encodeURIComponent(item.url);
-        fetch('/look/' + SHORTCODE + '/product-image?url=' + encodedUrl)
+      } else if (item.url || item.name) {
+        // Fetch via Serper image search using product name
+        const encodedName = encodeURIComponent(item.name || '');
+        const encodedUrl = encodeURIComponent(item.url || '');
+        fetch('/look/' + SHORTCODE + '/product-image?name=' + encodedName + '&url=' + encodedUrl)
           .then(r => r.json())
           .then(data => {
             const imgEl = document.getElementById('img-' + i);
