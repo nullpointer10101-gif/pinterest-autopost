@@ -1,0 +1,17 @@
+name: Test DDG
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: npm install duck-duck-scrape
+      - run: |
+          node -e "
+          const { search } = require('duck-duck-scrape');
+          search('site:flipkart.com Blue Jeans', { safeSearch: 'off' }).then(res => {
+            console.log('Results:', res.results.length);
+            if(res.results.length > 0) console.log(res.results[0].url);
+          }).catch(console.error);
+          "
