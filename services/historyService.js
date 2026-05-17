@@ -1,6 +1,41 @@
 const { v4: uuidv4 } = require('uuid');
 const storageService = require('./storageService');
 
+// ── Upstash Look Index — tiny per-post keys for instant storefront reads ─────
+const LOOK_INDEX_TTL = 60 * 60 * 24 * 90; // 90 days
+const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL   || '';
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
+
+async function writeLookIndex(record) {
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) return;
+  const shortcode = record.reelData?.shortcode || record.shortcode;
+  if (!shortcode) return;
+  const payload = {
+    id: record.id,
+    shortcode,
+    title:        record.aiContent?.title        || record.productInfo?.name || '',
+    thumbnailUrl: record.thumbnailUrl            || record.reelData?.thumbnailUrl || '',
+    mediaUrl:     record.mediaUrl               || record.reelData?.thumbnailUrl || '',
+    affiliateLink: record.affiliateLink          || null,
+    productInfo:  record.productInfo            || null,
+    aiContent:    record.aiContent              || null,
+    createdAt:    record.createdAt              || new Date().toISOString(),
+  };
+  try {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 5000);
+    await fetch(UPSTASH_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['SET', `look:${shortcode}`, JSON.stringify(payload), 'EX', LOOK_INDEX_TTL]),
+      signal: controller.signal,
+    });
+    console.log(`[History] ✅ Look index written for ${shortcode}`);
+  } catch (err) {
+    console.warn('[History] writeLookIndex failed:', err.message);
+  }
+}
+
 const DEFAULT_STATE = {
   posts: [],
   engagements: [],
@@ -75,6 +110,9 @@ async function add(entry) {
   };
   state.posts.unshift(record);
   await writeState(state);
+  // Write a tiny individual key so the storefront can find this post instantly
+  // without downloading the full 800KB state on every page load.
+  writeLookIndex(record).catch(() => {});
   return record;
 }
 

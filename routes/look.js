@@ -120,27 +120,35 @@ router.get('/:shortcode/products', async (req, res) => {
   }
 });
 
-// ── Instant HTML shell (loads in <1s, products loaded client-side) ────────────
+// ── Instant HTML shell ─────────────────────────────────────────────────────────
+// Fast path: check individual look:{shortcode} key (tiny, <1KB) first.
+// Only falls back to full 800KB state download for legacy posts without the index key.
 router.get('/:shortcode', async (req, res) => {
   try {
     const { shortcode } = req.params;
 
-    // ── 1. Load data from queue + history (same logic as /products route) ───
-    const queue = await queueService.getQueue();
-    let lookData = queue.find(item => item.shortcode === shortcode) || null;
-
-    const history = await historyService.getAll();
-    const historyData = history.find(item =>
-      item.shortcode === shortcode ||
-      item.reelData?.shortcode === shortcode ||
-      (item.url || '').includes(shortcode)
-    );
-
-    if (historyData) {
-      if (!lookData) lookData = historyData;
-      else if (!lookData.productInfo && historyData.productInfo) {
-        lookData.productInfo = historyData.productInfo;
+    // ── FAST PATH: read individual look index key ─────────────────────────────
+    let lookData = await cacheGet(`look:${shortcode}`);
+    if (lookData) {
+      console.log(`[Look] ⚡ Fast path hit for ${shortcode}`);
+    } else {
+      // ── SLOW FALLBACK: load full state for legacy posts ──────────────────────
+      console.log(`[Look] 🐢 No index key — falling back to full state for ${shortcode}`);
+      const [queue, history] = await Promise.all([
+        queueService.getQueue(),
+        historyService.getAll(),
+      ]);
+      let found = queue.find(item => item.shortcode === shortcode) || null;
+      const historyData = history.find(item =>
+        item.shortcode === shortcode ||
+        item.reelData?.shortcode === shortcode ||
+        (item.url || '').includes(shortcode)
+      );
+      if (historyData) {
+        if (!found) found = historyData;
+        else if (!found.productInfo && historyData.productInfo) found.productInfo = historyData.productInfo;
       }
+      lookData = found;
     }
 
     if (!lookData) {
@@ -153,30 +161,26 @@ router.get('/:shortcode', async (req, res) => {
       `);
     }
 
-    // ── 2. Pre-fetch outfit products (embedded in HTML — no slow second call) ─
+    // ── Build outfit product list from look data ──────────────────────────────
     let outfit = [];
     if (lookData.productInfo?.outfit?.length > 0) {
       outfit = lookData.productInfo.outfit;
     } else if (lookData.productInfo?.affiliateUrl || lookData.affiliateLink) {
-      outfit = [{ 
-        type: 'Main Piece', 
-        name: lookData.productInfo?.name || lookData.aiContent?.title || 'Featured Item', 
-        url: lookData.productInfo?.affiliateUrl || lookData.affiliateLink, 
-        image: null, 
-        originalPrice: null 
+      outfit = [{
+        type: 'Main Piece',
+        name: lookData.productInfo?.name || lookData.aiContent?.title || 'Featured Item',
+        url: lookData.productInfo?.affiliateUrl || lookData.affiliateLink,
+        image: null,
+        originalPrice: null
       }];
-    } else {
-      const cacheKey = `look_outfit_${shortcode}`;
-      const cached = await cacheGet(cacheKey);
-      if (cached && Array.isArray(cached) && cached.length > 0) outfit = cached;
     }
 
-    // Normalize fields for meta/title only — no heavy AI work here
-    const title = lookData.title || lookData.aiContent?.title || lookData.productInfo?.name || 'Shop The Look';
+    // Normalize fields
+    const title = lookData.aiContent?.title || lookData.productInfo?.name || lookData.title || 'Shop The Look';
     const thumbnailUrl = lookData.thumbnailUrl || lookData.reelData?.thumbnailUrl || '';
     const mediaUrl = lookData.mediaUrl || lookData.reelData?.thumbnailUrl || '';
 
-    // Serve instant HTML shell — products are loaded client-side via /products endpoint
+    // Serve instant HTML shell
 
     const html = `<!DOCTYPE html>
 <html lang="en">
