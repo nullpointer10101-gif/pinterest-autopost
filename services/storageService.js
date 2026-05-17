@@ -94,12 +94,21 @@ function isValidState(val) {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+let _memoryCache = null;
+let _memoryCacheTime = 0;
+
 /**
  * loadState(defaultState)
  * Loads state from Upstash (preferred) or local file backup.
  * Automatically heals a corrupt Upstash key if local has good data.
  */
 async function loadState(defaultState = {}) {
+  const now = Date.now();
+  if (_memoryCache && (now - _memoryCacheTime < 15000)) {
+    // Prevent double Upstash timeout penalties within the same Vercel request
+    return JSON.parse(JSON.stringify(_memoryCache));
+  }
+
   if (USE_UPSTASH) {
     try {
       const raw = await runUpstashCommand(['GET', APP_STATE_KEY]);
@@ -108,12 +117,17 @@ async function loadState(defaultState = {}) {
       if (raw === null) {
         // Try local backup first, then default
         const local = readLocalStateSync();
+        let result;
         if (isValidState(local)) {
           console.log('[Storage] Upstash key missing — restoring from local backup.');
           await runUpstashCommand(['SET', APP_STATE_KEY, JSON.stringify(local)]).catch(() => {});
-          return local;
+          result = local;
+        } else {
+          result = JSON.parse(JSON.stringify(defaultState));
         }
-        return JSON.parse(JSON.stringify(defaultState));
+        _memoryCache = result;
+        _memoryCacheTime = Date.now();
+        return result;
       }
 
       // raw might be a string (already a JS string from Upstash REST) or JSON
@@ -128,24 +142,29 @@ async function loadState(defaultState = {}) {
         parsed = raw; // Upstash may auto-parse
       }
 
+      let finalResult;
       if (isValidState(parsed)) {
         // Good Upstash data — also refresh local backup
         writeLocalStateSync(parsed);
-        return parsed;
+        finalResult = parsed;
+      } else {
+        // Upstash has corrupt/invalid data — try local backup to heal it
+        console.warn('[Storage] Upstash returned invalid state (got:', typeof parsed, ') — checking local backup...');
+        const local = readLocalStateSync();
+        if (isValidState(local)) {
+          console.log('[Storage] Healing Upstash with local backup data...');
+          await runUpstashCommand(['SET', APP_STATE_KEY, JSON.stringify(local)]).catch(() => {});
+          finalResult = local;
+        } else {
+          // Both corrupt — return default
+          console.warn('[Storage] Both Upstash and local backup are invalid. Starting fresh.');
+          finalResult = JSON.parse(JSON.stringify(defaultState));
+        }
       }
 
-      // Upstash has corrupt/invalid data — try local backup to heal it
-      console.warn('[Storage] Upstash returned invalid state (got:', typeof parsed, ') — checking local backup...');
-      const local = readLocalStateSync();
-      if (isValidState(local)) {
-        console.log('[Storage] Healing Upstash with local backup data...');
-        await runUpstashCommand(['SET', APP_STATE_KEY, JSON.stringify(local)]).catch(() => {});
-        return local;
-      }
-
-      // Both corrupt — return default
-      console.warn('[Storage] Both Upstash and local backup are invalid. Starting fresh.');
-      return JSON.parse(JSON.stringify(defaultState));
+      _memoryCache = finalResult;
+      _memoryCacheTime = Date.now();
+      return finalResult;
 
     } catch (err) {
       console.warn('[Storage] Upstash read failed:', err.message, '— falling back to local file.');
@@ -154,12 +173,17 @@ async function loadState(defaultState = {}) {
 
   // Upstash not configured or failed — use local file
   const local = readLocalStateSync();
+  let finalLocal;
   if (!local) {
-    const fresh = JSON.parse(JSON.stringify(defaultState));
-    writeLocalStateSync(fresh);
-    return fresh;
+    finalLocal = JSON.parse(JSON.stringify(defaultState));
+    writeLocalStateSync(finalLocal);
+  } else {
+    finalLocal = local;
   }
-  return local;
+  
+  _memoryCache = finalLocal;
+  _memoryCacheTime = Date.now();
+  return finalLocal;
 }
 
 /**
