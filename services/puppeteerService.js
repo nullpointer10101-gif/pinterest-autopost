@@ -538,96 +538,117 @@ async function createPinWithBot(pinData) {
     if (designEditorCheck) {
       console.log('[Bot] 🎬 "Design your Pin" editor detected — setting cover thumbnail...');
       try {
-        // ── Strategy 1: Look for "Upload cover image" button inside the modal ──
-        const uploadCoverClicked = await page.evaluate(() => {
-          const allBtns = Array.from(document.querySelectorAll('button, [role="button"], label'));
-          for (const btn of allBtns) {
-            const t = (btn.innerText || btn.getAttribute('aria-label') || btn.getAttribute('for') || '').toLowerCase();
-            if (
-              t.includes('upload cover') ||
-              t.includes('upload image') ||
-              t.includes('choose an image') ||
-              t.includes('add cover') ||
-              t.includes('custom cover')
-            ) {
-              btn.click();
-              return `clicked: "${btn.innerText || btn.getAttribute('aria-label')}"`;
+        // ── Debug: screenshot the cover editor so we can see what's on screen ──
+        try {
+          const _scDir = path.join(process.cwd(), 'public', 'logs');
+          await page.screenshot({ path: path.join(_scDir, `cover_editor_${Date.now()}.png`), fullPage: true });
+          console.log('[Bot] 📸 Cover editor screenshot saved.');
+        } catch (_e) {}
+
+        // ── Strategy 1: Direct file input upload (most reliable) ──────────────
+        let coverUploaded = false;
+        if (coverPath && fs.existsSync(coverPath)) {
+          const uploadBtnClicked = await page.evaluate(() => {
+            const allEls = Array.from(document.querySelectorAll('button, [role="button"], label, a, div[role="button"]'));
+            const keywords = ['upload cover', 'upload image', 'choose cover', 'add cover', 'custom cover', 'upload a cover', 'change cover'];
+            for (const el of allEls) {
+              const t = (el.innerText || el.getAttribute('aria-label') || el.getAttribute('for') || '').toLowerCase();
+              for (const kw of keywords) {
+                if (t.includes(kw)) {
+                  el.click();
+                  return t.trim().substring(0, 40);
+                }
+              }
             }
+            return null;
+          });
+          if (uploadBtnClicked) {
+            console.log(`[Bot] Clicked upload button: "${uploadBtnClicked}"`);
+            await new Promise(r => setTimeout(r, 2000));
           }
-          return null;
-        });
 
-        if (uploadCoverClicked && coverPath && fs.existsSync(coverPath)) {
-          console.log(`[Bot] Found upload button: ${uploadCoverClicked}`);
-          await new Promise(r => setTimeout(r, 1500));
-
-          // Now find the file input that appeared (could be anywhere in DOM — Pinterest uses hidden inputs)
-          const fileInputs = await page.$$('input[type="file"]');
-          if (fileInputs.length > 0) {
-            const targetInput = fileInputs[fileInputs.length - 1];
-            await targetInput.uploadFile(coverPath);
-            console.log('[Bot] ✅ Cover image uploaded via "Upload cover image" button.');
-            await new Promise(r => setTimeout(r, 3000));
-          } else {
-            // Try making the input visible and using it
-            await page.evaluate(() => {
-              document.querySelectorAll('input[type="file"]').forEach(el => {
-                el.style.opacity = '1';
-                el.style.display = 'block';
-                el.style.position = 'fixed';
-                el.style.top = '0';
-                el.style.left = '0';
-                el.style.zIndex = '99999';
-              });
+          await page.evaluate(() => {
+            document.querySelectorAll('input[type="file"]').forEach(el => {
+              el.style.opacity = '1';
+              el.style.display = 'block';
+              el.style.position = 'fixed';
+              el.style.top = '0';
+              el.style.left = '0';
+              el.style.zIndex = '99999';
+              el.style.width = '100px';
+              el.style.height = '100px';
             });
-            const fileInputs2 = await page.$$('input[type="file"]');
-            if (fileInputs2.length > 0) {
-              await fileInputs2[fileInputs2.length - 1].uploadFile(coverPath);
-              console.log('[Bot] ✅ Cover uploaded via revealed hidden input.');
-              await new Promise(r => setTimeout(r, 3000));
-            } else {
-              console.log('[Bot] ⚠️ No file input found after clicking upload button.');
-            }
-          }
-        } else {
-          // ── Strategy 2: Slider-based frame picker — seek to 30% mark ──────────
-          console.log('[Bot] No upload button found — using timeline slider to pick a clear frame...');
-          const sliderMoved = await page.evaluate(() => {
-            const slider = document.querySelector(
-              '[role="slider"], input[type="range"], [data-test-id="video-scrubber"], [data-test-id="timeline-scrubber"]'
-            );
-            if (!slider) return false;
-            // Set value to 30% of the range
-            const min = parseFloat(slider.getAttribute('min') || '0');
-            const max = parseFloat(slider.getAttribute('max') || '100');
-            const target = min + (max - min) * 0.30;
-            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(slider, target);
-            slider.dispatchEvent(new Event('input', { bubbles: true }));
-            slider.dispatchEvent(new Event('change', { bubbles: true }));
-            return true;
           });
 
-          if (sliderMoved) {
-            console.log('[Bot] ✅ Slider moved to 30% frame.');
-            await new Promise(r => setTimeout(r, 1500));
-          } else {
-            // Try using arrow keys on focused slider
+          const fileInputs = await page.$$('input[type="file"]');
+          console.log(`[Bot] Found ${fileInputs.length} file input(s) in cover editor.`);
+
+          if (fileInputs.length > 0) {
+            const targetInput = fileInputs[fileInputs.length - 1];
             try {
-              await page.focus('[role="slider"], input[type="range"]');
-              for (let k = 0; k < 3; k++) {
-                await page.keyboard.press('ArrowRight');
-                await new Promise(r => setTimeout(r, 200));
-              }
-              console.log('[Bot] ✅ Advanced slider via arrow keys.');
-            } catch {}
+              await targetInput.uploadFile(coverPath);
+              console.log('[Bot] ✅ Cover image uploaded via file input!');
+              coverUploaded = true;
+              await new Promise(r => setTimeout(r, 3000));
+            } catch (uploadErr) {
+              console.log(`[Bot] ⚠️ File input upload failed: ${uploadErr.message}`);
+            }
           }
         }
 
-        // ── Click "Done" to exit the editor and return to pin builder ──────────
+        // ── Strategy 2: Mouse-drag the timeline slider ────────────────
+        if (!coverUploaded) {
+          console.log('[Bot] No file upload succeeded — dragging timeline slider with mouse...');
+          const sliderDragged = await page.evaluate(() => {
+            const slider = document.querySelector('[role="slider"], input[type="range"], [data-test-id="video-scrubber"], [data-test-id="timeline-scrubber"]');
+            if (!slider) return 'no_slider_found';
+            const rect = slider.getBoundingClientRect();
+            return JSON.stringify({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+          });
+
+          if (sliderDragged !== 'no_slider_found') {
+            try {
+              const rect = JSON.parse(sliderDragged);
+              const startX = rect.x + 5;
+              const startY = rect.y + rect.height / 2;
+              const endX = rect.x + rect.width * 0.5;
+              
+              await page.mouse.move(startX, startY);
+              await page.mouse.down();
+              const steps = 10;
+              for (let i = 1; i <= steps; i++) {
+                const currentX = startX + (endX - startX) * (i / steps);
+                await page.mouse.move(currentX, startY);
+                await new Promise(r => setTimeout(r, 50));
+              }
+              await page.mouse.up();
+              console.log('[Bot] ✅ Slider dragged to ~50% of video via mouse.');
+              await new Promise(r => setTimeout(r, 1500));
+            } catch (dragErr) {
+              console.log(`[Bot] ⚠️ Mouse drag failed: ${dragErr.message}`);
+            }
+          } else {
+            console.log('[Bot] No slider element found. Trying keyboard arrows...');
+            try {
+              for (let t = 0; t < 5; t++) {
+                await page.keyboard.press('Tab');
+                await new Promise(r => setTimeout(r, 200));
+              }
+              for (let k = 0; k < 20; k++) {
+                await page.keyboard.press('ArrowRight');
+                await new Promise(r => setTimeout(r, 80));
+              }
+              console.log('[Bot] ✅ Pressed ArrowRight 20 times after tabbing.');
+            } catch (kbErr) {
+              console.log(`[Bot] ⚠️ Keyboard fallback failed: ${kbErr.message}`);
+            }
+          }
+        }
+
+        // ── Click "Done" to exit the editor ──────────
         await new Promise(r => setTimeout(r, 1000));
         const doneClicked = await page.evaluate(() => {
           const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
-          // Priority: "Done" > "Apply" > "Save" > "Continue"
           const labels = ['done', 'done editing', 'apply', 'save', 'continue'];
           for (const label of labels) {
             for (const btn of allBtns) {
