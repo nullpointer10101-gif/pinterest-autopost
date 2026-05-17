@@ -2,10 +2,7 @@ const express = require('express');
 const router = express.Router();
 const queueService = require('../services/queueService');
 const historyService = require('../services/historyService');
-const aiService = require('../services/aiService');
-const flipkartSearchService = require('../services/flipkartSearchService');
-const earnKaroService = require('../services/earnKaroService');
-const axios = require('axios');
+
 
 // ── Upstash cache helpers ─────────────────────────────────────────────────────
 const CACHE_TTL_SECONDS = 60 * 60 * 24; // 24 hours

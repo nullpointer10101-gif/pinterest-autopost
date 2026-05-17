@@ -19,7 +19,6 @@
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
-const axios = require('axios');
 
 const IS_SERVERLESS = !!(
   process.env.VERCEL ||
