@@ -222,28 +222,60 @@ async function identifyProduct({ caption = '', username = '', thumbnailUrl = '' 
   return heuristicIdentifyProduct(caption);
 }
 
-function heuristicIdentifyProduct(caption) {
-  const productKeywords = ['buy', 'shop', 'link', 'available', 'price', 'offer', 'discount', 'order', 'get', 'grab', 'sneakers', 'shirt', 'jeans', 'watch', 'phone', 'gadget'];
-  const lower = caption.toLowerCase();
-  const hasKeyword = productKeywords.some(k => lower.includes(k));
-  
-  if (!hasKeyword && caption.length < 20) return { found: false };
+/**
+ * Strips useless promotional CTA phrases from an Instagram caption so the AI
+ * focuses on real product context rather than "Comment 'link' for product in dm".
+ */
+function cleanCaption(caption) {
+  if (!caption) return '';
+  const spamPatterns = [
+    /comment ["']?link["']?.{0,30}(dm|inbox|bio)/gi,
+    /comment.{0,10}(below|above|here|now).{0,20}(link|product|get)/gi,
+    /link in (my )?bio/gi,
+    /shop link in bio/gi,
+    /dm (me|for|us) (the )?link/gi,
+    /click (the )?link in bio/gi,
+    /swipe up/gi,
+    /tap (the )?link/gi,
+    /\ud83d\udc46 follow @\w+.*/gi,
+    /follow @\w+.*/gi,
+    /💡 style tip:.*/gi,
+  ];
+  let cleaned = caption;
+  for (const pat of spamPatterns) {
+    cleaned = cleaned.replace(pat, '');
+  }
+  // Remove lines that are just hashtags
+  cleaned = cleaned.split('\n')
+    .filter(line => !(line.trim().startsWith('#') && !line.trim().replace(/#\w+/g, '').trim()))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return cleaned;
+}
 
-  // Clean the caption to get a searchable product name
-  // 1. Take first line or first 60 chars
-  let productName = caption.split('\n')[0].substring(0, 80);
-  // 2. Remove hashtags and emojis
+function heuristicIdentifyProduct(caption) {
+  const cleaned = cleanCaption(caption);
+  const productKeywords = ['sneakers', 'shirt', 'jeans', 'pants', 'watch', 'jacket', 'tshirt', 't-shirt', 'hoodie', 'shorts', 'kurta', 'saree', 'shoes', 'sandals', 'phone', 'gadget', 'perfume', 'bag', 'cap', 'hat'];
+  const lower = cleaned.toLowerCase();
+  const hasKeyword = productKeywords.some(k => lower.includes(k));
+
+  if (!hasKeyword && cleaned.length < 10) return { found: false };
+
+  // Take the most informative line (longest non-hashtag line)
+  const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+  let productName = (lines[0] || cleaned).substring(0, 80);
   productName = productName.replace(/#\w+/g, '').replace(/[^\w\s]/gi, '').trim();
-  
+
   if (productName.length < 3) return { found: false };
 
-  return { 
-    found: true, 
-    productName, 
-    exactMatchQuery: productName, 
+  return {
+    found: true,
+    productName,
+    exactMatchQuery: productName,
     similarMatchQuery: productName.split(' ').slice(0, 4).join(' '),
     broadMatchQuery: productName.split(' ').slice(0, 2).join(' '),
-    category: 'other' 
+    category: 'other'
   };
 }
 
@@ -252,26 +284,30 @@ async function identifyProductInternal({ caption = '', username = '', thumbnailU
     return heuristicIdentifyProduct(caption);
   }
 
-  const systemPrompt = 'You are an AI visual product identifier for affiliate marketing. You must analyze the provided caption and image to determine if a shoppable product (fashion, electronics, home decor, etc.) is showcased. Be helpful and try to find a product if the caption implies one. Return only valid JSON.';
-  
-  const textPrompt = `Instagram Reel from @${username}:
-Caption: "${caption.substring(0, 700)}"
+  const usefulCaption = cleanCaption(caption);
+  const hasImage = !!thumbnailUrl;
 
-Task: Identify the primary product being promoted. 
-- CRITICAL: You MUST visually inspect the provided image. Identify the EXACT brand, specific model, and color of the main product shown (e.g., "Puma Smash V2 White Sneakers", "Rolex Submariner Watch").
-- Do not just output generic terms. If the caption says "shop link in bio", you MUST rely on the image to figure out what the exact item is.
-- The goal is to find the EXACT SAME product shown in the reel.
+  const systemPrompt = 'You are an expert AI visual product identifier for affiliate marketing. Your PRIMARY source is the IMAGE — identify the exact product shown visually. The caption is ONLY secondary context and should be IGNORED if it is a generic CTA like "comment link" or "link in bio". Return only valid JSON.';
 
-If a product is found → Return: 
+  const textPrompt = `Instagram Reel from @${username}.
+${usefulCaption ? `Additional context from caption: "${usefulCaption.substring(0, 400)}"` : 'Caption: (not useful — use image only)'}
+
+Task: Identify the PRIMARY product visible in the image.
+- Look at what the person is WEARING or HOLDING in the photo.
+- Identify the EXACT item: type, color, style, and brand if visible (e.g. "Brown Baggy Corduroy Pants", "White Puma Sneakers", "Oversized Denim Jacket").
+- If the caption is vague (e.g. "Comment link", "Link in bio"), IGNORE it completely and rely only on the image.
+- DO NOT return generic phrases. Be specific about what you SEE.
+
+Return JSON:
 {
   "found": true,
-  "productName": "specific product name",
-  "exactMatchQuery": "brand + specific model + color + type",
-  "similarMatchQuery": "brand + color + type",
-  "broadMatchQuery": "color + type",
+  "productName": "specific visual description (e.g. Brown Baggy Corduroy Pants)",
+  "exactMatchQuery": "color + style + product type (e.g. Brown Baggy Corduroy Pants Men)",
+  "similarMatchQuery": "style + product type (e.g. Baggy Corduroy Pants)",
+  "broadMatchQuery": "product type only (e.g. Corduroy Pants Men)",
   "category": "fashion|electronics|home|beauty|other"
 }
-If absolutely no product → Return: { "found": false }
+If no product visible → Return: { "found": false }
 
 Return ONLY the JSON object.`;
 
@@ -349,23 +385,27 @@ async function identifyOutfit({ caption = '', username = '', thumbnailUrl = '' }
     return { found: false };
   }
 
-  const systemPrompt = `You are a professional AI fashion stylist and visual product identifier. Your task is to analyze the provided caption and image from an Instagram Reel, identify the main product being showcased, and then recommend 3 matching items to complete the outfit (a full "Shop The Look" curation). If no physical product is found, return {"found": false}.`;
-  
-  const textPrompt = `Instagram Reel from @${username}:
-Caption: "${caption.substring(0, 700)}"
+  const usefulCaption = cleanCaption(caption);
 
-Task: Extract the entire outfit from the image and caption.
-1. Identify the 'main' item (e.g., the jacket or shirt shown).
-2. Curate matching items (e.g., 'bottom', 'shoes', 'accessory') that complete the look. Be specific with brands and colors if possible, otherwise use highly descriptive generic terms.
-3. Return ONLY a valid JSON object in this exact format:
+  const systemPrompt = `You are an expert AI fashion stylist and visual product identifier. Your PRIMARY source is the IMAGE — identify what is VISIBLE in the photo. The caption is only secondary context; if it says "comment link" or "link in bio", treat the caption as empty and rely entirely on the image. Return only valid JSON.`;
+
+  const textPrompt = `Instagram Reel from @${username}.
+${usefulCaption ? `Caption context: "${usefulCaption.substring(0, 400)}"` : 'Caption: (not useful — identify from image only)'}
+
+Task: Look at the IMAGE and identify the FULL outfit of the person shown.
+1. 'main': The PRIMARY item they are wearing/showcasing (most prominent). Be SPECIFIC: color + style + type (e.g. "Brown Baggy Corduroy Pants", "White Oversized Cotton T-shirt").
+2. Curate 3 complementary items to complete the look. Each query must be a specific, searchable product description.
+3. IGNORE any caption text like "comment link", "link in bio", "shop link" — these are irrelevant.
+
+Return ONLY this JSON:
 {
   "found": true,
-  "outfitName": "A catchy, stylish name for this outfit (e.g., 'Casual Summer Streetwear')",
+  "outfitName": "Catchy outfit name (e.g. 'Relaxed Streetwear Look')",
   "items": [
-    { "type": "main", "query": "Exact description of main item (e.g., 'Puma Smash V2 White Sneakers')" },
-    { "type": "bottom", "query": "Matching bottom (e.g., 'Men\\'s Slim Fit Black Chinos')" },
-    { "type": "shoes", "query": "Matching shoes (e.g., 'White Casual Sneakers')" },
-    { "type": "accessory", "query": "Matching accessory (e.g., 'Silver Chain Watch')" }
+    { "type": "main", "query": "Brown Baggy Corduroy Pants Men" },
+    { "type": "top", "query": "Oversized White T-shirt Men" },
+    { "type": "shoes", "query": "White Casual Sneakers Men" },
+    { "type": "accessory", "query": "Silver Chain Necklace Men" }
   ]
 }
 
