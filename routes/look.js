@@ -381,6 +381,19 @@ router.get('/:shortcode', async (req, res) => {
       }
     }
 
+    @media (max-width: 480px) {
+      .product-grid {
+        grid-template-columns: 1fr;
+        padding: 0 12px;
+        gap: 12px;
+      }
+      .product-name {
+        font-size: 0.84rem;
+        -webkit-line-clamp: 3;
+      }
+      .shop-btn { font-size: 0.76rem; }
+    }
+
     @media (max-width: 390px) {
       .store-header {
         padding: 12px 10px;
@@ -394,15 +407,9 @@ router.get('/:shortcode', async (req, res) => {
         margin: 18px 0 10px;
       }
       .product-grid {
-        grid-template-columns: 1fr;
         padding: 0 12px;
         gap: 12px;
       }
-      .product-name {
-        font-size: 0.84rem;
-        -webkit-line-clamp: 3;
-      }
-      .shop-btn { font-size: 0.76rem; }
     }
   </style>
 </head>
