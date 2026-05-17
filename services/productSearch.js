@@ -98,6 +98,33 @@ async function searchSerper(query, domain, options = {}) {
   return data.organic.map((item) => ({ title: item.title, url: item.link }));
 }
 
+// Serper with automatic failover: tries primary key, falls back to backup on 429/401
+async function searchSerperWithFailover(query, domain, options = {}) {
+  const primaryKey = process.env.SERPER_API_KEY;
+  const backupKey = process.env.SERPER_API_KEY_BACKUP;
+
+  // Try primary key first
+  if (primaryKey) {
+    try {
+      return await searchSerper(query, domain, { ...options, apiKey: primaryKey });
+    } catch (err) {
+      if ((err.message.includes('quota exceeded') || err.message.includes('invalid API key')) && backupKey) {
+        console.warn(`  [search] ⚠️ Serper primary key failed (${err.message}). Switching to backup key...`);
+      } else {
+        throw err; // Not a key issue, rethrow
+      }
+    }
+  }
+
+  // Try backup key
+  if (backupKey) {
+    console.log('  [search] 🔑 Using Serper backup API key...');
+    return await searchSerper(query, domain, { ...options, apiKey: backupKey });
+  }
+
+  throw new Error('Serper: no API keys available');
+}
+
 async function searchBrave(query, domain, options = {}) {
   const { apiKey, num = 5 } = options;
   if (!apiKey) throw new Error('Brave: missing BRAVE_API_KEY');
@@ -143,7 +170,7 @@ async function findProductUrls(query, opts = {}) {
       cx: process.env.GOOGLE_CSE_CX,
     },
     serper: {
-      apiKey: process.env.SERPER_API_KEY,
+      apiKey: process.env.SERPER_API_KEY || process.env.SERPER_API_KEY_BACKUP,
     },
     brave: {
       apiKey: process.env.BRAVE_API_KEY,
@@ -166,8 +193,8 @@ async function findProductUrls(query, opts = {}) {
       },
       {
         name: 'Serper.dev',
-        enabled: !!config.serper.apiKey,
-        fn: () => searchSerper(query, platformCfg.domain, config.serper),
+        enabled: !!(process.env.SERPER_API_KEY || process.env.SERPER_API_KEY_BACKUP),
+        fn: () => searchSerperWithFailover(query, platformCfg.domain, { num: 5 }),
       },
       {
         name: 'Brave Search',

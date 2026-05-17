@@ -83,3 +83,4 @@ jobs:
           # GOOGLE_CSE_KEY: ${{ secrets.GOOGLE_CSE_KEY }}  # reserved for future
           # GOOGLE_CSE_CX: ${{ secrets.GOOGLE_CSE_CX }}  # reserved for future
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          SERPER_API_KEY_BACKUP: ${{ secrets.SERPER_API_KEY_BACKUP }}
