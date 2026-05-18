@@ -281,10 +281,10 @@
                         </div>
 
                         <div class="engage-inline">
-                            <label for="engage-count">Quick Engage Count</label>
+                            <label for="engage-count">Quick Like Target</label>
                             <div class="engage-inline-controls">
-                                <input type="range" id="engage-count" min="1" max="20" value="20">
-                                <span id="engage-count-value-dashboard">20</span>
+                                <input type="range" id="engage-count" min="1" max="10" value="5">
+                                <span id="engage-count-value-dashboard">5</span>
                             </div>
                         </div>
                     </article>
@@ -418,25 +418,35 @@
                         <article class="card">
                             <div class="card-title-wrap">
                                 <h2><i data-lucide="zap" class="heading-icon"></i>Pinterest Quick Actions</h2>
-                                <p class="muted-text">Run engagement jobs and inspect queue pressure.</p>
+                                <p class="muted-text">Target random men's outfit pins with a no-save engagement profile.</p>
                             </div>
 
                             <div class="field-wrap">
                                 <div class="field-inline-meta">
-                                    <label for="engage-count-manual">Direct Engagement Count</label>
-                                    <div id="engage-count-value" class="input-meta">20</div>
+                                    <label for="engage-count-manual">Manual Like Target</label>
+                                    <div id="engage-count-value" class="input-meta">5</div>
                                 </div>
-                                <input type="number" id="engage-count-manual" min="1" max="20" value="20">
+                                <input type="number" id="engage-count-manual" min="1" max="10" value="5">
+                            </div>
+
+                            <div class="field-wrap">
+                                <div class="field-inline-meta">
+                                    <label for="engage-comment-target">Manual Comment Target</label>
+                                    <div class="input-meta">Default hourly target: 3</div>
+                                </div>
+                                <input type="number" id="engage-comment-target" min="0" max="10" value="3">
                             </div>
 
                             <div class="field-wrap">
                                 <label for="engage-niche">Target Niche</label>
                                 <select id="engage-niche">
-                                    <option value="all">General Growth</option>
-                                    <option value="fashion">Fashion and Style</option>
-                                    <option value="home">Home Decor</option>
+                                    <option value="mens_outfits">Men's Outfits</option>
+                                    <option value="mens_streetwear">Men's Streetwear</option>
+                                    <option value="mens_formal">Men's Formal Wear</option>
                                 </select>
                             </div>
+
+                            <div class="input-meta">Hourly automation profile: 5 likes, 3 comments, 0 saves.</div>
 
                             <div class="quick-actions">
                                 <button id="engage-btn" class="btn btn-primary" type="button"><i data-lucide="activity" class="btn-icon"></i><span>Engage Bot</span></button>
@@ -573,6 +583,7 @@
                     </div>
 
                     <div class="button-row inline-actions-row">
+                        <button id="reset-engagement-guard-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="shield-check" class="btn-icon"></i><span>Reset Guard</span></button>
                         <button id="clear-engagements-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="eraser" class="btn-icon"></i><span>Clear Logs</span></button>
                     </div>
 

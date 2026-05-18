@@ -59,10 +59,15 @@ async function triggerInstantMission() {
   return dispatchWorkflow('fire-post.yml', 'Instant Mission → Fire Post');
 }
 
-async function triggerInstantEngagement(count = 3, niche = 'all') {
-  return dispatchWorkflow('instant-engagement.yml', 'Instant Engagement', { 
-    count: String(count), 
-    niche: String(niche) 
+async function triggerInstantEngagement(options = {}) {
+  const likeTarget = Math.max(1, Number.parseInt(options.likeTarget ?? options.likesTarget ?? '5', 10) || 5);
+  const commentTarget = Math.max(0, Number.parseInt(options.commentTarget ?? options.commentsTarget ?? '3', 10) || 3);
+  const niche = String(options.niche || 'mens_outfits').trim() || 'mens_outfits';
+
+  return dispatchWorkflow('instant-engagement.yml', 'Instant Engagement', {
+    like_target: String(likeTarget),
+    comment_target: String(commentTarget),
+    niche: niche,
   });
 }
 

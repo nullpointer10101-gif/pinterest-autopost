@@ -53,6 +53,7 @@ const DEFAULT_STATE = {
   },
   automation: {
     dateKey: '',
+    engagementDateKey: '',
     postsToday: 0,
     lastRunAt: null,
   },
@@ -380,6 +381,7 @@ async function getAutomationState() {
   const state = await readState();
   return {
     dateKey: '',
+    engagementDateKey: '',
     postsToday: 0,
     likesToday: 0,
     commentsToday: 0,
@@ -396,6 +398,7 @@ async function setAutomationState(automation) {
   const state = await readState();
   state.automation = {
     dateKey: '',
+    engagementDateKey: '',
     postsToday: 0,
     likesToday: 0,
     commentsToday: 0,
@@ -409,6 +412,21 @@ async function setAutomationState(automation) {
   };
   await writeState(state);
   return state.automation;
+}
+
+async function resetEngagementAutomationState(options = {}) {
+  const current = await getAutomationState();
+  const resetDaily = options.resetDaily === true;
+
+  return setAutomationState({
+    ...current,
+    circuitBreaker: null,
+    engagedUrls: resetDaily ? [] : Array.isArray(current.engagedUrls) ? current.engagedUrls.slice(-300) : [],
+    likesToday: resetDaily ? 0 : current.likesToday || 0,
+    commentsToday: resetDaily ? 0 : current.commentsToday || 0,
+    savesToday: 0,
+    engagementDateKey: resetDaily ? '' : (current.engagementDateKey || ''),
+  });
 }
 
 async function getWorkflowConfig() {
@@ -460,6 +478,7 @@ module.exports = {
   removeSnapshot,
   getAutomationState,
   setAutomationState,
+  resetEngagementAutomationState,
   getWorkflowConfig,
   setWorkflowConfig,
   getStorageInfo,

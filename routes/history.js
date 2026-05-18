@@ -81,6 +81,79 @@ async function tryStreamFirstImage(res, urls) {
   return false;
 }
 
+function toInt(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getPinterestEngagementTargets() {
+  return {
+    likeTarget: Math.max(0, toInt(process.env.AUTOMATION_ENGAGEMENT_LIKE_TARGET ?? process.env.AUTOMATION_ENGAGEMENT_LIKES_PER_HOUR, 5)),
+    commentTarget: Math.max(0, toInt(process.env.AUTOMATION_ENGAGEMENT_COMMENT_TARGET ?? process.env.AUTOMATION_ENGAGEMENT_COMMENTS_PER_HOUR, 3)),
+    niche: String(process.env.AUTOMATION_ENGAGEMENT_NICHE || 'mens_outfits').trim() || 'mens_outfits',
+  };
+}
+
+function getEngagementDateKey(timeZone = 'Asia/Calcutta') {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === 'year')?.value || '1970';
+  const month = parts.find((part) => part.type === 'month')?.value || '01';
+  const day = parts.find((part) => part.type === 'day')?.value || '01';
+  return `${year}-${month}-${day}`;
+}
+
+function countEngagementKinds(entries = []) {
+  const totals = { likes: 0, comments: 0, dispatches: 0, resets: 0 };
+  for (const entry of entries) {
+    const action = String(entry?.action || '').toLowerCase();
+    if (action.includes('like')) totals.likes += 1;
+    if (action.includes('comment')) totals.comments += 1;
+    if (action.includes('dispatch')) totals.dispatches += 1;
+    if (action.includes('reset')) totals.resets += 1;
+  }
+  return totals;
+}
+
+async function buildPinterestEngagementSummary(engagements = []) {
+  const automation = await historyService.getAutomationState();
+  const targets = getPinterestEngagementTargets();
+  const currentDateKey = getEngagementDateKey(process.env.AUTOMATION_TIMEZONE || 'Asia/Calcutta');
+  const now = Date.now();
+  const windowStart = now - (24 * 60 * 60 * 1000);
+  const recent = engagements.filter((entry) => {
+    const ts = new Date(entry?.engagedAt || entry?.createdAt || '').getTime();
+    return Number.isFinite(ts) && ts >= windowStart;
+  });
+  const recentCounts = countEngagementKinds(recent);
+  const guardUntil = automation.circuitBreaker && new Date(automation.circuitBreaker).getTime() > now
+    ? automation.circuitBreaker
+    : null;
+
+  return {
+    strategy: 'random_mens_outfit_pins',
+    strategyLabel: "Random men's outfit pins",
+    targets,
+    today: {
+      likes: automation.engagementDateKey === currentDateKey ? Math.max(0, toInt(automation.likesToday, 0)) : 0,
+      comments: automation.engagementDateKey === currentDateKey ? Math.max(0, toInt(automation.commentsToday, 0)) : 0,
+    },
+    last24h: recentCounts,
+    guard: {
+      active: !!guardUntil,
+      until: guardUntil,
+    },
+    noSaves: true,
+    lastActionAt: engagements[0]?.engagedAt || engagements[0]?.createdAt || null,
+    lastHourlyRunAt: automation.lastRunAt || null,
+  };
+}
+
 router.get('/history', async (req, res) => {
   try {
     const history = await historyService.getAll();
@@ -187,7 +260,8 @@ router.post('/history/snapshots/:id/restore', async (req, res) => {
 router.get('/engagements', async (req, res) => {
   try {
     const engagements = await historyService.getEngagements();
-    res.json({ success: true, engagements });
+    const summary = await buildPinterestEngagementSummary(engagements);
+    res.json({ success: true, engagements, summary });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -202,12 +276,46 @@ router.delete('/engagements', async (req, res) => {
   }
 });
 
+router.post('/engagements/reset-state', async (req, res) => {
+  try {
+    const resetDaily = req.body?.resetDaily === true;
+    const automation = await historyService.resetEngagementAutomationState({ resetDaily });
+
+    await historyService.addEngagement({
+      url: '',
+      action: resetDaily ? 'Reset Engagement State' : 'Reset Engagement Guard',
+      comment: resetDaily
+        ? 'Daily Pinterest engagement counters and guard were reset from the dashboard.'
+        : 'Pinterest engagement circuit breaker was cleared from the dashboard.',
+      source: 'api_manual',
+      command: 'POST /api/engagements/reset-state',
+      actor: 'dashboard_user',
+      engagedAt: new Date().toISOString(),
+    });
+
+    res.json({
+      success: true,
+      automation,
+      message: resetDaily
+        ? 'Engagement guard and daily counters reset.'
+        : 'Engagement guard reset.',
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/engage', async (req, res) => {
   try {
     const hardCap = Math.max(1, parseInt(process.env.AUTOMATION_ENGAGEMENTS_HARD_CAP || '20', 10));
-    const requested = Math.max(1, parseInt(req.body?.count || '2', 10));
-    const niche = req.body?.niche || 'all';
-    const targetCount = Math.min(requested, hardCap);
+    const defaults = getPinterestEngagementTargets();
+    const requestedLikeTarget = Math.max(1, toInt(req.body?.likeTarget ?? req.body?.count, defaults.likeTarget));
+    const requestedCommentTarget = Math.max(0, toInt(req.body?.commentTarget, defaults.commentTarget));
+    const likeTarget = Math.min(requestedLikeTarget, hardCap);
+    const commentTarget = Math.max(0, Math.min(requestedCommentTarget, Math.max(0, hardCap - likeTarget)));
+    const totalTarget = Math.max(1, likeTarget + commentTarget);
+    const niche = String(req.body?.niche || defaults.niche).trim() || defaults.niche;
+    const targetCount = Math.min(totalTarget, hardCap);
     
     if (!puppeteerService || typeof puppeteerService.runAutoEngager !== 'function') {
       return res.status(500).json({
@@ -217,28 +325,30 @@ router.post('/engage', async (req, res) => {
     }
 
     if (IS_SERVERLESS) {
-      console.log(`[Engager] Routing to Cloud Bot (GitHub Actions)... Niche: ${niche}`);
+      console.log(`[Engager] Routing to Cloud Bot (GitHub Actions)... Niche: ${niche} | Likes: ${likeTarget} | Comments: ${commentTarget}`);
       await historyService.addEngagement({
         url: '',
         action: 'Dispatch Engagement Mission',
-        comment: `Requested ${targetCount} engagement action(s) for ${niche} niche from dashboard.`,
+        comment: `Queued Pinterest engagement profile: ${likeTarget} likes + ${commentTarget} comments for ${niche}.`,
         source: 'github_actions',
         command: 'workflow_dispatch instant-engagement.yml',
         workflow: 'instant-engagement.yml',
         actor: 'dashboard_user',
         engagedAt: new Date().toISOString(),
       });
-      githubService.triggerInstantEngagement(targetCount, niche).catch(() => {});
+      githubService.triggerInstantEngagement({ likeTarget, commentTarget, niche }).catch(() => {});
       return res.json({
         success: true,
         queued: true,
-        message: `Instant Algorithm Mission launched! Bot will start engaging in seconds...`,
+        message: `Pinterest engagement mission launched for ${likeTarget} likes and ${commentTarget} comments.`,
       });
     }
 
     puppeteerService.runAutoEngager({
       count: targetCount,
       niche: niche,
+      likeTarget,
+      commentTarget,
       context: {
         source: 'api_manual',
         command: 'POST /api/engage',
@@ -249,10 +359,11 @@ router.post('/engage', async (req, res) => {
 
     res.json({
       success: true,
-      requested,
+      requested: totalTarget,
       targetCount,
       hardCap,
-      message: `Started background engager for ${targetCount} pin(s).`,
+      targets: { likeTarget, commentTarget, niche },
+      message: `Started Pinterest engagement for ${likeTarget} likes and ${commentTarget} comments.`,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

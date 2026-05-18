@@ -576,10 +576,6 @@ async function generateEngagementComment({ title, description, subNiche = 'casua
   };
   const fallback = fallbacks[subNiche.toLowerCase()] || fallbacks.default;
 
-  if (!openai) {
-    return fallback;
-  }
-
   let vocab = '';
   switch (subNiche.toLowerCase()) {
     case 'streetwear': vocab = 'Use vocabulary like: clean, heat, drip, on point, dialed.'; break;
@@ -623,8 +619,7 @@ async function generateEngagementComment({ title, description, subNiche = 'casua
     let retries = 3;
     while (retries > 0) {
       try {
-        const response = await openai.chat.completions.create({
-          model: aiConfig.model,
+        const response = await tryTextCompletion({
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
@@ -632,22 +627,22 @@ async function generateEngagementComment({ title, description, subNiche = 'casua
           temperature: 0.85,
           max_tokens: 100,
         });
-        
+
         let comment = response.choices[0].message.content.trim().replace(/^"/, '').replace(/"$/, '');
         if (validateComment(comment)) {
           return comment;
         }
-        
+
         console.warn(`[AI] Comment validation failed ("${comment}"). Retries left: ${retries - 1}`);
         retries--;
       } catch (err) {
-        if (err.message.includes('429') && retries > 1) {
+        if ((err.status === 429 || err.message.includes('429')) && retries > 1) {
           console.warn(`[AI] Rate limited (429). Retrying in 5s...`);
           await new Promise(r => setTimeout(r, 5000));
           retries--;
           continue;
         }
-        if (err.message.includes('400') && retries > 1) {
+        if ((err.status === 400 || err.message.includes('400')) && retries > 1) {
           console.warn(`[AI] Bad request (400). Retrying...`);
           await new Promise(r => setTimeout(r, 2000));
           retries--;

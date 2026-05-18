@@ -42,9 +42,23 @@ function getDateKey(timeZone) {
 }
 
 async function runHourlyAutomation(options = {}) {
+  const engagementLikeTarget = Math.max(0, toInt(
+    options.engagementLikeTarget ?? process.env.AUTOMATION_ENGAGEMENT_LIKE_TARGET ?? process.env.AUTOMATION_ENGAGEMENT_LIKES_PER_HOUR,
+    5
+  ));
+  const engagementCommentTarget = Math.max(0, toInt(
+    options.engagementCommentTarget ?? process.env.AUTOMATION_ENGAGEMENT_COMMENT_TARGET ?? process.env.AUTOMATION_ENGAGEMENT_COMMENTS_PER_HOUR,
+    3
+  ));
   const maxPostsPerDay = Math.max(1, toInt(options.maxPostsPerDay ?? process.env.AUTOMATION_MAX_POSTS_PER_DAY, 10));
   const maxPostsPerRun = Math.max(0, toInt(options.maxPostsPerRun ?? process.env.AUTOMATION_MAX_POSTS_PER_RUN, 2));
-  const requestedEngagementCount = Math.max(0, toInt(options.engagementCount ?? process.env.AUTOMATION_ENGAGEMENTS_PER_HOUR, 2));
+  const requestedEngagementCount = Math.max(
+    0,
+    toInt(
+      options.engagementCount ?? process.env.AUTOMATION_ENGAGEMENTS_PER_HOUR,
+      engagementLikeTarget + engagementCommentTarget
+    )
+  );
   const engagementHardCap = Math.max(1, toInt(process.env.AUTOMATION_ENGAGEMENTS_HARD_CAP, 20));
   const engagementCount = Math.min(requestedEngagementCount, engagementHardCap);
   const timeZone = options.timeZone || process.env.AUTOMATION_TIMEZONE || 'Asia/Calcutta';
@@ -169,6 +183,8 @@ async function runHourlyAutomation(options = {}) {
         const result = await puppeteerService.runAutoEngagerSafe({
           count: engagementCount,
           niche: options.engagementNiche || 'all',
+          likeTarget: engagementLikeTarget,
+          commentTarget: engagementCommentTarget,
           minGapMs: engagementMinGapMs,
           maxGapMs: engagementMaxGapMs,
           commentChance,
@@ -188,6 +204,15 @@ async function runHourlyAutomation(options = {}) {
           success: true,
           message: `Completed ${executedTotal} engagements in a single session.`,
           startDelayMs,
+          targets: {
+            likes: engagementLikeTarget,
+            comments: engagementCommentTarget,
+          },
+          completed: {
+            likes: Math.max(0, toInt(result?.likesCompleted, 0)),
+            comments: Math.max(0, toInt(result?.commentsCompleted, 0)),
+          },
+          niche: result?.niche || options.engagementNiche || 'all',
         };
       } catch (err) {
         engagement = {
@@ -197,6 +222,10 @@ async function runHourlyAutomation(options = {}) {
           success: false,
           message: err.message,
           startDelayMs: 0,
+          targets: {
+            likes: engagementLikeTarget,
+            comments: engagementCommentTarget,
+          },
         };
       }
     } else {
@@ -207,6 +236,10 @@ async function runHourlyAutomation(options = {}) {
         success: false,
         message: 'Puppeteer engager unavailable in this runtime',
         startDelayMs: 0,
+        targets: {
+          likes: engagementLikeTarget,
+          comments: engagementCommentTarget,
+        },
       };
     }
   }

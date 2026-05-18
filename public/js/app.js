@@ -4,6 +4,7 @@ const state = {
   history: [],
   channels: [],
   engagements: [],
+  engagementSummary: null,
   lastExtracted: null,
   drafts: [],
   refreshTimer: null,
@@ -132,6 +133,7 @@ function bindEvents() {
   on('export-history-btn', 'click', exportHistoryJson);
   on('clear-history-btn', 'click', clearHistory);
   on('engage-btn', 'click', startEngager);
+  on('reset-engagement-guard-btn', 'click', resetEngagementGuard);
   on('clear-engagements-btn', 'click', clearEngagements);
   on('manual-refresh-btn', 'click', () => refreshAll({ force: true }));
   on('visual-mode-btn', 'click', handleVisualModeToggle);
@@ -174,7 +176,7 @@ function bindEvents() {
     syncEngageCountDisplay(event.target.value, 'dashboard');
   });
 
-  syncEngageCountDisplay(byId('engage-count-manual')?.value || byId('engage-count')?.value || '20');
+  syncEngageCountDisplay(byId('engage-count-manual')?.value || byId('engage-count')?.value || '5');
 
   on('queue-search', 'input', renderQueueList);
   on('queue-status-filter', 'change', renderQueueList);
@@ -1352,6 +1354,7 @@ async function loadEngagements() {
   try {
     const response = await apiRequest('/api/engagements');
     state.engagements = Array.isArray(response.engagements) ? response.engagements : [];
+    state.engagementSummary = response.summary || null;
     renderEngagements();
     renderEngagementAuditList();
   } catch (error) {
@@ -1416,28 +1419,65 @@ function renderEngagements() {
 
   const rows = normalized.filter((entry) => {
     if (!search) return true;
-    const haystack = `${entry.action} ${entry.url || ''} ${entry.comment || ''}`.toLowerCase();
+    const haystack = `${entry.action} ${entry.url || ''} ${entry.comment || ''} ${entry.niche || ''} ${entry.query || ''} ${entry.pinTitle || ''} ${entry.boardName || ''}`.toLowerCase();
     return haystack.includes(search);
   });
 
   const shownCount = rows.length;
   const latestTime = rows[0]?.when ? formatTime12h(rows[0].when) : 'None';
   const platformLabel = platform === 'x_twitter' ? 'X (Twitter)' : 'Pinterest';
+  const pinterestSummary = state.engagementSummary || null;
 
-  summary.innerHTML = `
-    <div class="mini-stat-card">
-      <div class="mini-stat-label">Platform</div>
-      <div class="mini-stat-value">${platformLabel}</div>
-    </div>
-    <div class="mini-stat-card">
-      <div class="mini-stat-label">Active (24h)</div>
-      <div class="mini-stat-value">${shownCount} Logs</div>
-    </div>
-    <div class="mini-stat-card">
-      <div class="mini-stat-label">Latest</div>
-      <div class="mini-stat-value">${latestTime}</div>
-    </div>
-  `;
+  if (platform === 'pinterest' && pinterestSummary) {
+    const guardText = pinterestSummary.guard?.active
+      ? `Paused until ${formatTime12h(pinterestSummary.guard.until)}`
+      : 'Ready';
+    summary.innerHTML = `
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Strategy</div>
+        <div class="mini-stat-value">${escHtml(pinterestSummary.strategyLabel || platformLabel)}</div>
+      </div>
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Hourly Target</div>
+        <div class="mini-stat-value">${escHtml(`${pinterestSummary.targets?.likeTarget || 0} likes / ${pinterestSummary.targets?.commentTarget || 0} comments`)}</div>
+      </div>
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Today</div>
+        <div class="mini-stat-value">${escHtml(`${pinterestSummary.today?.likes || 0} likes / ${pinterestSummary.today?.comments || 0} comments`)}</div>
+      </div>
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Last 24h</div>
+        <div class="mini-stat-value">${escHtml(`${pinterestSummary.last24h?.likes || 0} likes / ${pinterestSummary.last24h?.comments || 0} comments`)}</div>
+      </div>
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Guard</div>
+        <div class="mini-stat-value">${escHtml(guardText)}</div>
+      </div>
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Saves</div>
+        <div class="mini-stat-value">${pinterestSummary.noSaves ? 'Disabled' : 'Enabled'}</div>
+      </div>
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Latest</div>
+        <div class="mini-stat-value">${latestTime}</div>
+      </div>
+    `;
+  } else {
+    summary.innerHTML = `
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Platform</div>
+        <div class="mini-stat-value">${platformLabel}</div>
+      </div>
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Active (24h)</div>
+        <div class="mini-stat-value">${shownCount} Logs</div>
+      </div>
+      <div class="mini-stat-card">
+        <div class="mini-stat-label">Latest</div>
+        <div class="mini-stat-value">${latestTime}</div>
+      </div>
+    `;
+  }
 
   if (!rows.length) {
     list.innerHTML = '<div class="pulse-item">No logs found in the last 24 hours.</div>';
@@ -1451,7 +1491,8 @@ function renderEngagements() {
       const whenAgo = formatTimeAgo(entry.when);
       const actionText = String(entry.action || 'Engagement');
       const actionIcon = getEngagementActionIcon(actionText);
-      
+      const detailParts = [entry.pinTitle, entry.boardName, entry.query].filter(Boolean).map(escHtml);
+      const detailHtml = detailParts.length ? `<div class="audit-meta">${detailParts.join(' • ')}</div>` : '';
       const noteHtml = entry.comment ? `<div class="audit-note">"${escHtml(entry.comment)}"</div>` : '';
       const linkHtml = entry.url ? `<a class="pill-btn" href="${escAttr(entry.url)}" target="_blank" rel="noopener noreferrer">Open Link</a>` : '';
 
@@ -1467,6 +1508,7 @@ function renderEngagements() {
               <span class="audit-time-dot"></span>
               <span>${escHtml(when)}</span>
             </div>
+            ${detailHtml}
             ${noteHtml}
           </div>
           <div class="audit-actions">
@@ -1482,23 +1524,44 @@ function renderEngagements() {
 
 async function startEngager() {
   const button = byId('engage-btn');
-  const count = parseInt(byId('engage-count-manual')?.value || byId('engage-count')?.value || '20', 10);
-  const niche = byId('engage-niche')?.value || 'all';
+  const originalHtml = button?.innerHTML || 'Engage Bot';
+  const likeTarget = parseInt(byId('engage-count-manual')?.value || byId('engage-count')?.value || '5', 10);
+  const commentTarget = parseInt(byId('engage-comment-target')?.value || '3', 10);
+  const niche = byId('engage-niche')?.value || 'mens_outfits';
 
   button.disabled = true;
-  button.textContent = 'Firing...';
+  button.innerHTML = '<i data-lucide="loader-2" class="btn-icon animate-spin"></i><span>Firing...</span>';
+  hydrateIcons();
   try {
     const response = await apiRequest('/api/engage', {
       method: 'POST',
-      body: { count, niche },
+      body: { likeTarget, commentTarget, niche },
     });
     showToast(response.message || 'Booster started.', 'success');
-    await renderEngagementAuditList();
+    await loadEngagements();
   } catch (error) {
     showToast(error.message || 'Booster failed to start.', 'error');
   } finally {
     button.disabled = false;
-    button.textContent = 'Engage Bot';
+    button.innerHTML = originalHtml;
+    hydrateIcons();
+  }
+}
+
+async function resetEngagementGuard() {
+  const button = byId('reset-engagement-guard-btn');
+  if (button) button.disabled = true;
+  try {
+    const response = await apiRequest('/api/engagements/reset-state', {
+      method: 'POST',
+      body: { resetDaily: false },
+    });
+    showToast(response.message || 'Engagement guard reset.', 'success');
+    await loadEngagements();
+  } catch (error) {
+    showToast(error.message || 'Failed to reset engagement guard.', 'error');
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -1508,7 +1571,9 @@ async function clearEngagements() {
     const response = await apiRequest('/api/engagements', { method: 'DELETE' });
     showToast(response.message || 'Engagement logs cleared.', 'success');
     state.engagements = [];
+    state.engagementSummary = null;
     renderEngagements();
+    renderEngagementAuditList();
   } catch (error) {
     showToast(error.message || 'Failed to clear engagement logs.', 'error');
   }
@@ -2027,8 +2092,16 @@ function normalizeEngagementEntry(entry = {}) {
     action: String(entry.action || 'Viewed'),
     url: String(entry.url || ''),
     comment: String(entry.comment || ''),
+    niche: String(entry.niche || ''),
+    query: String(entry.query || ''),
+    pinTitle: String(entry.pinTitle || ''),
+    boardName: String(entry.boardName || ''),
     command: commandRaw || (source === 'github_actions' ? 'node scripts/run-hourly-automation.js' : 'manual engager'),
-    workflow: workflowRaw || (source === 'github_actions' ? 'instant-engagement.yml' : ''),
+    workflow: workflowRaw || (
+      source === 'github_actions'
+        ? (commandRaw.includes('run-hourly-automation.js') ? 'hourly-automation.yml' : 'instant-engagement.yml')
+        : ''
+    ),
     source,
     actor: String(entry.actor || ''),
     runId: String(entry.runId || ''),
@@ -2041,8 +2114,10 @@ function normalizeEngagementEntry(entry = {}) {
 
 function getEngagementActionIcon(action) {
   const lower = String(action || '').toLowerCase();
+  if (lower.includes('dispatch')) return 'rocket';
   if (lower.includes('like')) return 'heart';
   if (lower.includes('comment')) return 'message-circle';
+  if (lower.includes('reset')) return 'shield-check';
   if (lower.includes('follow')) return 'user-plus';
   if (lower.includes('post')) return 'send';
   if (lower.includes('extract')) return 'scissors';
@@ -2401,6 +2476,7 @@ function getAutosaveFieldIds() {
     'ig-session-cookie',
     'engage-niche',
     'engage-count-manual',
+    'engage-comment-target',
     'x-engage-count',
     'new-channel-input',
   ];

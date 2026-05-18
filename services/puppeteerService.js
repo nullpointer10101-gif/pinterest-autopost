@@ -1339,95 +1339,337 @@ async function createPinWithBot(pinData) {
 }
 
 
-function isPinRelevant(title, description, boardName = '', fallbackMode = false, targetNiche = 'all') {
+function normalizePinUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return raw.split('#')[0].split('?')[0];
+  }
+}
+
+function normalizePinterestEngagementNiche(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'mens_streetwear') return 'mens_streetwear';
+  if (raw === 'mens_formal') return 'mens_formal';
+  if (raw === 'fashion' || raw === 'all' || raw === 'menswear' || raw === 'mens' || raw === 'men') return 'mens_outfits';
+  return 'mens_outfits';
+}
+
+function getPinterestEngagementTargets(options = {}) {
+  const likeTarget = Math.max(
+    1,
+    toInt(options.likeTarget ?? options.likesTarget ?? process.env.AUTOMATION_ENGAGEMENT_LIKE_TARGET ?? process.env.AUTOMATION_ENGAGEMENT_LIKES_PER_HOUR, 5)
+  );
+  const commentTarget = Math.max(
+    0,
+    toInt(options.commentTarget ?? options.commentsTarget ?? process.env.AUTOMATION_ENGAGEMENT_COMMENT_TARGET ?? process.env.AUTOMATION_ENGAGEMENT_COMMENTS_PER_HOUR, 3)
+  );
+  return {
+    likeTarget,
+    commentTarget,
+    totalTarget: likeTarget + commentTarget,
+  };
+}
+
+function getEngagementDateKey(timeZone = 'Asia/Calcutta') {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === 'year')?.value || '1970';
+  const month = parts.find((part) => part.type === 'month')?.value || '01';
+  const day = parts.find((part) => part.type === 'day')?.value || '01';
+  return `${year}-${month}-${day}`;
+}
+
+function prepareEngagementAutomationState(automationState = {}, timeZone = 'Asia/Calcutta') {
+  const engagementDateKey = getEngagementDateKey(timeZone);
+  const normalizedUrls = Array.from(new Set(
+    (Array.isArray(automationState.engagedUrls) ? automationState.engagedUrls : [])
+      .map(normalizePinUrl)
+      .filter(Boolean)
+  ));
+  const trimmedUrls = normalizedUrls.slice(-600);
+  const changed = trimmedUrls.length !== normalizedUrls.length
+    || trimmedUrls.length !== (Array.isArray(automationState.engagedUrls) ? automationState.engagedUrls.length : 0)
+    || automationState.engagementDateKey !== engagementDateKey
+    || (automationState.savesToday || 0) !== 0;
+
+  const nextState = {
+    ...automationState,
+    engagedUrls: automationState.engagementDateKey === engagementDateKey ? trimmedUrls : trimmedUrls.slice(-120),
+    engagementDateKey,
+    likesToday: automationState.engagementDateKey === engagementDateKey ? (automationState.likesToday || 0) : 0,
+    commentsToday: automationState.engagementDateKey === engagementDateKey ? (automationState.commentsToday || 0) : 0,
+    savesToday: 0,
+  };
+
+  return { changed, nextState };
+}
+
+function pickRandomItem(items, fallback = '') {
+  if (!Array.isArray(items) || items.length === 0) return fallback;
+  return items[randomInt(0, items.length - 1)];
+}
+
+function getMensEngagementQueries(targetNiche) {
+  if (targetNiche === 'mens_streetwear') {
+    return [
+      'mens streetwear outfit',
+      'mens sneakers outfit',
+      'oversized mens outfit',
+      'men casual street style',
+      'urban menswear outfit',
+      'mens layered outfit',
+    ];
+  }
+
+  if (targetNiche === 'mens_formal') {
+    return [
+      'mens formal outfit',
+      'mens blazer outfit',
+      'mens business casual outfit',
+      'mens suit inspiration',
+      'mens loafers outfit',
+      'smart casual men style',
+    ];
+  }
+
+  return [
+    'mens outfit inspiration',
+    'mens casual outfit',
+    'mens fashion outfit',
+    'mens style guide',
+    'menswear outfit ideas',
+    'mens smart casual outfit',
+  ];
+}
+
+function buildPinterestSearchUrl(query) {
+  return `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(query)}&rs=typed`;
+}
+
+async function openRandomEngagementSearch(page, queries, reason = 'refresh') {
+  const query = pickRandomItem(queries, queries[0] || 'mens outfit inspiration');
+  const url = buildPinterestSearchUrl(query);
+  console.log(`[Bot] Loading ${reason} search feed: ${query}`);
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+  return { query, url };
+}
+
+async function collectVisiblePinLinks(page) {
+  return page.evaluate(() => {
+    const rawLinks = Array.from(document.querySelectorAll('a[href*="/pin/"]'))
+      .map((anchor) => anchor.href)
+      .filter(Boolean);
+    return Array.from(new Set(rawLinks))
+      .filter((link) => !link.includes('/pin/pin-builder/'))
+      .map((link) => link.split('#')[0]);
+  });
+}
+
+async function extractPinSnapshot(page) {
+  return page.evaluate(() => {
+    const titleCandidates = Array.from(document.querySelectorAll('h1, [data-test-id="pinTitle"]'));
+    let title = '';
+    for (const element of titleCandidates) {
+      const text = element.innerText ? element.innerText.trim() : '';
+      if (text && text !== 'Pinterest' && text !== 'Explore') {
+        title = text;
+        break;
+      }
+    }
+
+    const descCandidates = Array.from(document.querySelectorAll('[data-test-id="pin-description-text"], .TP9, ._8n, [data-test-id="pinDescription"]'));
+    const desc = descCandidates
+      .map((element) => element.innerText ? element.innerText.trim() : '')
+      .filter(Boolean)
+      .join(' ');
+
+    const imageAltText = Array.from(document.querySelectorAll('img[src*="pinimg"]'))
+      .map((image) => image.alt || '')
+      .filter(Boolean)
+      .join(' ');
+
+    const boardText = Array.from(document.querySelectorAll('a[href*="/board/"], [data-test-id="board-title"], [data-test-id="board-name"], [data-test-id="SaveButton"]'))
+      .map((element) => element.innerText ? element.innerText.trim() : '')
+      .filter((text) => text && !['Save', 'Saved', 'Profile'].includes(text))
+      .join(' ');
+
+    const fallbackTitle = document.querySelector('meta[property="og:title"]')?.content || '';
+    const fallbackDesc = document.querySelector('meta[property="og:description"]')?.content || '';
+
+    return {
+      title: (title || fallbackTitle || '').trim(),
+      desc: `${desc} ${imageAltText} ${fallbackDesc}`.trim(),
+      comments: document.querySelectorAll('[data-test-id="comment-container"]').length,
+      boardName: boardText.trim(),
+    };
+  });
+}
+
+async function clickLikeOnPin(page) {
+  const selectors = [
+    'button[aria-label="React"]',
+    'button[aria-label="react"]',
+    'button[data-test-id="pin-rep-reaction-button"]',
+  ];
+
+  for (const selector of selectors) {
+    const button = await page.$(selector);
+    if (!button) continue;
+    await button.click();
+    return true;
+  }
+
+  return false;
+}
+
+async function submitCommentOnPin(page, commentText, loadMultiplier = 1) {
+  const openSelectors = [
+    'button[aria-label="Comments"]',
+    '[data-test-id="community-comment-button"]',
+  ];
+  let opened = false;
+  for (const selector of openSelectors) {
+    const button = await page.$(selector);
+    if (!button) continue;
+    await button.click();
+    opened = true;
+    break;
+  }
+
+  if (!opened) return false;
+
+  await sleep(1500 * loadMultiplier);
+
+  const boxSelectors = [
+    'div[aria-label="Add a comment"]',
+    '[data-test-id="comment-composer"]',
+    'input[placeholder="Add a comment"]',
+    '[data-test-id="comment-input-box"]',
+    'textarea',
+  ];
+
+  let commentBox = null;
+  for (const selector of boxSelectors) {
+    commentBox = await page.$(selector);
+    if (commentBox) break;
+  }
+  if (!commentBox) return false;
+
+  await commentBox.click();
+  await sleep(randomInt(1000, 2000));
+  await page.keyboard.type(commentText, { delay: randomInt(80, 180) });
+  await sleep(randomInt(800, 1800));
+
+  const submitSelectors = [
+    'button[aria-label="Post"]',
+    '[data-test-id="comment-submit-button"]',
+    'button[data-test-id="done-button"]',
+  ];
+
+  for (const selector of submitSelectors) {
+    const button = await page.$(selector);
+    if (!button) continue;
+    const disabled = await page.evaluate((element) => !!element.disabled, button);
+    if (disabled) continue;
+    await button.click();
+    await sleep(randomInt(3500, 6500) * loadMultiplier);
+    return true;
+  }
+
+  return false;
+}
+
+function isPinRelevant(title, description, boardName = '', fallbackMode = false, targetNiche = 'mens_outfits') {
+  const normalizedNiche = normalizePinterestEngagementNiche(targetNiche);
   const text = `${title} ${description}`.toLowerCase();
-  const boardText = (boardName || '').toLowerCase();
-  
-  // STEP 1: Blacklist is the only hard reject
-  const baseBlacklist = [
+  const boardText = String(boardName || '').toLowerCase();
+  const combined = `${text} ${boardText}`;
+
+  const blacklist = [
     'women', 'woman', 'female', 'girl', 'girls', 'ladies', 'lady', 'feminine', 'she', 'her', 'hers', 'womens', 'womenswear', 'bridal', 'bride',
     'recipe', 'food', 'cooking', 'baking', 'meal', 'dinner', 'lunch', 'breakfast', 'dessert', 'cake',
     'makeup', 'lipstick', 'nail', 'mascara', 'blush', 'foundation', 'contour', 'lashes',
     'kids', 'children', 'baby', 'toddler', 'infant', 'nursery',
-    'pets', 'cat', 'dog'
+    'pets', 'cat', 'dog',
+    'home decor', 'interior design', 'kitchen', 'bathroom', 'living room', 'bedroom',
   ];
-  
-  // Add niche-specific blacklists
-  let blacklisted = [...baseBlacklist];
-  if (targetNiche === 'fashion') {
-      blacklisted.push('decor', 'interior', 'home', 'room', 'bedroom', 'living room', 'kitchen', 'bathroom', 'furniture', 'diy', 'craft', 'car', 'vehicle', 'tech', 'software');
-  } else if (targetNiche === 'home') {
-      blacklisted.push('outfit', 'streetwear', 'menswear', 'suit', 'blazer', 'sneakers', 'grooming', 'beard', 'cologne');
+
+  if (blacklist.some((word) => combined.includes(word))) {
+    return { relevant: false, reason: 'blacklisted', subNiche: 'casual', matchCount: 0 };
   }
 
-  if (blacklisted.some(word => text.includes(word) || boardText.includes(word))) return { relevant: false, reason: 'blacklisted' };
+  const menKeywords = ['men', 'man', 'male', 'guy', 'gentleman', 'menswear', 'mensstyle', 'mens', 'dapper', 'him'];
+  const outfitKeywords = ['outfit', 'style', 'fashion', 'look', 'wardrobe', 'streetwear', 'blazer', 'suit', 'chinos', 'sneakers', 'loafers', 'tailored', 'casual', 'smart casual', 'fit', 'ootd'];
+  const streetwearKeywords = ['streetwear', 'oversized', 'sneakers', 'urban', 'layered', 'hoodie', 'cargo', 'baggy'];
+  const formalKeywords = ['formal', 'suit', 'blazer', 'tailored', 'business casual', 'loafers', 'dress shoes', 'sharp'];
+  const strongIdentifiers = ['menswear', 'mensstyle', 'outfit', 'streetwear', 'blazer', 'suit', 'smart casual', 'dapper'];
 
-  // STEP 2: Strict filtering based on niche
-  if (targetNiche === 'fashion') {
-      const fashionRelatedWords = ['outfit', 'look', 'style', 'fit', 'drip', 'fashion', 'wear', 'wardrobe', 'clothing', 'apparel', 'dressed', 'ootd', 'blazer', 'suit', 'chinos', 'sneakers', 'streetwear', 'menswear', 'dapper', 'grooming', 'beard', 'fade', 'cologne', 'loafers', 'oxford', 'tailored', 'aesthetic'];
-      const menKeywords = ['men', 'man', 'male', 'guy', 'gentleman', 'menswear', 'mensstyle', 'outfit men', 'style men', 'fashion men', 'masculine', 'bro', 'him', 'mens'];
+  const hasMenKeyword = menKeywords.some((word) => combined.includes(word));
+  const hasOutfitKeyword = outfitKeywords.some((word) => combined.includes(word));
+  const hasStreetwearKeyword = streetwearKeywords.some((word) => combined.includes(word));
+  const hasFormalKeyword = formalKeywords.some((word) => combined.includes(word));
 
-      const hasMenKeyword = menKeywords.some(w => text.includes(w) || boardText.includes(w));
-      const hasFashionKeyword = fashionRelatedWords.some(w => text.includes(w) || boardText.includes(w));
-
-      if (!hasMenKeyword || !hasFashionKeyword) {
-          const strictFashionWords = ['menswear', 'dapper', 'chinos', 'blazer', 'loafers', 'streetwear', 'mensstyle', 'ootd', 'outfit', 'suit'];
-          const hasStrictFashion = strictFashionWords.some(w => text.includes(w) || boardText.includes(w));
-          
-          if (fallbackMode && hasStrictFashion) {
-              // Allowed through fallback
-          } else {
-              return { relevant: false, reason: 'missing strict mens or fashion identifiers' };
-          }
-      }
-  } else if (targetNiche === 'home') {
-      const homeKeywords = ['decor', 'interior', 'home', 'room', 'bedroom', 'living room', 'kitchen', 'bathroom', 'furniture', 'diy', 'craft', 'design', 'architecture', 'renovation', 'apartment', 'house'];
-      const hasHomeKeyword = homeKeywords.some(w => text.includes(w) || boardText.includes(w));
-      if (!hasHomeKeyword && !fallbackMode) {
-          return { relevant: false, reason: 'missing home identifiers' };
-      }
-  }
-
-  // STEP 3: Sub-niche detection
-  const subNiches = {
-    casual: ['streetwear', 'casual', 'everyday', 'weekend', 'relaxed'],
-    formal: ['suit', 'tuxedo', 'blazer', 'formal', 'business', 'dapper', 'sharp'],
-    streetwear: ['sneakers', 'hypebeast', 'urban', 'hype', 'drops'],
-    smart_casual: ['chinos', 'oxford', 'loafers', 'smart casual', 'business casual'],
-    seasonal: ['summer', 'winter', 'fall', 'spring'],
-    grooming: ['beard', 'haircut', 'hairstyle', 'fade', 'lineup', 'grooming'],
-    accessories: ['watch', 'chain', 'belt', 'sunglasses', 'rings'],
-    luxury: ['designer', 'gucci', 'louis vuitton', 'luxury'],
-    athletic: ['gym', 'athletic', 'workout'],
-    cultural: ['korean', 'italian', 'african', 'japan']
-  };
-
-  let detectedSubNiche = 'casual';
-  let matchCount = 0;
-  for (const [niche, keywords] of Object.entries(subNiches)) {
-    let hits = keywords.filter(k => text.includes(k) || boardText.includes(k)).length;
-    if (hits > 0) {
-      if (hits > matchCount) {
-        matchCount = hits;
-        detectedSubNiche = niche;
-      }
+  if (!hasMenKeyword || !hasOutfitKeyword) {
+    const fallbackPass = fallbackMode && strongIdentifiers.some((word) => combined.includes(word));
+    if (!fallbackPass) {
+      return { relevant: false, reason: 'missing mens outfit identifiers', subNiche: 'casual', matchCount: 0 };
     }
   }
 
-  if (fallbackMode && targetNiche === 'fashion' && (!hasMenKeyword || !hasFashionKeyword)) {
-      return { relevant: true, subNiche: detectedSubNiche, matchCount: 1, reason: 'fallback_mode' };
+  if (normalizedNiche === 'mens_streetwear' && !hasStreetwearKeyword && !fallbackMode) {
+    return { relevant: false, reason: 'missing streetwear identifiers', subNiche: 'streetwear', matchCount: 0 };
   }
 
-  return { relevant: true, subNiche: detectedSubNiche, matchCount, reason: 'matched' };
+  if (normalizedNiche === 'mens_formal' && !hasFormalKeyword && !fallbackMode) {
+    return { relevant: false, reason: 'missing formal identifiers', subNiche: 'formal', matchCount: 0 };
+  }
+
+  const subNiches = {
+    casual: ['casual', 'everyday', 'weekend', 'relaxed'],
+    formal: ['formal', 'suit', 'tuxedo', 'blazer', 'business', 'dapper', 'sharp'],
+    streetwear: ['streetwear', 'sneakers', 'hype', 'urban', 'oversized', 'cargo'],
+    smart_casual: ['chinos', 'oxford', 'loafers', 'smart casual', 'business casual'],
+    seasonal: ['summer', 'winter', 'fall', 'spring'],
+    grooming: ['beard', 'haircut', 'hairstyle', 'fade', 'grooming'],
+    accessories: ['watch', 'chain', 'belt', 'sunglasses', 'rings'],
+    athletic: ['gym', 'athletic', 'workout'],
+  };
+
+  let detectedSubNiche = normalizedNiche === 'mens_formal'
+    ? 'formal'
+    : normalizedNiche === 'mens_streetwear'
+      ? 'streetwear'
+      : 'casual';
+  let matchCount = 0;
+
+  for (const [niche, keywords] of Object.entries(subNiches)) {
+    const hits = keywords.filter((keyword) => combined.includes(keyword)).length;
+    if (hits > matchCount) {
+      matchCount = hits;
+      detectedSubNiche = niche;
+    }
+  }
+
+  return { relevant: true, subNiche: detectedSubNiche, matchCount, reason: fallbackMode ? 'fallback_mode' : 'matched' };
 }
 
 function scorePin(pinData, matchCount) {
   let score = 0;
-  if (pinData.saves > 50) score += 20;
-  if (pinData.desc && pinData.desc.split(' ').length > 30) score += 15;
+  if (pinData.title) score += 15;
+  if (pinData.desc && pinData.desc.split(' ').length > 20) score += 15;
   if (pinData.comments > 0) score += 10;
-  if (matchCount >= 2) score += 10;
-  if (!pinData.desc || pinData.desc.trim().length === 0) score -= 20;
+  if (pinData.boardName) score += 10;
+  if (matchCount >= 2) score += 12;
+  if (!pinData.desc || pinData.desc.trim().length === 0) score -= 15;
   return score;
 }
 
@@ -1435,25 +1677,43 @@ async function runAutoEngagerSafe(options = {}) {
   const sessionCookie = await getActiveSessionCookie();
   if (!sessionCookie) throw new Error('PINTEREST_SESSION_COOKIE is missing. Link a session in Settings.');
   const context = resolveEngagementContext(options.context || {});
+  const timeZone = process.env.AUTOMATION_TIMEZONE || 'Asia/Calcutta';
+  const targets = getPinterestEngagementTargets(options);
+  const targetNiche = normalizePinterestEngagementNiche(options.niche || process.env.AUTOMATION_ENGAGEMENT_NICHE || 'mens_outfits');
+  const searchQueries = getMensEngagementQueries(targetNiche);
 
-  const automationState = await historyService.getAutomationState();
-  let { likesToday = 0, commentsToday = 0, savesToday = 0, engagedUrls = [], circuitBreaker } = automationState;
-  
+  let automationState = await historyService.getAutomationState();
+  const preparedState = prepareEngagementAutomationState(automationState, timeZone);
+  if (preparedState.changed) {
+    automationState = await historyService.setAutomationState(preparedState.nextState);
+  } else {
+    automationState = preparedState.nextState;
+  }
+
+  let { likesToday = 0, commentsToday = 0, engagedUrls = [], circuitBreaker } = automationState;
+
   if (circuitBreaker && new Date(circuitBreaker).getTime() > Date.now()) {
     console.log(`[Bot] Circuit breaker active until ${new Date(circuitBreaker).toLocaleString()}. Skipping engagement.`);
-    return { success: false, message: 'Circuit breaker active.' };
+    return { success: false, message: 'Circuit breaker active.', likesCompleted: 0, commentsCompleted: 0, niche: targetNiche };
   }
 
   const DAILY_MAX_LIKES = 25;
   const DAILY_MAX_COMMENTS = 12;
-  const DAILY_MAX_SAVES = 8;
-  
+
   if (likesToday >= DAILY_MAX_LIKES && commentsToday >= DAILY_MAX_COMMENTS) {
     console.log('[Bot] Daily hard caps reached. Exiting.');
-    return { success: true, message: 'Daily caps reached.' };
+    return {
+      success: true,
+      message: 'Daily caps reached.',
+      likesCompleted: 0,
+      commentsCompleted: 0,
+      likeTarget: targets.likeTarget,
+      commentTarget: targets.commentTarget,
+      niche: targetNiche,
+    };
   }
 
-  console.log(`[Bot] Starting strict hourly engagement mode.`);
+  console.log(`[Bot] Starting Pinterest engagement profile for ${targetNiche}: ${targets.likeTarget} likes, ${targets.commentTarget} comments, 0 saves.`);
 
   const browser = await puppeteer.launch({
     headless: 'new',
@@ -1462,262 +1722,203 @@ async function runAutoEngagerSafe(options = {}) {
 
   try {
     const page = await browser.newPage();
-    page.on('console', msg => { if (!msg.text().includes('Failed to load resource')) console.log(`[Bot-Browser] ${msg.text()}`); });
+    page.on('console', (msg) => {
+      if (!msg.text().includes('Failed to load resource')) {
+        console.log(`[Bot-Browser] ${msg.text()}`);
+      }
+    });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
     await page.setCookie({ name: '_pinterest_sess', value: sessionCookie, domain: '.pinterest.com', path: '/', secure: true, httpOnly: true });
-
-    const targetNiche = options.niche || 'all';
-    let targetBoards = ["Men's Style Guide", "Gentleman's Wardrobe", "Streetwear Men", "Suits and Formal Men", "Men's Outfits", "Menswear Inspiration"];
-    
-    if (targetNiche === 'home') {
-      targetBoards = ["Home Decor", "Interior Design", "Living Room Ideas", "Minimalist Home", "Cozy Bedroom"];
-    } else if (targetNiche === 'all') {
-      targetBoards = [...targetBoards, "Home Decor", "Interior Design", "Tech Gadgets", "Luxury Cars"];
-    }
-    let feedUrl = 'https://www.pinterest.com/homefeed/';
-    
-    // 60% home feed, 40% direct board
-    if (Math.random() < 0.4) {
-      const board = targetBoards[Math.floor(Math.random() * targetBoards.length)];
-      feedUrl = `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(board)}`;
-      console.log(`[Bot] Routing to specific board search: ${board}`);
-    } else {
-      console.log(`[Bot] Routing to home feed.`);
-    }
-
-    await page.goto(feedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
 
     let hourlyLikes = 0;
     let hourlyComments = 0;
     let cycle = 0;
-    const maxCycles = 50; 
     let loadMultiplier = 1;
+    const maxCycles = Math.max(36, targets.totalTarget * 10);
+    const seenThisSession = new Set((Array.isArray(engagedUrls) ? engagedUrls : []).map(normalizePinUrl).filter(Boolean));
+    let { query: activeQuery, url: activeFeedUrl } = await openRandomEngagementSearch(page, searchQueries, 'initial');
 
-    // The session is complete ONLY when BOTH minimums are true (unless hard caps hit).
-    while ((hourlyLikes < 5 || hourlyComments < 3) && cycle < maxCycles) {
-      cycle++;
-      
-      if (likesToday >= DAILY_MAX_LIKES && commentsToday >= DAILY_MAX_COMMENTS) {
-          console.log('[Bot] Daily caps hit mid-session.');
-          break;
+    while ((hourlyLikes < targets.likeTarget || hourlyComments < targets.commentTarget) && cycle < maxCycles) {
+      cycle += 1;
+
+      if (cycle > 1 && cycle % 4 === 0) {
+        const nextSearch = await openRandomEngagementSearch(page, searchQueries, 'rotation');
+        activeQuery = nextSearch.query;
+        activeFeedUrl = nextSearch.url;
       }
 
-      console.log(`[Bot] Target Loop ${cycle} | Hourly: ${hourlyLikes}/5 Likes, ${hourlyComments}/3 Comments`);
+      if (likesToday >= DAILY_MAX_LIKES && commentsToday >= DAILY_MAX_COMMENTS) {
+        console.log('[Bot] Daily caps hit mid-session.');
+        break;
+      }
 
-      const pinLinks = await page.evaluate(() => {
-        const links = Array.from(document.querySelectorAll('a[href*="/pin/"]')).map(a => a.href);
-        return [...new Set(links)].filter(l => !l.includes('/pin/pin-builder/'));
-      });
+      console.log(`[Bot] Loop ${cycle} | Likes ${hourlyLikes}/${targets.likeTarget} | Comments ${hourlyComments}/${targets.commentTarget} | Query "${activeQuery}"`);
 
-      const unengagedLinks = pinLinks.filter(l => !engagedUrls.some(e => l.includes(e)));
+      const pinLinks = await collectVisiblePinLinks(page);
+      const freshLinks = pinLinks.filter((link) => !seenThisSession.has(normalizePinUrl(link)));
 
-      if (!unengagedLinks.length) {
-        console.log('[Bot] No fresh pins found, scrolling deeper...');
-        await page.evaluate(() => window.scrollBy(0, 1500));
-        await sleep(randomInt(3000, 5000) * loadMultiplier);
-        
-        if (cycle > 5 && cycle % 3 === 0) {
-            console.log('[Bot] Mid-session route switch to find more pins...');
-            const board = targetBoards[Math.floor(Math.random() * targetBoards.length)];
-            await page.goto(`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(board)}`, { waitUntil: 'networkidle2', timeout: 45000 });
-            await sleep(5000 * loadMultiplier);
+      if (!freshLinks.length) {
+        console.log('[Bot] No fresh mens-outfit pins visible. Scrolling...');
+        await page.evaluate(() => window.scrollBy(0, 1800));
+        await sleep(randomInt(2500, 5000) * loadMultiplier);
+        if (cycle % 3 === 0) {
+          const nextSearch = await openRandomEngagementSearch(page, searchQueries, 're-seed');
+          activeQuery = nextSearch.query;
+          activeFeedUrl = nextSearch.url;
         }
         continue;
       }
 
-      const randomPin = unengagedLinks[randomInt(0, unengagedLinks.length - 1)];
-      console.log(`[Bot] Viewing pin: ${randomPin}`);
-      
+      const randomPin = pickRandomItem(freshLinks);
+      const normalizedPin = normalizePinUrl(randomPin);
+      seenThisSession.add(normalizedPin);
+      console.log(`[Bot] Viewing pin: ${normalizedPin}`);
+
       const loadStart = Date.now();
       const response = await page.goto(randomPin, { waitUntil: 'networkidle2', timeout: 45000 });
       if (response && response.status() === 429) {
-          console.log('[Bot] HTTP 429 Too Many Requests detected. Triggering 2-hour circuit breaker.');
-          await historyService.setAutomationState({ ...automationState, circuitBreaker: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() });
-          break;
+        console.log('[Bot] HTTP 429 Too Many Requests detected. Triggering 2-hour circuit breaker.');
+        automationState = await historyService.setAutomationState({
+          ...automationState,
+          likesToday,
+          commentsToday,
+          engagedUrls,
+          circuitBreaker: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        });
+        break;
       }
-      
+
       if (Date.now() - loadStart > 8000) {
-          console.log('[Bot] Page loaded slowly, increasing delays by 50%.');
-          loadMultiplier = 1.5;
+        console.log('[Bot] Page loaded slowly, increasing delays by 50%.');
+        loadMultiplier = 1.5;
       }
 
-      // Check for login redirect / cookie expiration
-      if ((await page.url()).includes('login')) {
-          console.log('[Bot] Redirected to login. Session cookie expired. Triggering circuit breaker.');
-          await historyService.setAutomationState({ ...automationState, circuitBreaker: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
-          break;
+      const currentUrl = await page.url();
+      if (currentUrl.includes('login')) {
+        console.log('[Bot] Redirected to login. Session cookie expired. Triggering circuit breaker.');
+        automationState = await historyService.setAutomationState({
+          ...automationState,
+          likesToday,
+          commentsToday,
+          engagedUrls,
+          circuitBreaker: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        });
+        break;
       }
 
-      await sleep(randomInt(2000, 5000) * loadMultiplier); // Read time
+      await sleep(randomInt(2000, 4500) * loadMultiplier);
 
-      const pinData = await page.evaluate(() => {
-        const titleEls = document.querySelectorAll('h1, [data-test-id="pinTitle"]');
-        let title = '';
-        for (const el of titleEls) {
-          if (el.innerText && el.innerText.trim() !== 'Pinterest' && el.innerText.trim() !== 'Explore') {
-            title = el.innerText.trim();
-            break;
-          }
-        }
-        
-        const descEls = document.querySelectorAll('[data-test-id="pin-description-text"], .TP9, ._8n, [data-test-id="pinDescription"]');
-        let desc = '';
-        for (const el of descEls) {
-          if (el.innerText && el.innerText.trim() !== '') {
-            desc += ' ' + el.innerText.trim();
-          }
-        }
-        
-        const images = document.querySelectorAll('img[src*="pinimg"]');
-        for (const img of images) {
-          if (img.alt) desc += ' ' + img.alt;
-        }
-
-        const comments = document.querySelectorAll('[data-test-id="comment-container"]').length;
-        
-        const boardEls = document.querySelectorAll('a[href*="/board/"], [data-test-id="board-title"], [data-test-id="board-name"], [data-test-id="SaveButton"]');
-        let boardName = '';
-        for (const el of boardEls) {
-            const txt = el.innerText ? el.innerText.trim() : '';
-            if (txt && !['Save', 'Saved', 'Profile'].includes(txt)) {
-                boardName += ' ' + txt;
-            }
-        }
-        
-        if (!title) {
-            title = document.querySelector('meta[property="og:title"]')?.content || '';
-        }
-        if (!desc.trim()) {
-            desc += ' ' + (document.querySelector('meta[property="og:description"]')?.content || '');
-        }
-
-        return { title: title.trim(), desc: desc.trim(), saves: 0, comments, boardName: boardName.trim() };
-      });
-
-      console.log(`[Bot] Extracted -> Title: "${pinData.title}" | Desc: "${pinData.desc.substring(0, 50)}..." | Board: "${pinData.boardName}"`);
+      const pinData = await extractPinSnapshot(page);
+      console.log(`[Bot] Extracted -> Title: "${pinData.title}" | Desc: "${pinData.desc.substring(0, 70)}..." | Board: "${pinData.boardName}"`);
 
       const fallbackMode = cycle > 10;
       const relevancy = isPinRelevant(pinData.title, pinData.desc, pinData.boardName, fallbackMode, targetNiche);
       if (!relevancy.relevant) {
-        console.log(`[Bot] ⏭️ Skipped irrelevant pin: "${pinData.title}" Reason: ${relevancy.reason}`);
+        console.log(`[Bot] Skipped irrelevant pin: "${pinData.title}" Reason: ${relevancy.reason}`);
+        await page.goto(activeFeedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
         continue;
       }
 
       const score = scorePin(pinData, relevancy.matchCount);
-      const isUrgent = hourlyLikes < 5 || hourlyComments < 3;
-      if (score < 40 && !isUrgent && relevancy.reason !== 'fallback_mode') {
-          console.log(`[Bot] ⏭️ Skipped due to low score (${score}) and minimums are met.`);
-          continue;
+      if (score < 25 && !fallbackMode) {
+        console.log(`[Bot] Skipped low-quality pin (score ${score}).`);
+        await page.goto(activeFeedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+        continue;
       }
 
-      console.log(`[Bot] ✅ Pin relevant (Score: ${score}, Sub-niche: ${relevancy.subNiche}, Reason: ${relevancy.reason}). Engaging...`);
-
-      // 1. Like
       let liked = false;
-      if (likesToday < DAILY_MAX_LIKES && hourlyLikes < 5 || Math.random() > 0.5) {
-          try {
-            const reactionBtn = await page.$('button[aria-label="React"], button[aria-label="react"], button[data-test-id="pin-rep-reaction-button"]');
-            if (reactionBtn) {
-              await reactionBtn.click();
-              console.log('[Bot] ❤️ Liked pin');
-              liked = true;
-              hourlyLikes++;
-              likesToday++;
-              await sleep(randomInt(18000, 90000) * loadMultiplier); // Human delay 18-90s
-            }
-          } catch(e) {}
-      }
-
-      // 2. Comment
       let commented = false;
-      let theComment = '';
-      if (commentsToday < DAILY_MAX_COMMENTS && (hourlyComments < 3 || Math.random() > 0.5)) {
-          try {
-              console.log(`[Bot] Generating comment for sub-niche: ${relevancy.subNiche}`);
-              theComment = await aiService.generateEngagementComment({
-                  title: pinData.title,
-                  description: pinData.desc,
-                  subNiche: relevancy.subNiche
-              });
+      let generatedComment = '';
 
-              // Click comment box
-              const openBtn = await page.$('button[aria-label="Comments"], [data-test-id="community-comment-button"]');
-              if (openBtn) await openBtn.click();
-              await sleep(1500 * loadMultiplier);
-
-              const commentBox = await page.$('div[aria-label="Add a comment"], [data-test-id="comment-composer"], input[placeholder="Add a comment"], [data-test-id="comment-input-box"]');
-              if (commentBox) {
-                  await commentBox.click();
-                  await sleep(randomInt(1000, 2000));
-                  
-                  // Type with character delays 80-200ms
-                  await page.keyboard.type(theComment, { delay: randomInt(80, 200) });
-                  await sleep(randomInt(1000, 2000));
-                  
-                  const postBtn = await page.$('button[aria-label="Post"], [data-test-id="comment-submit-button"], button[data-test-id="done-button"]');
-                  if (postBtn && !(await page.evaluate(el => el.disabled, postBtn))) {
-                      await postBtn.click();
-                      await sleep(randomInt(4000, 7000));
-                      console.log(`[Bot] 💬 Commented: "${theComment}"`);
-                      commented = true;
-                      hourlyComments++;
-                      commentsToday++;
-                      await sleep(randomInt(45000, 120000) * loadMultiplier); // Human delay 45-120s
-                  }
-              }
-          } catch(e) {}
+      if (hourlyLikes < targets.likeTarget && likesToday < DAILY_MAX_LIKES) {
+        try {
+          liked = await clickLikeOnPin(page);
+          if (liked) {
+            hourlyLikes += 1;
+            likesToday += 1;
+            console.log('[Bot] Liked pin.');
+            await sleep(randomInt(8000, 18000) * loadMultiplier);
+          }
+        } catch (err) {
+          console.warn('[Bot] Like action failed:', err.message);
+        }
       }
 
-      // 3. Save (optional)
-      let saved = false;
-      if (savesToday < DAILY_MAX_SAVES && Math.random() > 0.7) {
-          try {
-            const saveBtn = await page.$('button[aria-label="Save"], button[data-test-id="pin-save-button"]');
-            if (saveBtn) {
-                await saveBtn.click();
-                console.log('[Bot] 📌 Saved pin');
-                saved = true;
-                savesToday++;
-                await sleep(randomInt(5000, 10000) * loadMultiplier);
-            }
-          } catch(e) {}
+      if (hourlyComments < targets.commentTarget && commentsToday < DAILY_MAX_COMMENTS) {
+        try {
+          generatedComment = await aiService.generateEngagementComment({
+            title: pinData.title,
+            description: pinData.desc,
+            subNiche: relevancy.subNiche,
+          });
+          commented = await submitCommentOnPin(page, generatedComment, loadMultiplier);
+          if (commented) {
+            hourlyComments += 1;
+            commentsToday += 1;
+            console.log(`[Bot] Commented: "${generatedComment}"`);
+            await sleep(randomInt(12000, 22000) * loadMultiplier);
+          }
+        } catch (err) {
+          console.warn('[Bot] Comment action failed:', err.message);
+        }
       }
 
-      // Record History
-      const actionParts = [];
-      if (liked) actionParts.push('Liked');
-      if (commented) actionParts.push('Commented');
-      if (saved) actionParts.push('Saved');
-      const actionTaken = actionParts.length ? actionParts.join(' & ') : 'Viewed';
+      if (liked || commented) {
+        const actionTaken = liked && commented
+          ? 'Liked & Commented'
+          : liked
+            ? 'Liked Pin'
+            : 'Commented on Pin';
 
-      await historyService.addEngagement({
-        url: randomPin,
-        action: actionTaken,
-        comment: commented ? theComment : '',
-        source: context.source,
-        command: context.command,
-        workflow: context.workflow,
-        actor: context.actor,
-        engagedAt: new Date().toISOString(),
-      });
-      
-      engagedUrls.push(randomPin.split('?')[0]);
-      
-      // Update state live
-      await historyService.setAutomationState({ ...automationState, likesToday, commentsToday, savesToday, engagedUrls });
+        await historyService.addEngagement({
+          url: normalizedPin,
+          action: actionTaken,
+          comment: commented ? generatedComment : '',
+          niche: targetNiche,
+          query: activeQuery,
+          pinTitle: pinData.title || '',
+          boardName: pinData.boardName || '',
+          source: context.source,
+          command: context.command,
+          workflow: context.workflow,
+          actor: context.actor,
+          engagedAt: new Date().toISOString(),
+        });
 
-      // Between scrolling and clicking wait 3-8s for next cycle
-      await sleep(randomInt(3000, 8000) * loadMultiplier);
-      
-      // Back to feed
-      await page.goto(feedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+        engagedUrls = [...engagedUrls, normalizedPin]
+          .map(normalizePinUrl)
+          .filter(Boolean)
+          .slice(-600);
+
+        automationState = await historyService.setAutomationState({
+          ...automationState,
+          likesToday,
+          commentsToday,
+          savesToday: 0,
+          engagedUrls,
+          engagementDateKey: getEngagementDateKey(timeZone),
+          circuitBreaker: null,
+        });
+      }
+
+      await sleep(randomInt(3000, 7000) * loadMultiplier);
+      await page.goto(activeFeedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
     }
 
-    console.log(`[Bot] Hourly run complete. Achieved ${hourlyLikes} Likes, ${hourlyComments} Comments.`);
-    return { success: true, message: `Achieved ${hourlyLikes} likes, ${hourlyComments} comments.` };
-    
+    const executed = hourlyLikes + hourlyComments;
+    console.log(`[Bot] Hourly run complete. Achieved ${hourlyLikes} likes and ${hourlyComments} comments with no saves.`);
+    return {
+      success: true,
+      executed,
+      likesCompleted: hourlyLikes,
+      commentsCompleted: hourlyComments,
+      likeTarget: targets.likeTarget,
+      commentTarget: targets.commentTarget,
+      niche: targetNiche,
+      message: `Achieved ${hourlyLikes} likes and ${hourlyComments} comments.`,
+    };
   } catch (error) {
-    console.error('[Bot] Strict engager failed:', error.message);
+    console.error('[Bot] Refreshed engager failed:', error.message);
     throw new Error(`Booster failed: ${error.message}`);
   } finally {
     await browser.close();
