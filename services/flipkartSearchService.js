@@ -504,6 +504,7 @@ module.exports = {
   searchFlipkart,
   detectProductType,
   getProductTypeLabel,
+  getProductTypeQueryTerm,
   isProductTypeMatch,
   calculateSimilarity,
 };

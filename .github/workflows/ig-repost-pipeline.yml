@@ -90,6 +90,8 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_FALLBACK_API_KEY: ${{ secrets.GEMINI_FALLBACK_API_KEY }}
           EARNKARO_SESSION_COOKIE: ${{ secrets.EARNKARO_SESSION_COOKIE }}
+          AMAZON_ASSOCIATE_TAG: ${{ secrets.AMAZON_ASSOCIATE_TAG }}
+          AMAZON_MARKETPLACE: ${{ secrets.AMAZON_MARKETPLACE || 'www.amazon.in' }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL || 'https://pinterest-autopost.vercel.app' }}
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
           SERPER_API_KEY_BACKUP: ${{ secrets.SERPER_API_KEY_BACKUP }}

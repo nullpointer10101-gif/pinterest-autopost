@@ -2,6 +2,7 @@
 
 const flipkartSearchService = require('./flipkartSearchService');
 const earnKaroService = require('./earnKaroService');
+const amazonAffiliateService = require('./amazonAffiliateService');
 
 function cleanQuery(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -63,6 +64,29 @@ async function buildAffiliateShelf(products, { typeLabel, fallbackType = 'Main P
   return affiliateLinks;
 }
 
+function fillWithAmazonFallback(affiliateLinks, {
+  query,
+  expectedType,
+  productTypeLabel,
+  limit,
+  logPrefix = '[Product Curation]',
+} = {}) {
+  const remaining = Math.max(0, Number(limit || 0) - affiliateLinks.length);
+  if (remaining <= 0) return affiliateLinks;
+  if (!expectedType) return affiliateLinks;
+
+  const typeQuery = flipkartSearchService.getProductTypeQueryTerm(expectedType);
+  const amazonLinks = amazonAffiliateService.buildSameTypeSearchShelf({
+    query,
+    typeQuery,
+    typeLabel: productTypeLabel,
+    limit: remaining,
+    logPrefix,
+  });
+
+  return affiliateLinks.concat(amazonLinks);
+}
+
 async function buildSameTypeShelfFromQuery(query, {
   limit = 4,
   logPrefix = '[Product Curation]',
@@ -102,10 +126,17 @@ async function buildSameTypeShelfFromQuery(query, {
     typeLabel: productTypeLabel,
     logPrefix,
   });
+  const completedLinks = fillWithAmazonFallback(affiliateLinks, {
+    query: clean,
+    expectedType,
+    productTypeLabel,
+    limit,
+    logPrefix,
+  });
 
   return {
-    affiliateLinks,
-    mainProductName: affiliateLinks[0]?.name || clean,
+    affiliateLinks: completedLinks,
+    mainProductName: completedLinks[0]?.name || clean,
     productType: expectedType,
     productTypeLabel,
   };
@@ -177,10 +208,17 @@ async function buildSameTypeShelfFromProductData(productData, {
     typeLabel: productTypeLabel,
     logPrefix,
   });
+  const completedLinks = fillWithAmazonFallback(affiliateLinks, {
+    query: productName,
+    expectedType,
+    productTypeLabel,
+    limit,
+    logPrefix,
+  });
 
   return {
-    affiliateLinks,
-    mainProductName: affiliateLinks[0]?.name || productName,
+    affiliateLinks: completedLinks,
+    mainProductName: completedLinks[0]?.name || productName,
     productType: expectedType,
     productTypeLabel,
   };

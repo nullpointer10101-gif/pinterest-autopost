@@ -71,6 +71,8 @@ jobs:
           # Queue content prep & affiliate auth
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           EARNKARO_SESSION_COOKIE: ${{ secrets.EARNKARO_SESSION_COOKIE }}
+          AMAZON_ASSOCIATE_TAG: ${{ secrets.AMAZON_ASSOCIATE_TAG }}
+          AMAZON_MARKETPLACE: ${{ secrets.AMAZON_MARKETPLACE || 'www.amazon.in' }}
           # AI Config
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ secrets.AI_MODEL }}

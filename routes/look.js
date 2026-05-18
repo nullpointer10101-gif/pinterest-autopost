@@ -4,6 +4,7 @@ const router  = express.Router();
 const queueService   = require('../services/queueService');
 const historyService = require('../services/historyService');
 const igRepostStateService = require('../services/igRepostStateService');
+const amazonAffiliateService = require('../services/amazonAffiliateService');
 
 // ── Upstash helpers ───────────────────────────────────────────────────────────
 const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL   || '';
@@ -639,6 +640,17 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       margin: 6px 0 0;
       color: var(--muted);
     }
+    .affiliate-disclosure {
+      border: 1px solid var(--line);
+      background: rgba(255, 250, 241, .72);
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 11px 13px;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.45;
+      margin: -2px 0 16px;
+    }
     .product-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -991,6 +1003,7 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       }
       .products-head { align-items: start; flex-direction: column; }
       .products-head .ghost-btn { display: none; }
+      .affiliate-disclosure { font-size: 11px; }
       .products-section {
         padding: 10px 0 112px;
       }
@@ -1154,6 +1167,7 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
         </div>
         <button class="ghost-btn" id="open-selected-top" type="button">Open Selected</button>
       </div>
+      <div class="affiliate-disclosure">Disclosure: shopping links may be affiliate links. We may earn a commission if you buy through them, at no extra cost to you.</div>
 
       <div class="toolbar">
         <label class="search-wrap">
@@ -1546,6 +1560,11 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
 router.get('/:shortcode/product-image', async (req, res) => {
   const { url, name } = req.query;
   if (!url && !name) return res.json({ image: null });
+  if (amazonAffiliateService.isAmazonUrl(url)) {
+    // Amazon search fallback links are generated legally without scraping
+    // Amazon product media. Keep the UI placeholder until PA-API is available.
+    return res.json({ image: null });
+  }
 
   const cacheKey = `img2:${Buffer.from(url || name).toString('base64').slice(0, 40)}`;
   const cached = await upstashGet(cacheKey);
