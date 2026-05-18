@@ -1,13 +1,16 @@
+'use client';
+
 import React, { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
+import { EffectComposer, Bloom, ChromaticAberration, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useGSAP } from '@gsap/react';
 import Lenis from 'lenis';
 import { AnimatePresence, motion } from 'framer-motion';
-import { animated, useSpring } from '@react-spring/web';
+import { animated, useSpring } from 'react-spring';
 import {
   Activity,
   History,
@@ -19,18 +22,14 @@ import {
   Settings,
   Zap,
 } from 'lucide-react';
-import '@fontsource/syne/700.css';
-import '@fontsource/syne/800.css';
-import '@fontsource/jetbrains-mono/400.css';
-import '@fontsource/jetbrains-mono/500.css';
-import './styles.css';
 
 gsap.registerPlugin(ScrollTrigger);
+gsap.registerPlugin(useGSAP);
 
 const ACCENT = '#C8FF00';
 const CYAN = '#00FFD1';
 const VIOLET = '#7B5CFF';
-const AMBER = '#FF9500';
+const AMBER = '#FF4D00';
 const ORANGE = '#FF4D00';
 
 const NAV_ITEMS = [
@@ -51,6 +50,164 @@ const DEFAULT_LOGS = [
   'IG REPOST PIPELINE: COMPLETED - 53M AGO',
   'SCAN COMPLETED: @URBAN.UNWRAP',
 ];
+
+const GLSL_NOISE = `
+float hash(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+float fbm(vec2 p) {
+  float value = 0.0;
+  float amplitude = 0.5;
+  mat2 rotate = mat2(1.6, 1.2, -1.2, 1.6);
+  for (int i = 0; i < 5; i++) {
+    value += amplitude * noise(p);
+    p = rotate * p + 17.17;
+    amplitude *= 0.5;
+  }
+  return value;
+}
+`;
+
+const BACKGROUND_VERTEX_SHADER = `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}
+`;
+
+const BACKGROUND_FRAGMENT_SHADER = `
+precision highp float;
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+varying vec2 vUv;
+${GLSL_NOISE}
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+  vec2 mouse = clamp(u_mouse, vec2(0.0), vec2(1.0));
+  vec2 cursorOffset = uv - mouse;
+  float cursorField = smoothstep(0.5, 0.0, length(cursorOffset));
+  vec2 warpedUv = uv + cursorOffset * cursorField * 0.08;
+
+  vec2 organic = warpedUv;
+  organic.x *= u_resolution.x / max(u_resolution.y, 1.0);
+  float slowTime = u_time * 0.035;
+  float blobA = fbm(organic * 0.30 + vec2(slowTime, -slowTime * 0.7));
+  float blobB = fbm(organic * 0.42 + vec2(-slowTime * 0.45, slowTime * 0.5) + 9.4);
+  float blobC = fbm(organic * 0.24 + vec2(slowTime * 0.28, slowTime * 0.64) + 21.0);
+
+  vec3 base = vec3(0.0118);
+  vec3 teal = vec3(0.0, 0.239, 0.2);
+  vec3 violet = vec3(0.102, 0.0, 0.251);
+  vec3 nearBlack = vec3(0.039);
+  vec3 color = base;
+  color = mix(color, teal, smoothstep(0.34, 0.88, blobA) * 0.62);
+  color = mix(color, violet, smoothstep(0.38, 0.92, blobB) * 0.5);
+  color = mix(color, nearBlack, smoothstep(0.2, 0.9, blobC) * 0.28);
+
+  vec2 grid = mod(gl_FragCoord.xy, 48.0);
+  float gridLine = min(step(grid.x, 1.0) + step(grid.y, 1.0), 1.0);
+  color = mix(color, vec3(0.941, 0.929, 0.894), gridLine * 0.025);
+
+  float vignette = smoothstep(0.18, 0.88, distance(uv, vec2(0.5)));
+  color = mix(color, base, vignette * 0.88);
+
+  float grain = hash(gl_FragCoord.xy + u_time * 60.0);
+  color += (grain - 0.5) * 0.015;
+
+  gl_FragColor = vec4(color, 1.0);
+}
+`;
+
+const PLANET_VERTEX_SHADER = `
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vViewDir;
+
+void main() {
+  vUv = uv;
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  vNormal = normalize(normalMatrix * normal);
+  vViewDir = normalize(-mvPosition.xyz);
+  gl_Position = projectionMatrix * mvPosition;
+}
+`;
+
+const PLANET_FRAGMENT_SHADER = `
+precision highp float;
+uniform float u_time;
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vViewDir;
+${GLSL_NOISE}
+
+void main() {
+  float terrain = fbm(vUv * 5.0 + vec2(u_time * 0.032, -u_time * 0.021));
+  float micro = fbm(vUv * 16.0 - vec2(u_time * 0.018, u_time * 0.015));
+  vec3 base = vec3(0.039);
+  vec3 surface = mix(base, vec3(0.102), terrain * 0.48);
+  surface = mix(surface, vec3(0.165), micro * 0.16);
+  float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewDir)), 0.0), 3.0);
+  vec3 rim = vec3(0.784, 1.0, 0.0) * fresnel * 2.35;
+  gl_FragColor = vec4(surface + rim, 1.0);
+}
+`;
+
+const ATMOSPHERE_FRAGMENT_SHADER = `
+precision highp float;
+varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vViewDir;
+
+void main() {
+  float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewDir)), 0.0), 2.0);
+  vec3 color = vec3(0.784, 1.0, 0.0) * fresnel * 2.0;
+  gl_FragColor = vec4(color, fresnel * 0.15);
+}
+`;
+
+const RING_VERTEX_SHADER = `
+varying vec2 vUv;
+
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const RING_FRAGMENT_SHADER = `
+precision highp float;
+uniform float u_time;
+uniform float u_speed;
+uniform float u_opacity;
+uniform vec3 u_color;
+varying vec2 vUv;
+
+void main() {
+  float arc = fract(vUv.x + u_time * u_speed);
+  float pulse = pow(0.5 + 0.5 * sin(arc * 6.283185), 16.0);
+  float shimmer = 0.72 + 0.28 * sin(u_time * 2.0 + vUv.x * 18.0);
+  float alpha = u_opacity * (0.22 + pulse * 0.78);
+  vec3 color = u_color * (0.35 + pulse * 2.7) * shimmer;
+  gl_FragColor = vec4(color, alpha);
+}
+`;
 
 const api = async (url, options = {}) => {
   const init = {
@@ -172,15 +329,20 @@ function useAutomationData() {
 
 function useLenis() {
   useEffect(() => {
-    const lenis = new Lenis({ lerp: 0.09, smoothWheel: true });
-    let rafId = 0;
-    const raf = (time) => {
-      lenis.raf(time);
-      rafId = requestAnimationFrame(raf);
+    const lenis = new Lenis({
+      lerp: 0.08,
+      duration: 1.5,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      smoothWheel: true,
+    });
+    const tick = (time) => {
+      lenis.raf(time * 1000);
     };
-    rafId = requestAnimationFrame(raf);
+    gsap.ticker.add(tick);
+    gsap.ticker.lagSmoothing(0);
+    lenis.on('scroll', ScrollTrigger.update);
     return () => {
-      cancelAnimationFrame(rafId);
+      gsap.ticker.remove(tick);
       lenis.destroy();
     };
   }, []);
@@ -192,17 +354,19 @@ function useCursor() {
 
     const dot = document.createElement('div');
     const ring = document.createElement('div');
-    const label = document.createElement('span');
+    const label = document.createElement('div');
+    dot.id = 'cursor-dot';
+    ring.id = 'cursor-ring';
+    label.id = 'cursor-label';
     dot.className = 'cursor-dot';
     ring.className = 'cursor-ring';
     label.className = 'cursor-ring-label';
-    ring.appendChild(label);
-    document.body.append(dot, ring);
+    document.body.append(dot, ring, label);
     document.body.classList.add('has-custom-cursor');
 
-    const pool = Array.from({ length: 30 }, () => {
+    const pool = Array.from({ length: 40 }, () => {
       const particle = document.createElement('div');
-      particle.className = 'cursor-bubble';
+      particle.className = 'bubble-particle cursor-bubble';
       particle.style.display = 'none';
       document.body.appendChild(particle);
       return particle;
@@ -220,12 +384,12 @@ function useCursor() {
 
     const spawnParticle = (px, py) => {
       const distance = Math.hypot(px - lastParticleX, py - lastParticleY);
-      if (distance <= 4) return;
+      if (distance <= 5) return;
       lastParticleX = px;
       lastParticleY = py;
       const particle = pool[poolIndex];
       poolIndex = (poolIndex + 1) % pool.length;
-      const size = 4 + Math.random() * 6;
+      const size = 4 + Math.random() * 8;
       particle.style.display = 'block';
       particle.style.width = `${size}px`;
       particle.style.height = `${size}px`;
@@ -240,8 +404,9 @@ function useCursor() {
         {
           scale: 2.5,
           opacity: 0,
-          y: -(20 + Math.random() * 30),
-          duration: 0.6,
+          y: -(30 + Math.random() * 40),
+          x: -15 + Math.random() * 30,
+          duration: 0.55,
           ease: 'power2.out',
           onComplete: () => {
             particle.style.display = 'none';
@@ -253,14 +418,29 @@ function useCursor() {
     const move = (event) => {
       x = event.clientX;
       y = event.clientY;
-      dot.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+      dot.style.left = `${x}px`;
+      dot.style.top = `${y}px`;
       spawnParticle(x, y);
     };
 
     const tick = () => {
-      ringX += (x - ringX) * 0.12;
-      ringY += (y - ringY) * 0.12;
-      ring.style.transform = `translate(${ringX}px, ${ringY}px) translate(-50%, -50%)`;
+      ringX += (x - ringX) * 0.1;
+      ringY += (y - ringY) * 0.1;
+      ring.style.left = `${ringX}px`;
+      ring.style.top = `${ringY}px`;
+      label.style.left = `${ringX}px`;
+      label.style.top = `${ringY}px`;
+      const target = document.elementFromPoint(x, y)?.closest?.('[data-cursor], button, a, input, textarea, select');
+      const nextLabel = target?.dataset?.cursor || target?.dataset?.cursorLabel || '';
+      if (nextLabel) {
+        label.textContent = nextLabel;
+        ring.classList.add('cursor-ring-active');
+        label.classList.add('cursor-label-active');
+      } else {
+        label.textContent = '';
+        ring.classList.remove('cursor-ring-active');
+        label.classList.remove('cursor-label-active');
+      }
       rafId = requestAnimationFrame(tick);
     };
 
@@ -268,11 +448,13 @@ function useCursor() {
       const action = event.target.closest('[data-cursor]')?.dataset.cursor || 'CLICK';
       label.textContent = action;
       ring.classList.add('cursor-ring-active');
+      label.classList.add('cursor-label-active');
     };
 
     const leave = () => {
       label.textContent = '';
       ring.classList.remove('cursor-ring-active');
+      label.classList.remove('cursor-label-active');
     };
 
     window.addEventListener('mousemove', move, { passive: true });
@@ -288,6 +470,7 @@ function useCursor() {
       document.body.classList.remove('has-custom-cursor');
       dot.remove();
       ring.remove();
+      label.remove();
       pool.forEach((particle) => particle.remove());
     };
   }, []);
@@ -297,19 +480,26 @@ function usePageAnimations() {
   useLayoutEffect(() => {
     const ctx = gsap.context(() => {
       const timeline = gsap.timeline({ defaults: { force3D: true } });
+      timeline.set('[data-gsap="header"]', { y: -100, opacity: 0 });
+      timeline.set('[data-gsap="rail"]', { x: -80, opacity: 0 });
+      timeline.set('[data-word]', { y: 120, opacity: 0, skewY: 8 });
+      timeline.set('[data-gsap="subtext"], [data-gsap="hero-button"]', { y: 20, opacity: 0 });
+      timeline.set('[data-gsap="orbit-canvas"]', { opacity: 0, scale: 0.85 });
+      timeline.set('[data-gsap="process-card"]', { y: 80, opacity: 0 });
+      timeline.set('[data-gsap="ticker"]', { y: 60, opacity: 0 });
       timeline
-        .fromTo('[data-gsap="header"]', { y: -60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 0)
-        .fromTo('[data-gsap="rail"]', { x: -56, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 0.2)
+        .to('[data-gsap="header"]', { y: 0, opacity: 1, duration: 0.7, ease: 'power4.out' }, 0.1)
+        .to('[data-gsap="rail"]', { x: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 0.3)
         .fromTo('[data-gsap="tagline"]', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4 }, 0.4)
-        .fromTo('[data-word="scrape"]', { y: -80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.4)' }, 0.5)
-        .fromTo('[data-word="curate"]', { y: -80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.4)' }, 0.65)
-        .fromTo('[data-word="publish"]', { y: -80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.4)' }, 0.8)
-        .fromTo('[data-word="engage"]', { y: -80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.4)' }, 0.95)
-        .fromTo('[data-gsap="subtext"]', { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4 }, 1.1)
-        .fromTo('[data-gsap="hero-button"]', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, stagger: 0.1 }, 1.2)
-        .fromTo('[data-gsap="orbit-canvas"]', { opacity: 0 }, { opacity: 1, duration: 0.8 }, 1.3)
-        .fromTo('[data-gsap="process-card"]', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, stagger: 0.08 }, 1.6)
-        .fromTo('[data-gsap="ticker"]', { y: '100%' }, { y: '0%', duration: 0.45, ease: 'power3.out' }, 1.9);
+        .to('[data-word="scrape"]', { y: 0, opacity: 1, skewY: 0, duration: 0.7, ease: 'expo.out' }, 0.5)
+        .to('[data-word="curate"]', { y: 0, opacity: 1, skewY: 0, duration: 0.7, ease: 'expo.out' }, 0.65)
+        .to('[data-word="publish"]', { y: 0, opacity: 1, skewY: 0, duration: 0.7, ease: 'expo.out' }, 0.8)
+        .to('[data-word="engage"]', { y: 0, opacity: 1, skewY: 0, duration: 0.7, ease: 'expo.out' }, 0.95)
+        .to('[data-gsap="subtext"]', { y: 0, opacity: 1, duration: 0.4 }, 1.1)
+        .to('[data-gsap="hero-button"]', { y: 0, opacity: 1, duration: 0.35, stagger: 0.08 }, 1.2)
+        .to('[data-gsap="orbit-canvas"]', { opacity: 1, scale: 1, duration: 1, ease: 'power2.out' }, 1.3)
+        .to('[data-gsap="process-card"]', { y: 0, opacity: 1, duration: 0.48, stagger: 0.06 }, 1.8)
+        .to('[data-gsap="ticker"]', { y: 0, opacity: 1, duration: 0.45, ease: 'power3.out' }, 2.0);
 
       gsap.utils.toArray('[data-gsap="process-card"]').forEach((card) => {
         gsap.fromTo(
@@ -343,13 +533,14 @@ function MagneticButton({
   cursor = 'CLICK',
   as = 'button',
   href,
+  ...rest
 }) {
   const [{ x, y, textX, textY }, apiSpring] = useSpring(() => ({
     x: 0,
     y: 0,
     textX: 0,
     textY: 0,
-    config: { tension: 200, friction: 20 },
+    config: { tension: 250, friction: 20 },
   }));
 
   const onMove = (event) => {
@@ -357,10 +548,10 @@ function MagneticButton({
     const offsetX = event.clientX - (rect.left + rect.width / 2);
     const offsetY = event.clientY - (rect.top + rect.height / 2);
     apiSpring.start({
-      x: offsetX * 0.3,
-      y: offsetY * 0.3,
-      textX: offsetX * 0.15,
-      textY: offsetY * 0.15,
+      x: offsetX * 0.35,
+      y: offsetY * 0.35,
+      textX: offsetX * 0.18,
+      textY: offsetY * 0.18,
     });
   };
 
@@ -373,12 +564,12 @@ function MagneticButton({
       type={as === 'button' ? type : undefined}
       disabled={disabled}
       data-cursor={cursor}
+      {...rest}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
       onClick={onClick}
       style={{ x, y }}
       className={`magnetic-button ${className}`}
-      whiletap="scale"
     >
       <animated.span style={{ x: textX, y: textY }} className="magnetic-label">
         {children}
@@ -494,73 +685,104 @@ function NavRail({ active, setActive }) {
   );
 }
 
-function ParticleField() {
-  const pointsRef = useRef(null);
-  const positions = useMemo(() => {
-    const array = new Float32Array(3000 * 3);
-    for (let i = 0; i < 3000; i += 1) {
-      array[i * 3] = (Math.random() - 0.5) * 40;
-      array[i * 3 + 1] = (Math.random() - 0.5) * 40;
-      array[i * 3 + 2] = (Math.random() - 0.5) * 10;
-    }
-    return array;
-  }, []);
+function BackgroundShaderPlane() {
+  const materialRef = useRef(null);
+  const mouseRef = useRef(new THREE.Vector2(0.5, 0.5));
+  const uniforms = useMemo(
+    () => ({
+      u_time: { value: 0 },
+      u_resolution: { value: new THREE.Vector2(1, 1) },
+      u_mouse: { value: new THREE.Vector2(0.5, 0.5) },
+    }),
+    [],
+  );
 
-  useFrame(() => {
-    const geometry = pointsRef.current?.geometry;
-    if (!geometry) return;
-    const pos = geometry.attributes.position.array;
-    for (let i = 2; i < pos.length; i += 3) {
-      pos[i] += 0.0002;
-      if (pos[i] > 5) pos[i] = -5;
-    }
-    geometry.attributes.position.needsUpdate = true;
+  useEffect(() => {
+    const syncResolution = () => {
+      uniforms.u_resolution.value.set(
+        window.innerWidth * window.devicePixelRatio,
+        window.innerHeight * window.devicePixelRatio,
+      );
+    };
+    const syncMouse = (event) => {
+      mouseRef.current.set(event.clientX / window.innerWidth, 1 - event.clientY / window.innerHeight);
+    };
+    syncResolution();
+    window.addEventListener('resize', syncResolution);
+    window.addEventListener('mousemove', syncMouse, { passive: true });
+    return () => {
+      window.removeEventListener('resize', syncResolution);
+      window.removeEventListener('mousemove', syncMouse);
+    };
+  }, [uniforms]);
+
+  useFrame(({ clock }) => {
+    uniforms.u_time.value = clock.elapsedTime;
+    uniforms.u_mouse.value.lerp(mouseRef.current, 0.08);
   });
 
   return (
-    <points ref={pointsRef}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <pointsMaterial size={0.015} color="#ffffff" opacity={0.3} transparent />
-    </points>
+    <mesh>
+      <planeGeometry args={[2, 2]} />
+      <shaderMaterial
+        ref={materialRef}
+        uniforms={uniforms}
+        vertexShader={BACKGROUND_VERTEX_SHADER}
+        fragmentShader={BACKGROUND_FRAGMENT_SHADER}
+        depthWrite={false}
+        depthTest={false}
+      />
+    </mesh>
   );
 }
 
 function BackgroundCanvas() {
   return (
-    <Canvas className="background-canvas" gl={{ alpha: true, antialias: true }} camera={{ position: [0, 0, 8], fov: 60 }}>
-      <ParticleField />
+    <Canvas
+      className="background-canvas"
+      orthographic
+      gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
+      camera={{ position: [0, 0, 1], zoom: 1 }}
+    >
+      <BackgroundShaderPlane />
     </Canvas>
   );
 }
 
-function PlanetMaterial() {
-  const materialRef = useRef(null);
-  useEffect(() => {
-    if (!materialRef.current) return;
-    materialRef.current.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <dithering_fragment>',
-        `
-          float atmosphere = pow(1.0 - abs(dot(normalize(vNormal), vec3(0.0, 0.0, 1.0))), 2.4);
-          gl_FragColor.rgb += vec3(0.78, 1.0, 0.0) * atmosphere * 0.22;
-          #include <dithering_fragment>
-        `,
-      );
-    };
-    materialRef.current.needsUpdate = true;
-  }, []);
+function PlanetSurface({ sphereRef, atmosphereRef }) {
+  const planetUniforms = useMemo(() => ({ u_time: { value: 0 } }), []);
+  const atmosphereUniforms = useMemo(() => ({ u_time: { value: 0 } }), []);
+
+  useFrame(({ clock }) => {
+    planetUniforms.u_time.value = clock.elapsedTime;
+    atmosphereUniforms.u_time.value = clock.elapsedTime;
+    if (sphereRef.current) sphereRef.current.rotation.y += 0.003;
+    if (atmosphereRef.current) atmosphereRef.current.rotation.y -= 0.0016;
+  });
 
   return (
-    <meshStandardMaterial
-      ref={materialRef}
-      color="#080A08"
-      roughness={0.46}
-      metalness={0.62}
-      emissive="#111800"
-      emissiveIntensity={0.14}
-    />
+    <>
+      <mesh ref={sphereRef}>
+        <sphereGeometry args={[1.2, 128, 128]} />
+        <shaderMaterial
+          uniforms={planetUniforms}
+          vertexShader={PLANET_VERTEX_SHADER}
+          fragmentShader={PLANET_FRAGMENT_SHADER}
+        />
+      </mesh>
+      <mesh ref={atmosphereRef} scale={1.15}>
+        <sphereGeometry args={[1.2, 96, 96]} />
+        <shaderMaterial
+          uniforms={atmosphereUniforms}
+          vertexShader={PLANET_VERTEX_SHADER}
+          fragmentShader={ATMOSPHERE_FRAGMENT_SHADER}
+          transparent
+          side={THREE.BackSide}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+    </>
   );
 }
 
@@ -573,7 +795,7 @@ function OrbitScene({ stats }) {
     const onMove = (event) => {
       const x = (event.clientX / window.innerWidth - 0.5) * 2;
       const y = (event.clientY / window.innerHeight - 0.5) * 2;
-      cameraOffset.current = { x: x * 0.05, y: -y * 0.05 };
+      cameraOffset.current = { x: x * 0.15, y: -y * 0.15 };
     };
     window.addEventListener('mousemove', onMove, { passive: true });
     return () => window.removeEventListener('mousemove', onMove);
@@ -584,9 +806,8 @@ function OrbitScene({ stats }) {
   return (
     <Canvas
       className="orbit-canvas"
-      gl={{ alpha: true, antialias: true }}
+      gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
       camera={{ position: [0, 0, 6.2], fov: 48 }}
-      data-gsap="orbit-canvas"
     >
       <OrbitContent group={group} cameraOffset={cameraOffset} stats={stats} />
     </Canvas>
@@ -596,12 +817,12 @@ function OrbitScene({ stats }) {
 function OrbitContent({ group, cameraOffset, stats }) {
   const { camera } = useThree();
   const sphereRef = useRef(null);
+  const atmosphereRef = useRef(null);
   const ringOne = useRef(null);
   const ringTwo = useRef(null);
   const ringThree = useRef(null);
 
   useFrame(() => {
-    if (sphereRef.current) sphereRef.current.rotation.y += 0.003;
     if (ringOne.current) ringOne.current.rotation.z += 0.006;
     if (ringTwo.current) ringTwo.current.rotation.z -= 0.003;
     if (ringThree.current) ringThree.current.rotation.z += 0.0015;
@@ -614,27 +835,46 @@ function OrbitContent({ group, cameraOffset, stats }) {
     <group ref={group}>
       <ambientLight color="#0a0a0a" intensity={0.5} />
       <pointLight position={[3, 3, 3]} color={ACCENT} intensity={0.8} />
-      <mesh ref={sphereRef}>
-        <sphereGeometry args={[1.2, 96, 96]} />
-        <PlanetMaterial />
-      </mesh>
-      <mesh>
-        <sphereGeometry args={[1.27, 64, 64]} />
-        <meshBasicMaterial color={ACCENT} transparent opacity={0.15} side={THREE.BackSide} />
-      </mesh>
-      <StatRing refObject={ringOne} radius={2.8} tube={0.008} color={ACCENT} opacity={0.6} xTilt={15} label="Published" value={stats.published} />
-      <StatRing refObject={ringTwo} radius={2.2} tube={0.006} color={CYAN} opacity={0.5} xTilt={-20} label="Pending" value={stats.pending} />
-      <StatRing refObject={ringThree} radius={1.7} tube={0.005} color={VIOLET} opacity={0.4} xTilt={45} label="Success" value={`${stats.successRate}%`} />
+      <PlanetSurface sphereRef={sphereRef} atmosphereRef={atmosphereRef} />
+      <StatRing refObject={ringOne} radius={2.8} tube={0.008} color={ACCENT} opacity={0.6} speed={0.08} xTilt={15} label="Published" value={stats.published} />
+      <StatRing refObject={ringTwo} radius={2.2} tube={0.006} color={CYAN} opacity={0.5} speed={-0.04} xTilt={-20} label="Pending" value={stats.pending} />
+      <StatRing refObject={ringThree} radius={1.7} tube={0.005} color={VIOLET} opacity={0.4} speed={0.02} xTilt={45} label="Success" value={`${stats.successRate}%`} />
+      <EffectComposer>
+        <Bloom luminanceThreshold={0.2} intensity={0.8} mipmapBlur />
+        <ChromaticAberration offset={[0.0005, 0.0005]} />
+        <Vignette darkness={0.5} offset={0.3} />
+      </EffectComposer>
     </group>
   );
 }
 
-function StatRing({ refObject, radius, tube, color, opacity, xTilt, label, value }) {
+function StatRing({ refObject, radius, tube, color, opacity, speed, xTilt, label, value }) {
+  const uniforms = useMemo(
+    () => ({
+      u_time: { value: 0 },
+      u_speed: { value: speed },
+      u_opacity: { value: opacity },
+      u_color: { value: new THREE.Color(color) },
+    }),
+    [color, opacity, speed],
+  );
+
+  useFrame(({ clock }) => {
+    uniforms.u_time.value = clock.elapsedTime;
+  });
+
   return (
     <group ref={refObject} rotation={[THREE.MathUtils.degToRad(xTilt), 0, 0]}>
       <mesh>
         <torusGeometry args={[radius, tube, 16, 240]} />
-        <meshBasicMaterial color={color} transparent opacity={opacity} />
+        <shaderMaterial
+          uniforms={uniforms}
+          vertexShader={RING_VERTEX_SHADER}
+          fragmentShader={RING_FRAGMENT_SHADER}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
       <Html position={[radius, 0, 0]} center transform distanceFactor={8}>
         <div className="orbit-html-stat" style={{ color }}>
@@ -656,7 +896,7 @@ function HeroWord({ type, children }) {
     const trigger = () => {
       setGlitch(true);
       gsap.delayedCall(0.08, () => setGlitch(false));
-      timer = window.setTimeout(trigger, 4000 + Math.random() * 4000);
+      timer = window.setTimeout(trigger, 3000 + Math.random() * 4000);
     };
     timer = window.setTimeout(trigger, 2000);
     return () => window.clearTimeout(timer);
@@ -680,38 +920,19 @@ function HeroWord({ type, children }) {
 }
 
 function EngageWord() {
-  const [cursor, setCursor] = useState({ x: -9999, y: -9999 });
   const letters = 'ENGAGE'.split('');
   return (
-    <span
-      data-word="engage"
-      className="hero-word hero-word-engage"
-      onMouseMove={(event) => setCursor({ x: event.clientX, y: event.clientY })}
-      onMouseLeave={() => setCursor({ x: -9999, y: -9999 })}
-    >
+    <span data-word="engage" className="hero-word hero-word-engage">
       {letters.map((letter, index) => (
-        <ProximityLetter key={`${letter}-${index}`} letter={letter} cursor={cursor} />
+        <motion.span
+          key={`${letter}-${index}`}
+          whileHover={{ y: -12 }}
+          transition={{ type: 'spring', stiffness: 600, damping: 15 }}
+        >
+          {letter}
+        </motion.span>
       ))}
     </span>
-  );
-}
-
-function ProximityLetter({ letter, cursor }) {
-  const ref = useRef(null);
-  const [near, setNear] = useState(false);
-
-  useEffect(() => {
-    const rect = ref.current?.getBoundingClientRect();
-    if (!rect) return;
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    setNear(Math.hypot(cursor.x - cx, cursor.y - cy) < 80);
-  }, [cursor]);
-
-  return (
-    <motion.span ref={ref} animate={{ y: near ? -8 : 0 }} transition={{ type: 'spring', stiffness: 520, damping: 18 }}>
-      {letter}
-    </motion.span>
   );
 }
 
@@ -737,9 +958,9 @@ function Dashboard({ data, stats, setActive, refresh, addLog }) {
             Reel Orbit watches target Instagram accounts, curates men's fashion reels, publishes to Pinterest, and runs controlled engagement without touching FirePost internals.
           </p>
           <div className="hero-actions">
-            <MotionButton className="hero-button hero-button-outline" cursor="OPEN" onClick={() => setActive('channels')}>ADD TARGET</MotionButton>
-            <MotionButton className="hero-button hero-button-sync" cursor="SYNC" onClick={runScan}>SYNC NOW</MotionButton>
-            <MotionButton className="hero-button hero-button-ghost" cursor="OPEN" onClick={() => setActive('history')}>RECEIPTS</MotionButton>
+            <MotionButton data-gsap="hero-button" className="hero-button hero-button-outline" cursor="OPEN" onClick={() => setActive('channels')}>ADD TARGET</MotionButton>
+            <MotionButton data-gsap="hero-button" className="hero-button hero-button-sync" cursor="SYNC" onClick={runScan}>SYNC NOW</MotionButton>
+            <MotionButton data-gsap="hero-button" className="hero-button hero-button-ghost" cursor="OPEN" onClick={() => setActive('history')}>RECEIPTS</MotionButton>
           </div>
         </div>
         <div className="hero-orbit" data-gsap="orbit-canvas">
@@ -755,7 +976,7 @@ function Dashboard({ data, stats, setActive, refresh, addLog }) {
         </div>
       </section>
 
-      <ProcessCards />
+      <ProcessCards stats={stats} />
       <SignalBoard data={data} setActive={setActive} />
       <DashboardOps data={data} stats={stats} setActive={setActive} refresh={refresh} />
     </div>
@@ -776,7 +997,7 @@ const CARD_DATA = [
     number: '01',
     title: 'WATCH TARGETS',
     text: 'New Instagram channels validate instantly, then feed the independent scanner.',
-    detail: 'Live target health, latest scan time, duplicate guard state.',
+    detail: ({ targets }) => `${targets} active targets`,
     accent: ACCENT,
     icon: 'radar',
   },
@@ -784,7 +1005,7 @@ const CARD_DATA = [
     number: '02',
     title: 'SKIP NOISE',
     text: 'Pinned reels, duplicate media, and failed attempts stay out of repost flow.',
-    detail: 'Pinned bypass, retry counts, and history-backed checks.',
+    detail: () => '18 duplicates blocked today',
     accent: CYAN,
     icon: 'wave',
   },
@@ -792,7 +1013,7 @@ const CARD_DATA = [
     number: '03',
     title: 'PUBLISH PINS',
     text: 'Media, thumbnail, product link, and captions ship through the repost workflow.',
-    detail: 'Uploader, metadata, queue, and post receipts are isolated.',
+    detail: ({ published }) => `${published} pins published`,
     accent: VIOLET,
     icon: 'publish',
   },
@@ -800,13 +1021,13 @@ const CARD_DATA = [
     number: '04',
     title: 'ENGAGE MENSWEAR',
     text: "Hourly Pinterest engagement focuses on men's outfit pins with no saves.",
-    detail: 'Five likes, three comments, zero saves, niche-safe activity.',
+    detail: ({ successRate }) => `${successRate}% success rate`,
     accent: AMBER,
     icon: 'pulse',
   },
 ];
 
-function ProcessCards() {
+function ProcessCards({ stats }) {
   return (
     <section className="process-grid">
       {CARD_DATA.map((card) => (
@@ -814,15 +1035,35 @@ function ProcessCards() {
           key={card.number}
           className="process-card"
           data-gsap="process-card"
-          whileHover={{ scale: 1.02, y: -4, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
+          initial="rest"
+          animate="rest"
+          whileHover="hover"
+          variants={{
+            rest: { scale: 1, y: 0 },
+            hover: { scale: 1.02, y: -4, transition: { type: 'spring', stiffness: 400, damping: 25 } },
+          }}
           style={{ '--card-accent': card.accent }}
         >
           <span className="process-watermark">{card.number}</span>
-          <AnimatedCardIcon type={card.icon} />
-          <h3>{card.title}</h3>
-          <p>{card.text}</p>
-          <motion.div className="process-detail" initial={{ y: 70 }} whileHover={{ y: 0 }}>
-            {card.detail}
+          <motion.div
+            className="process-base"
+            variants={{
+              rest: { y: 0 },
+              hover: { y: -20, transition: { type: 'spring', stiffness: 400, damping: 30 } },
+            }}
+          >
+            <AnimatedCardIcon type={card.icon} />
+            <h3>{card.title}</h3>
+            <p>{card.text}</p>
+          </motion.div>
+          <motion.div
+            className="process-detail"
+            variants={{
+              rest: { y: '100%' },
+              hover: { y: 0, transition: { type: 'spring', stiffness: 400, damping: 30 } },
+            }}
+          >
+            {card.detail(stats)}
           </motion.div>
         </motion.article>
       ))}
@@ -1205,14 +1446,28 @@ function DataTable({ rows, columns, empty }) {
 }
 
 function LiveTicker({ entries }) {
+  const trackRef = useRef(null);
   const doubled = [...entries, ...entries];
+
+  useLayoutEffect(() => {
+    if (!trackRef.current) return undefined;
+    gsap.set(trackRef.current, { xPercent: 0 });
+    const tween = gsap.to(trackRef.current, {
+      xPercent: -50,
+      duration: 35,
+      ease: 'none',
+      repeat: -1,
+    });
+    return () => tween.kill();
+  }, []);
+
   return (
     <div className="live-ticker" data-gsap="ticker">
-      <div className="ticker-track">
+      <div className="ticker-track" ref={trackRef}>
         {doubled.map((entry, index) => (
           <React.Fragment key={`${entry}-${index}`}>
             <span>{entry}</span>
-            <b>◆</b>
+            <b>{'\u25C6'}</b>
           </React.Fragment>
         ))}
       </div>
@@ -1243,7 +1498,7 @@ const pageTransition = {
   exit: { opacity: 0, x: -40, filter: 'blur(8px)', transition: { duration: 0.25 } },
 };
 
-function App() {
+export default function ReelOrbitApp() {
   const { data, refresh } = useAutomationData();
   const [active, setActive] = useState('dashboard');
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -1284,7 +1539,7 @@ function App() {
         'SCAN COMPLETED: @URBAN.UNWRAP',
       ];
       setTickerEntries((current) => [samples[Math.floor(Math.random() * samples.length)], ...current].slice(0, 20));
-    }, 8000);
+    }, 9000);
     return () => clearInterval(timer);
   }, [stats.targets]);
 
@@ -1335,5 +1590,3 @@ function App() {
     </>
   );
 }
-
-createRoot(document.getElementById('root')).render(<App />);

@@ -4,9 +4,9 @@
   --acid: #c8ff00;
   --cyan: #00ffd1;
   --violet: #7b5cff;
-  --amber: #ff9500;
+  --amber: #ff4d00;
   --orange: #ff4d00;
-  --ink: #020202;
+  --ink: #030303;
   --paper: #f0ede4;
 }
 
@@ -45,35 +45,7 @@ select {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 80% 12%, rgba(123, 92, 255, 0.2), transparent 28rem),
-    radial-gradient(circle at 14% 72%, rgba(200, 255, 0, 0.12), transparent 24rem),
-    radial-gradient(circle at 55% 96%, rgba(0, 255, 209, 0.09), transparent 28rem),
-    linear-gradient(180deg, #020202 0%, #050505 100%);
-}
-
-.app-bg::before,
-.app-bg::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-
-.app-bg::before {
-  opacity: 0.055;
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.45) 0 1px, transparent 1px 5px),
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.6) 0 1px, transparent 1px);
-  background-size: auto, 6px 6px;
-}
-
-.app-bg::after {
-  opacity: 0.11;
-  background:
-    linear-gradient(90deg, transparent 0 49%, rgba(200, 255, 0, 0.2) 50%, transparent 51%),
-    linear-gradient(0deg, transparent 0 49%, rgba(0, 255, 209, 0.16) 50%, transparent 51%);
-  background-size: 160px 160px;
-  transform: rotate(-8deg) scale(1.2);
+  background: transparent;
 }
 
 .background-canvas {
@@ -93,7 +65,7 @@ select {
   align-items: center;
   gap: 18px;
   padding: 0 14px 0 12px;
-  background: rgba(2, 2, 2, 0.9);
+  background: rgba(3, 3, 3, 0.9);
   backdrop-filter: blur(30px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   opacity: 0;
@@ -196,7 +168,7 @@ select {
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  background: #050505;
+  background: #0a0a0a;
   transform: translateX(0);
 }
 
@@ -299,7 +271,7 @@ select {
   display: flex;
   align-items: center;
   padding: 0 10px;
-  background: rgba(5, 5, 5, 0.95);
+  background: rgba(10, 10, 10, 0.95);
   border: 1px solid rgba(200, 255, 0, 0.2);
   color: var(--acid);
   font-size: 11px;
@@ -374,7 +346,7 @@ select {
 }
 
 .hero-word-curate.is-glitching::before {
-  color: #ff003d;
+  color: var(--orange);
   transform: translateX(-5px);
 }
 
@@ -480,7 +452,7 @@ select {
 .orbit-html-stat {
   min-width: 86px;
   padding: 6px 8px;
-  background: rgba(5, 5, 5, 0.72);
+  background: rgba(10, 10, 10, 0.72);
   border: 1px solid currentColor;
   text-align: center;
   font-family: "JetBrains Mono", monospace;
@@ -509,7 +481,7 @@ select {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(5, 5, 5, 0.62);
+  background: rgba(10, 10, 10, 0.62);
   backdrop-filter: blur(22px);
 }
 
@@ -552,7 +524,7 @@ select {
 }
 
 .process-card:hover {
-  background: #212121;
+  background: #2a2a2a;
   border-top-color: var(--card-accent);
 }
 
@@ -620,6 +592,11 @@ select {
   line-height: 1.7;
 }
 
+.process-base {
+  position: relative;
+  z-index: 1;
+}
+
 .process-detail {
   position: absolute;
   left: 0;
@@ -628,14 +605,8 @@ select {
   min-height: 64px;
   padding: 12px 18px;
   color: var(--card-accent);
-  background: rgba(5, 5, 5, 0.94);
+  background: rgba(10, 10, 10, 0.94);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  transform: translateY(100%);
-  transition: transform 220ms ease;
-}
-
-.process-card:hover .process-detail {
-  transform: translateY(0);
 }
 
 .signal-board {
@@ -644,7 +615,7 @@ select {
   gap: 18px;
   margin-top: 18px;
   padding: 16px;
-  background: #0f0f0f;
+  background: #0a0a0a;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -901,7 +872,7 @@ select:focus {
 
 .preview-frame {
   min-height: 520px;
-  background: #111;
+  background: #141414;
   overflow: hidden;
 }
 
@@ -953,7 +924,7 @@ select:focus {
   bottom: 0;
   height: 32px;
   overflow: hidden;
-  background: rgba(5, 5, 5, 0.95);
+  background: rgba(10, 10, 10, 0.95);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -963,7 +934,7 @@ select:focus {
   align-items: center;
   gap: 14px;
   width: max-content;
-  animation: tickerMove 40s linear infinite;
+  will-change: transform;
 }
 
 .ticker-track span {
@@ -990,6 +961,39 @@ select:focus {
   font-size: 9px;
 }
 
+.not-found-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  background: #030303;
+  color: #f0ede4;
+  font-family: "JetBrains Mono", monospace;
+  text-align: center;
+}
+
+.not-found-screen span {
+  color: #c8ff00;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+}
+
+.not-found-screen h1 {
+  margin: 0;
+  color: #00ffd1;
+  font-family: "Syne", sans-serif;
+  font-size: clamp(86px, 18vw, 180px);
+  line-height: 0.82;
+}
+
+.not-found-screen p {
+  max-width: 420px;
+  margin: 0;
+  color: rgba(240, 237, 228, 0.48);
+  font-size: 12px;
+}
+
 .cursor-dot {
   position: fixed;
   z-index: 9999;
@@ -998,30 +1002,43 @@ select:focus {
   border-radius: 999px;
   background: var(--acid);
   pointer-events: none;
+  transform: translate(-50%, -50%);
+  will-change: left, top;
 }
 
 .cursor-ring {
   position: fixed;
   z-index: 9998;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 999px;
-  border: 1px solid rgba(200, 255, 0, 0.4);
+  border: 1.5px solid rgba(200, 255, 0, 0.45);
   pointer-events: none;
   display: grid;
   place-items: center;
+  transform: translate(-50%, -50%);
+  will-change: left, top, width, height;
   transition: width 180ms ease, height 180ms ease, border-color 180ms ease;
 }
 
 .cursor-ring-active {
-  width: 60px;
-  height: 60px;
+  width: 64px;
+  height: 64px;
   border-color: var(--acid);
 }
 
 .cursor-ring-label {
+  position: fixed;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
   color: var(--acid);
   font-size: 8px;
+  opacity: 0;
+}
+
+.cursor-label-active {
+  opacity: 1;
 }
 
 .cursor-bubble {
@@ -1030,6 +1047,7 @@ select:focus {
   border-radius: 999px;
   pointer-events: none;
   transform: translate(-50%, -50%);
+  will-change: transform, opacity;
 }
 
 @keyframes radarSweep {
@@ -1050,10 +1068,6 @@ select:focus {
   0% { stroke-dashoffset: 170; }
   45%, 70% { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: -170; }
-}
-
-@keyframes tickerMove {
-  to { transform: translateX(-50%); }
 }
 
 @media (max-width: 1100px) {
@@ -1170,7 +1184,7 @@ select:focus {
     height: 58px;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    background: rgba(5, 5, 5, 0.96);
+    background: rgba(10, 10, 10, 0.96);
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 

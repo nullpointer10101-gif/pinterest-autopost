@@ -54,6 +54,8 @@ desktop.ini
 # Build artifacts
 dist/
 build/
+.next/
+out/
 
 .vercel
 .env*.local
