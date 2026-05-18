@@ -19,6 +19,27 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const PIN_BUILDER_URLS = [
+  'https://www.pinterest.com/pin-creation-tool/',
+  'https://www.pinterest.com/pin-builder/',
+  'https://in.pinterest.com/pin-creation-tool/',
+  'https://in.pinterest.com/pin-builder/',
+];
+
+const UPLOAD_INPUT_SELECTORS = [
+  'input[data-test-id="storyboard-upload-input"]',
+  'input#storyboard-upload-input',
+  'input[aria-label="File Upload"]',
+  'input[type="file"]',
+];
+
+const BUILDER_READY_SELECTORS = [
+  '[data-test-id="storyboard-draft-upload-container"]',
+  '[data-test-id="storyboard-upload-input"]',
+  '[data-test-id="save-from-url-container"]',
+  '#storyboard-selector-title',
+];
+
 function normalizeSessionCookie(input) {
   let raw = String(input || '').trim();
   if (!raw) return '';
@@ -70,33 +91,182 @@ async function downloadMedia(mediaUrl, destinationPath) {
   });
 }
 
-async function uploadMedia(page, filePath) {
-  await page.waitForSelector('input[type="file"]', { timeout: 30000 });
-  const inputs = await page.$$('input[type="file"]');
-  const input = inputs[inputs.length - 1];
-  if (!input) throw new Error('Pinterest upload field not found');
-  await input.uploadFile(filePath);
+async function collectBuilderState(page) {
+  return page.evaluate((builderSelectors, uploadSelectors) => {
+    const bodyText = document.body.innerText || '';
+    const buttonTexts = Array.from(document.querySelectorAll('button, [role="button"], a'))
+      .map((node) => (node.innerText || node.getAttribute('aria-label') || '').trim())
+      .filter(Boolean)
+      .slice(0, 30);
 
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+    return {
+      url: window.location.href,
+      title: document.title || '',
+      h1: document.querySelector('h1')?.innerText || '',
+      hasBuilder: builderSelectors.some((selector) => !!document.querySelector(selector)),
+      hasUploadInput: uploadSelectors.some((selector) => !!document.querySelector(selector)),
+      hasLoginText: /log in|login|sign up|continue with email|welcome to pinterest/i.test(bodyText),
+      hasDraftLimit: /limit of 50 drafts|you['’]ve reached the pin draft limit/i.test(bodyText),
+      bodySnippet: bodyText.slice(0, 1200),
+      buttonTexts,
+    };
+  }, BUILDER_READY_SELECTORS, UPLOAD_INPUT_SELECTORS);
+}
+
+async function waitForBuilderReady(page, timeoutMs = 45000) {
+  const startedAt = Date.now();
+  let lastState = null;
+
+  while ((Date.now() - startedAt) < timeoutMs) {
+    lastState = await collectBuilderState(page);
+    if (lastState.hasUploadInput || lastState.hasBuilder) {
+      return lastState;
+    }
+    if (lastState.hasLoginText) {
+      throw new Error(`Pinterest session is not on the pin builder (${JSON.stringify(lastState)})`);
+    }
     await sleep(2000);
-    const status = await page.evaluate(() => {
-      const bodyText = (document.body.innerText || '').toLowerCase();
-      const hasMedia = !!document.querySelector('video, [data-test-id="pin-builder-media"] img, [data-test-id="pin-draft-media"] img');
-      const hasProgress = !!document.querySelector('[role="progressbar"], [data-test-id="media-upload-progress"], [data-test-id="upload-progress"]');
-      const draftLimit = bodyText.includes('limit of 50 drafts');
-      if (draftLimit) return 'draft_limit';
-      if (hasMedia) return 'ready';
-      if (hasProgress || bodyText.includes('processing')) return 'processing';
-      return 'waiting';
-    });
+  }
 
-    if (status === 'ready') return;
-    if (status === 'draft_limit') {
-      throw new Error('Pinterest draft limit reached');
+  throw new Error(`Pinterest pin builder did not become ready in time (${JSON.stringify(lastState)})`);
+}
+
+async function openPinBuilder(page) {
+  let lastError = null;
+
+  for (const url of PIN_BUILDER_URLS) {
+    try {
+      await page.goto(url, {
+        waitUntil: 'networkidle2',
+        timeout: 90000,
+      });
+      const state = await waitForBuilderReady(page);
+      console.log(`[IG-Repost Publisher] Pin builder ready at ${state.url}`);
+      return state;
+    } catch (err) {
+      lastError = err;
+      console.warn(`[IG-Repost Publisher] Pin builder open failed for ${url}:`, err.message);
+      await sleep(2500);
     }
   }
 
-  throw new Error('Pinterest media upload did not complete in time');
+  throw lastError || new Error('Unable to open Pinterest pin builder');
+}
+
+async function resolveUploadInput(page) {
+  for (const selector of UPLOAD_INPUT_SELECTORS) {
+    try {
+      const input = await page.$(selector);
+      if (input) {
+        return input;
+      }
+    } catch {}
+  }
+
+  try {
+    const clicked = await page.evaluate(() => {
+      const uploadArea = document.querySelector('[data-test-id="storyboard-draft-upload-container"]');
+      if (uploadArea) {
+        const clickTarget = uploadArea.querySelector('label, button, [role="button"]') || uploadArea;
+        clickTarget.click();
+        return true;
+      }
+      return false;
+    });
+    if (clicked) {
+      await sleep(1500);
+    }
+  } catch {}
+
+  for (const selector of UPLOAD_INPUT_SELECTORS) {
+    try {
+      const input = await page.$(selector);
+      if (input) {
+        return input;
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+async function getUploadStatus(page) {
+  return page.evaluate(() => {
+    const bodyText = (document.body.innerText || '').toLowerCase();
+    const hasMedia = !!document.querySelector(
+      'video, [data-test-id="pin-builder-media"] img, [data-test-id="pin-draft-media"] img, [data-test-id="story-pin-image-block"] img, [data-test-id="story-pin-video-block"] img'
+    );
+    const hasProgress = !!document.querySelector(
+      '[role="progressbar"], [data-test-id="media-upload-progress"], [data-test-id="upload-progress"], .spinnerContainer'
+    );
+    const hasUploadInput = !!document.querySelector(
+      'input[data-test-id="storyboard-upload-input"], input#storyboard-upload-input, input[aria-label="File Upload"], input[type="file"]'
+    );
+    const draftLimit = /limit of 50 drafts|you['’]ve reached the pin draft limit/.test(bodyText);
+    const loginGate = /log in|login|sign up|continue with email|welcome to pinterest/.test(bodyText);
+    if (draftLimit) return 'draft_limit';
+    if (loginGate && !hasUploadInput && !hasMedia) return 'login_gate';
+    if (hasMedia) return 'ready';
+    if (hasProgress || bodyText.includes('processing')) return 'processing';
+    if (hasUploadInput || bodyText.includes('choose a file')) return 'waiting';
+    return 'unknown';
+  });
+}
+
+async function uploadMedia(page, filePath) {
+  let lastStatus = 'waiting';
+
+  for (let uploadAttempt = 1; uploadAttempt <= 3; uploadAttempt += 1) {
+    console.log(`[IG-Repost Publisher] Upload attempt ${uploadAttempt}/3`);
+
+    const builderState = await waitForBuilderReady(page);
+    if (builderState.hasLoginText) {
+      throw new Error(`Pinterest session is not authorized for pin creation (${JSON.stringify(builderState)})`);
+    }
+
+    const input = await resolveUploadInput(page);
+    if (!input) {
+      await saveDebugSnapshot(page, 'ig_repost_upload_input_missing');
+      if (uploadAttempt < 3) {
+        await openPinBuilder(page);
+        continue;
+      }
+      throw new Error(`Pinterest upload field not found (${JSON.stringify(builderState)})`);
+    }
+
+    await input.uploadFile(filePath);
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await sleep(2000);
+      lastStatus = await getUploadStatus(page);
+      if (lastStatus === 'ready') return;
+      if (lastStatus === 'draft_limit') {
+        throw new Error('Pinterest draft limit reached');
+      }
+      if (lastStatus === 'login_gate') {
+        break;
+      }
+      if (lastStatus === 'processing') {
+        for (let processingAttempt = 0; processingAttempt < 15; processingAttempt += 1) {
+          await sleep(3000);
+          lastStatus = await getUploadStatus(page);
+          if (lastStatus === 'ready') return;
+          if (lastStatus === 'draft_limit') {
+            throw new Error('Pinterest draft limit reached');
+          }
+        }
+        break;
+      }
+    }
+
+    await saveDebugSnapshot(page, `ig_repost_upload_retry_${uploadAttempt}`);
+    if (uploadAttempt < 3) {
+      await openPinBuilder(page);
+      continue;
+    }
+  }
+
+  throw new Error(`Pinterest media upload did not complete in time (status: ${lastStatus})`);
 }
 
 async function handleVideoCoverEditor(page, isVideo) {
@@ -719,10 +889,7 @@ async function publish(payload = {}) {
     });
 
     console.log('[IG-Repost Publisher] Opening Pinterest pin builder...');
-    await page.goto('https://www.pinterest.com/pin-creation-tool/', {
-      waitUntil: 'networkidle2',
-      timeout: 90000,
-    });
+    await openPinBuilder(page);
 
     console.log('[IG-Repost Publisher] Uploading media...');
     await uploadMedia(page, mediaPath);
