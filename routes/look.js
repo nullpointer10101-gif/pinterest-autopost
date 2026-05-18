@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const queueService   = require('../services/queueService');
 const historyService = require('../services/historyService');
+const igRepostStateService = require('../services/igRepostStateService');
 
 // ── Upstash helpers ───────────────────────────────────────────────────────────
 const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL   || '';
@@ -40,6 +41,19 @@ async function upstashSet(key, value, ttl = 86400) {
     });
     clearTimeout(t);
   } catch {}
+}
+
+async function loadLookData(shortcode) {
+  const cleanShortcode = String(shortcode || '').trim();
+  if (!cleanShortcode) return null;
+
+  const direct = await upstashGet(`look:${cleanShortcode}`);
+  if (direct) return direct;
+
+  const isolated = await upstashGet(`iglook:${cleanShortcode}`);
+  if (isolated) return isolated;
+
+  return igRepostStateService.getLookDataByShortcode(cleanShortcode);
 }
 
 // ── Product Image via Serper Image Search ────────────────────────────────────
@@ -122,7 +136,7 @@ router.get('/:shortcode/fresh-video', async (req, res) => {
 router.get('/:shortcode/products', async (req, res) => {
   const { shortcode } = req.params;
   try {
-    const lookData = await upstashGet(`look:${shortcode}`);
+    const lookData = await loadLookData(shortcode);
     let outfit = [];
     if (lookData?.productInfo?.outfit?.length > 0) {
       outfit = lookData.productInfo.outfit;
@@ -141,7 +155,7 @@ router.get('/:shortcode', async (req, res) => {
     const { shortcode } = req.params;
 
     // Fast path: individual Upstash key
-    let lookData = await upstashGet(`look:${shortcode}`);
+    let lookData = await loadLookData(shortcode);
     if (lookData) {
       console.log(`[Look] ⚡ Fast path hit for ${shortcode}`);
     } else {
