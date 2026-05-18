@@ -1,9 +1,0 @@
-2:"$Sreact.suspense"
-3:I[1523,["794","static/chunks/794-21a7fa105f0d45ca.js","931","static/chunks/app/page-eb20ddcfdfc414a3.js"],"BailoutToCSR"]
-5:I[4707,[],""]
-6:I[6423,[],""]
-0:["RZGWfKg5yvjRBnB8agizf",[[["",{"children":["__PAGE__",{}]},"$undefined","$undefined",true],["",{"children":["__PAGE__",{},[["$L1",["$","$2",null,{"fallback":null,"children":["$","$L3",null,{"reason":"next/dynamic","children":"$L4"}]}],null],null],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/8f27f53b631d065b.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"en","children":["$","body",null,{"children":["$","$L5",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L6",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":["$","main",null,{"className":"not-found-screen","children":[["$","span",null,{"children":"REEL ORBIT SIGNAL LOST"}],["$","h1",null,{"children":"404"}],["$","p",null,{"children":"The requested console route is outside the active automation orbit."}]]}],"notFoundStyles":[]}]}]}]],null],null],["$L7",null]]]]
-8:I[8157,["794","static/chunks/794-21a7fa105f0d45ca.js","931","static/chunks/app/page-eb20ddcfdfc414a3.js"],"default"]
-4:["$","$L8",null,{}]
-7:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Reel Orbit"}],["$","meta","3",{"name":"description","content":"Social automation command center for Instagram scraping, Pinterest publishing, and menswear engagement."}]]
-1:null

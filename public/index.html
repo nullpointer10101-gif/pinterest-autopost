@@ -1,1 +1,662 @@
-<!DOCTYPE html><html lang="en"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/css/8f27f53b631d065b.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-eccf231378bd9eb2.js"/><script src="/_next/static/chunks/fd9d1056-8b18fc9dcae3a0fc.js" async=""></script><script src="/_next/static/chunks/117-b858e279e57ca0cb.js" async=""></script><script src="/_next/static/chunks/main-app-f84ad83a491751da.js" async=""></script><script src="/_next/static/chunks/794-21a7fa105f0d45ca.js" async=""></script><script src="/_next/static/chunks/app/page-eb20ddcfdfc414a3.js" async=""></script><title>Reel Orbit</title><meta name="description" content="Social automation command center for Instagram scraping, Pinterest publishing, and menswear engagement."/><script src="/_next/static/chunks/polyfills-42372ed130431b0a.js" noModule=""></script></head><body><!--$!--><template data-dgst="BAILOUT_TO_CLIENT_SIDE_RENDERING"></template><!--/$--><script src="/_next/static/chunks/webpack-eccf231378bd9eb2.js" async=""></script><script>(self.__next_f=self.__next_f||[]).push([0]);self.__next_f.push([2,null])</script><script>self.__next_f.push([1,"1:HL[\"/_next/static/css/8f27f53b631d065b.css\",\"style\"]\n"])</script><script>self.__next_f.push([1,"2:I[2846,[],\"\"]\n4:\"$Sreact.suspense\"\n5:I[1523,[\"794\",\"static/chunks/794-21a7fa105f0d45ca.js\",\"931\",\"static/chunks/app/page-eb20ddcfdfc414a3.js\"],\"BailoutToCSR\"]\n6:I[8157,[\"794\",\"static/chunks/794-21a7fa105f0d45ca.js\",\"931\",\"static/chunks/app/page-eb20ddcfdfc414a3.js\"],\"default\"]\n7:I[4707,[],\"\"]\n8:I[6423,[],\"\"]\na:I[1060,[],\"\"]\nb:[]\n0:[\"$\",\"$L2\",null,{\"buildId\":\"RZGWfKg5yvjRBnB8agizf\",\"assetPrefix\":\"\",\"urlParts\":[\"\",\"\"],\"initialTree\":[\"\",{\"children\":[\"__PAGE__\",{}]},\"$undefined\",\"$undefined\",true],\"initialSeedData\":[\"\",{\"children\":[\"__PAGE__\",{},[[\"$L3\",[\"$\",\"$4\",null,{\"fallback\":null,\"children\":[\"$\",\"$L5\",null,{\"reason\":\"next/dynamic\",\"children\":[\"$\",\"$L6\",null,{}]}]}],null],null],null]},[[[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/css/8f27f53b631d065b.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\"}]],[\"$\",\"html\",null,{\"lang\":\"en\",\"children\":[\"$\",\"body\",null,{\"children\":[\"$\",\"$L7\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L8\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":[\"$\",\"main\",null,{\"className\":\"not-found-screen\",\"children\":[[\"$\",\"span\",null,{\"children\":\"REEL ORBIT SIGNAL LOST\"}],[\"$\",\"h1\",null,{\"children\":\"404\"}],[\"$\",\"p\",null,{\"children\":\"The requested console route is outside the active automation orbit.\"}]]}],\"notFoundStyles\":[]}]}]}]],null],null],\"couldBeIntercepted\":false,\"initialHead\":[null,\"$L9\"],\"globalErrorComponent\":\"$a\",\"missingSlots\":\"$Wb\"}]\n"])</script><script>self.__next_f.push([1,"9:[[\"$\",\"meta\",\"0\",{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1\"}],[\"$\",\"meta\",\"1\",{\"charSet\":\"utf-8\"}],[\"$\",\"title\",\"2\",{\"children\":\"Reel Orbit\"}],[\"$\",\"meta\",\"3\",{\"name\":\"description\",\"content\":\"Social automation command center for Instagram scraping, Pinterest publishing, and menswear engagement.\"}]]\n3:null\n"])</script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b0614">
+    <title>Reel Orbit</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <div class="scene-layer" aria-hidden="true">
+        <div class="scene-gradient scene-gradient-a"></div>
+        <div class="scene-gradient scene-gradient-b"></div>
+        <div class="scene-grid"></div>
+        <div class="scene-orbit scene-orbit-one"></div>
+        <div class="scene-orbit scene-orbit-two"></div>
+        <div class="scene-noise"></div>
+    </div>
+
+    <div class="app-shell">
+        <header class="topbar">
+            <div class="brand-wrap">
+                <p class="brand-tag">Flux Deck</p>
+                <div class="brand-title">
+                    <i data-lucide="radar" class="brand-icon"></i>
+                    <span>Reel Orbit</span>
+                </div>
+                <p class="brand-subtitle">A mobile-first orbit deck for scraping reels, publishing pins, and running safe menswear engagement.</p>
+                <div class="status-wrap">
+                    <span id="connection-status" class="badge badge-success">ONLINE</span>
+                    <span id="active-mode" class="badge">MODE: AUTO</span>
+                </div>
+            </div>
+
+            <div class="header-tools">
+                <label class="switch-wrap" for="auto-refresh-toggle">
+                    <input id="auto-refresh-toggle" type="checkbox" checked>
+                    <span>Auto Refresh</span>
+                </label>
+                <button id="manual-refresh-btn" class="btn btn-secondary compact-btn" type="button">
+                    <i data-lucide="refresh-cw" class="btn-icon"></i>
+                    <span>Refresh</span>
+                </button>
+                <button id="visual-mode-btn" class="btn btn-secondary compact-btn visual-mode-btn" type="button" title="Cycle visual modes">
+                    <i data-lucide="moon-star" class="btn-icon"></i>
+                    <span id="visual-mode-label">Flux</span>
+                </button>
+                <div id="live-time" class="clock">00:00</div>
+            </div>
+        </header>
+
+        <nav class="tab-nav" aria-label="Main tabs">
+            <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
+            <button class="tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
+            <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
+            <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
+            <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Engagement</span></button>
+            <button class="tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
+            <button class="tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
+        </nav>
+
+        <main>
+            <section class="ops-ribbon" aria-live="polite">
+                <div class="ops-ribbon-main">
+                    <span class="ops-kicker">Live Ops</span>
+                    <strong id="ops-ticker-text">Booting mission systems...</strong>
+                </div>
+                <div class="ops-ribbon-meter">
+                    <span id="ops-progress-label">Success 0%</span>
+                    <div class="ops-meter-track">
+                        <div id="ops-progress-fill" class="ops-meter-fill"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="panel-dashboard" class="panel panel-dashboard">
+                <section class="orbit-deck">
+                    <div class="orbit-brief">
+                        <div class="hero-pill-row">
+                            <span class="hero-pill hero-pill-primary">Reel Radar</span>
+                            <span class="hero-pill hero-pill-secondary">Pinterest Autopilot</span>
+                        </div>
+                        <h1 class="orbit-title">Scrape. Curate. Publish. Engage.</h1>
+                        <p class="orbit-copy">A living command surface for target Instagram channels, Pinterest queue pressure, and men's outfit engagement. No FirePost wiring, no useless X panels, no duplicate dashboard noise.</p>
+
+                        <div class="orbit-actions">
+                            <button id="hero-open-channels-btn" class="btn btn-primary hero-action" type="button">
+                                <i data-lucide="rss" class="btn-icon"></i>
+                                <span>Add Target</span>
+                            </button>
+                            <button id="hero-refresh-btn" class="btn btn-secondary hero-action" type="button">
+                                <i data-lucide="refresh-cw" class="btn-icon"></i>
+                                <span>Sync Now</span>
+                            </button>
+                            <button id="hero-open-history-btn" class="btn btn-secondary hero-action" type="button">
+                                <i data-lucide="history" class="btn-icon"></i>
+                                <span>Receipts</span>
+                            </button>
+                        </div>
+
+                        <div class="orbit-signal-row">
+                            <div class="orbit-signal">
+                                <span>Connection</span>
+                                <strong id="hero-connection-status" class="badge">ONLINE</strong>
+                            </div>
+                            <div class="orbit-signal">
+                                <span>Targets</span>
+                                <strong id="hero-channel-count">0</strong>
+                            </div>
+                            <div class="orbit-signal">
+                                <span>Next Wake</span>
+                                <strong id="hero-next-cycle">--:--</strong>
+                            </div>
+                            <div class="orbit-signal">
+                                <span>Skin</span>
+                                <strong id="hero-mode-label" class="hero-mode-value">Flux</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="orbit-core-card" data-kinetic-card>
+                        <div class="orbit-rings" aria-hidden="true">
+                            <span class="orbit-ring orbit-ring-one"></span>
+                            <span class="orbit-ring orbit-ring-two"></span>
+                            <span class="orbit-ring orbit-ring-three"></span>
+                        </div>
+                        <div class="orbit-core">
+                            <span>Live Core</span>
+                            <strong>Autonomous</strong>
+                            <small>IG repost pipeline stays isolated</small>
+                        </div>
+                        <div class="orbit-stat orbit-stat-a">
+                            <span>Published</span>
+                            <strong id="hero-total-posts">0</strong>
+                        </div>
+                        <div class="orbit-stat orbit-stat-b">
+                            <span>Pending</span>
+                            <strong id="hero-queue-pending">0</strong>
+                        </div>
+                        <div class="orbit-stat orbit-stat-c">
+                            <span>Success</span>
+                            <strong id="hero-success-rate">0%</strong>
+                        </div>
+                        <div class="orbit-stat orbit-stat-d">
+                            <span>Failed</span>
+                            <strong id="hero-queue-failed">0</strong>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="flow-board">
+                    <article class="flow-card flow-card-hot" data-kinetic-card>
+                        <span class="flow-index">01</span>
+                        <i data-lucide="radar" class="flow-icon"></i>
+                        <h2>Watch Targets</h2>
+                        <p>New Instagram channels validate immediately, then run on the independent scheduled scanner.</p>
+                    </article>
+                    <article class="flow-card" data-kinetic-card>
+                        <span class="flow-index">02</span>
+                        <i data-lucide="scissors" class="flow-icon"></i>
+                        <h2>Skip Noise</h2>
+                        <p>Duplicate guards, repost history, and pinned-reel rules keep the pipeline clean.</p>
+                    </article>
+                    <article class="flow-card" data-kinetic-card>
+                        <span class="flow-index">03</span>
+                        <i data-lucide="send" class="flow-icon"></i>
+                        <h2>Publish Pins</h2>
+                        <p>Thumbnail, product link, caption, and media handling stay inside the independent repost workflow.</p>
+                    </article>
+                    <article class="flow-card" data-kinetic-card>
+                        <span class="flow-index">04</span>
+                        <i data-lucide="heart-handshake" class="flow-icon"></i>
+                        <h2>Engage Menswear</h2>
+                        <p>Hourly Pinterest engagement stays focused on men's outfit pins with no save action.</p>
+                    </article>
+                </section>
+
+                <article class="alert-center signal-alerts">
+                    <div class="alert-center-head">
+                        <h2><i data-lucide="siren" class="heading-icon"></i>Signal Board</h2>
+                        <span id="alert-center-count" class="badge">0 ALERTS</span>
+                    </div>
+                    <div id="alert-center-list" class="alert-list">
+                        <div class="pulse-item">Scanning live automation health...</div>
+                    </div>
+                </article>
+
+                <section class="dashboard-grid">
+                    <article class="card dashboard-card dashboard-card-workflow">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="workflow" class="heading-icon"></i>Workflow Control Center</h2>
+                            <p class="muted-text">Controls for active Pinterest automations plus read-only IG repost health.</p>
+                        </div>
+
+                        <div class="workflow-grid">
+                            <div class="workflow-item">
+                                <div class="workflow-info">
+                                    <i data-lucide="camera" class="workflow-icon"></i>
+                                    <div>
+                                        <div class="workflow-name">Pinterest Posting</div>
+                                        <div class="workflow-desc">Manual pin builder and queue engine</div>
+                                    </div>
+                                </div>
+                                <label class="master-switch">
+                                    <input type="checkbox" id="wf-pinterest-posting" checked>
+                                    <span class="master-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="workflow-item">
+                                <div class="workflow-info">
+                                    <i data-lucide="thumbs-up" class="workflow-icon"></i>
+                                    <div>
+                                        <div class="workflow-name">Pinterest Engagement</div>
+                                        <div class="workflow-desc">Men's outfit likes and comments</div>
+                                    </div>
+                                </div>
+                                <label class="master-switch">
+                                    <input type="checkbox" id="wf-pinterest-engagement" checked>
+                                    <span class="master-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="workflow-item workflow-item-readonly">
+                                <div class="workflow-info">
+                                    <i data-lucide="zap" class="workflow-icon"></i>
+                                    <div>
+                                        <div class="workflow-name">Independent IG Repost</div>
+                                        <div class="workflow-desc">Own scheduler, queue, duplicate guard</div>
+                                    </div>
+                                </div>
+                                <span id="ig-workflow-badge" class="badge">Checking...</span>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="card dashboard-card dashboard-card-ig">
+                        <div class="card-header-row">
+                            <div class="card-title-wrap">
+                                <h2><i data-lucide="instagram" class="heading-icon"></i>IG Repost Pipeline</h2>
+                                <p class="muted-text">Standalone scraper/reposter status with manual scan dispatch.</p>
+                            </div>
+                            <button id="run-ig-scan-btn" class="btn btn-secondary compact-btn" type="button">
+                                <i data-lucide="radar" class="btn-icon"></i>
+                                <span>Run Scan</span>
+                            </button>
+                        </div>
+
+                        <div class="pipeline-metrics-grid">
+                            <div class="pipeline-metric">
+                                <span>Accounts</span>
+                                <strong id="ig-dashboard-accounts">0</strong>
+                            </div>
+                            <div class="pipeline-metric">
+                                <span>Ready Jobs</span>
+                                <strong id="ig-dashboard-ready">0</strong>
+                            </div>
+                            <div class="pipeline-metric">
+                                <span>Posted</span>
+                                <strong id="ig-dashboard-posts">0</strong>
+                            </div>
+                            <div class="pipeline-metric">
+                                <span>Failed</span>
+                                <strong id="ig-dashboard-failed">0</strong>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-log-head">
+                            <span>Latest Activity</span>
+                            <span id="ig-dashboard-last-run" class="input-meta">Waiting...</span>
+                        </div>
+                        <div id="ig-dashboard-logs" class="list compact-list">
+                            <div class="pulse-item">Loading IG pipeline activity...</div>
+                        </div>
+                    </article>
+
+                    <article class="card dashboard-card dashboard-card-queue">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="layers" class="heading-icon"></i>Live Mission Queue</h2>
+                            <p class="muted-text">Realtime queue preview of upcoming items.</p>
+                        </div>
+                        <div id="dashboard-queue-list" class="list">
+                            <div class="pulse-item">Loading missions...</div>
+                        </div>
+                        <div class="card-footer align-end">
+                            <button id="quick-open-queue-btn" class="pill-btn" type="button">Open Full Queue</button>
+                        </div>
+                    </article>
+
+                    <article class="card dashboard-card dashboard-card-history">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="history" class="heading-icon"></i>Recent History</h2>
+                            <p class="muted-text">Latest success and error operations.</p>
+                        </div>
+                        <div id="dashboard-history-list" class="list">
+                            <div class="pulse-item">Loading history...</div>
+                        </div>
+                        <div class="card-footer align-end">
+                            <button id="quick-open-history-btn" class="pill-btn" type="button">Open Full History</button>
+                        </div>
+                    </article>
+
+                    <article class="card dashboard-card dashboard-card-cycle">
+                        <div class="countdown-wrap">
+                            <div class="countdown-label">Next Automation Cycle</div>
+                            <div id="countdown-clock" class="countdown-timer">--:--</div>
+                            <div class="countdown-subtext">
+                                <i data-lucide="timer" class="mini-icon"></i>
+                                Trigger target: minute 15 each hour
+                            </div>
+                        </div>
+
+                        <div class="health-grid">
+                            <div class="health-item">
+                                <div id="light-pinterest" class="status-light"></div>
+                                <div>
+                                    <div class="stat-label">Pinterest Session</div>
+                                    <div id="status-text-pinterest" class="input-meta">Checking...</div>
+                                </div>
+                            </div>
+                            <div class="health-item">
+                                <div id="light-ig" class="status-light"></div>
+                                <div>
+                                    <div class="stat-label">IG Repost Pipeline</div>
+                                    <div id="status-text-ig" class="input-meta">Checking...</div>
+                                </div>
+                            </div>
+                            <div class="health-item">
+                                <div id="light-ai" class="status-light"></div>
+                                <div>
+                                    <div class="stat-label">AI Engine</div>
+                                    <div id="status-text-ai" class="input-meta">Ready</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="engage-inline">
+                            <label for="engage-count">Quick Like Target</label>
+                            <div class="engage-inline-controls">
+                                <input type="range" id="engage-count" min="1" max="10" value="5">
+                                <span id="engage-count-value-dashboard">5</span>
+                            </div>
+                        </div>
+                    </article>
+                </section>
+            </section>
+
+            <section id="panel-channels" class="panel hidden">
+                <article class="card">
+                    <div class="card-title-wrap">
+                        <h2><i data-lucide="users-round" class="heading-icon"></i>Target Channels</h2>
+                        <p class="muted-text">Add Instagram sources for automated reel-to-pin missions.</p>
+                    </div>
+
+                    <div class="field-wrap">
+                        <label for="new-channel-input">Add New Channel</label>
+                        <div class="inline-field">
+                            <input type="text" id="new-channel-input" placeholder="@username or https://www.instagram.com/profile">
+                            <button id="add-channel-btn" class="btn btn-primary" type="button">
+                                <i data-lucide="plus" class="btn-icon"></i>
+                                <span>Add Channel</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="channel-pipeline-panel">
+                        <div>
+                            <div class="sub-title">Independent Repost Monitor</div>
+                            <p class="muted-text">New channels validate instantly; scheduled scans continue separately from FirePost.</p>
+                        </div>
+                        <div class="channel-pipeline-actions">
+                            <div class="pipeline-mini-stats">
+                                <span><strong id="channels-status-accounts">0</strong> accounts</span>
+                                <span><strong id="channels-status-ready">0</strong> ready</span>
+                                <span><strong id="channels-status-failed">0</strong> failed</span>
+                            </div>
+                            <button id="channels-scan-now-btn" class="btn btn-secondary compact-btn" type="button">
+                                <i data-lucide="radar" class="btn-icon"></i>
+                                <span>Run IG Scan</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="sub-title">Active Channels</div>
+                    <div id="channels-list" class="list channel-list-grid">
+                        <div class="pulse-item">Loading channels...</div>
+                    </div>
+                </article>
+            </section>
+
+            <section id="panel-queue" class="panel hidden">
+                <article class="card">
+                    <div class="card-header-row">
+                        <h2><i data-lucide="layers" class="heading-icon"></i>Mission Queue</h2>
+                        <div class="button-row">
+                            <button id="run-bot-btn" class="btn btn-primary compact-btn" type="button"><i data-lucide="zap" class="btn-icon"></i><span>Run Queue Bot</span></button>
+                            <button id="retry-failed-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="refresh-cw" class="btn-icon"></i><span>Retry Failed</span></button>
+                            <button id="clear-queue-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear Queue</span></button>
+                        </div>
+                    </div>
+
+                    <div class="control-row">
+                        <input type="text" id="queue-search" placeholder="Search queue by title, source, or username">
+                        <select id="queue-status-filter">
+                            <option value="all">All statuses</option>
+                            <option value="pending">Pending</option>
+                            <option value="processing">Processing</option>
+                            <option value="failed">Failed</option>
+                        </select>
+                    </div>
+
+                    <div id="queue-list" class="list"></div>
+                </article>
+            </section>
+
+            <section id="panel-pinterest" class="panel hidden">
+                <div class="panel-grid panel-grid-main">
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="pen-square" class="heading-icon"></i>Pinterest Mission Builder</h2>
+                            <p class="muted-text">Extract reels, generate high-conversion copy, and launch posting operations.</p>
+                        </div>
+
+                        <div class="field-wrap">
+                            <label for="reel-url">Instagram Reel URL</label>
+                            <div class="inline-field inline-field-reel">
+                                <input type="text" id="reel-url" placeholder="https://www.instagram.com/reel/...">
+                                <div class="inline-actions">
+                                    <button id="paste-reel-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="clipboard" class="btn-icon"></i><span>Paste</span></button>
+                                    <button id="extract-btn" class="btn btn-primary" type="button">Extract</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <section id="preview-section" class="preview-shell hidden">
+                            <div class="preview-media-wrap">
+                                <img id="preview-img" class="preview-img" alt="Mission preview">
+                                <video id="preview-video" class="preview-video hidden" muted loop playsinline preload="metadata"></video>
+                                <div class="preview-media-actions">
+                                    <button id="preview-audio-btn" class="pill-btn hidden" type="button">Unmute</button>
+                                    <button id="preview-scroll-btn" class="pill-btn hidden" type="button">No Scroll: Off</button>
+                                </div>
+                            </div>
+
+                            <div class="preview-fields">
+                                <div class="field-wrap">
+                                    <label for="field-title">Pin Title</label>
+                                    <input type="text" id="field-title" maxlength="100">
+                                    <div id="field-title-meta" class="input-meta">0/100 chars | 0 words</div>
+                                </div>
+                                <div class="field-wrap">
+                                    <label for="field-desc">Description</label>
+                                    <textarea id="field-desc" rows="5" maxlength="800"></textarea>
+                                    <div id="field-desc-meta" class="input-meta">0/800 chars | 0 words</div>
+                                </div>
+                                <div class="field-wrap">
+                                    <label for="field-link">Destination Link</label>
+                                    <input type="text" id="field-link" maxlength="2048" placeholder="https://your-site.com/product-page">
+                                    <div id="field-link-meta" class="input-meta">Optional destination URL for click-through.</div>
+                                </div>
+                                <div class="field-wrap">
+                                    <label for="field-alt">Alt Text</label>
+                                    <input type="text" id="field-alt" maxlength="500" placeholder="Optional alt text">
+                                    <div id="field-alt-meta" class="input-meta">0/500 chars</div>
+                                </div>
+
+                                <div class="button-row">
+                                    <button id="post-now-btn" class="btn btn-primary" type="button">Post Now</button>
+                                    <button id="queue-btn" class="btn btn-secondary" type="button">Queue</button>
+                                </div>
+
+                                <div class="draft-strip">
+                                    <label for="draft-name">Draft Name</label>
+                                    <div class="inline-field">
+                                        <input type="text" id="draft-name" placeholder="e.g. Summer haul pin">
+                                        <button class="btn btn-secondary compact-btn" type="button" onclick="saveDraftFromName()">Save Named Draft</button>
+                                        <button class="btn btn-secondary compact-btn" type="button" onclick="saveDraftFromPreview()">Quick Save</button>
+                                    </div>
+                                </div>
+
+                                <div class="sub-title">Saved Drafts</div>
+                                <div id="draft-list" class="list">
+                                    <div class="pulse-item">No drafts saved yet.</div>
+                                </div>
+                            </div>
+                        </section>
+                    </article>
+
+                    <aside class="sidebar-col">
+                        <article class="card">
+                            <div class="card-title-wrap">
+                                <h2><i data-lucide="zap" class="heading-icon"></i>Pinterest Quick Actions</h2>
+                                <p class="muted-text">Target random men's outfit pins with a no-save engagement profile.</p>
+                            </div>
+
+                            <div class="field-wrap">
+                                <div class="field-inline-meta">
+                                    <label for="engage-count-manual">Manual Like Target</label>
+                                    <div id="engage-count-value" class="input-meta">5</div>
+                                </div>
+                                <input type="number" id="engage-count-manual" min="1" max="10" value="5">
+                            </div>
+
+                            <div class="field-wrap">
+                                <div class="field-inline-meta">
+                                    <label for="engage-comment-target">Manual Comment Target</label>
+                                    <div class="input-meta">Default hourly target: 3</div>
+                                </div>
+                                <input type="number" id="engage-comment-target" min="0" max="10" value="3">
+                            </div>
+
+                            <div class="field-wrap">
+                                <label for="engage-niche">Target Niche</label>
+                                <select id="engage-niche">
+                                    <option value="mens_outfits">Men's Outfits</option>
+                                    <option value="mens_streetwear">Men's Streetwear</option>
+                                    <option value="mens_formal">Men's Formal Wear</option>
+                                </select>
+                            </div>
+
+                            <div class="input-meta">Hourly automation profile: 5 likes, 3 comments, 0 saves.</div>
+
+                            <div class="quick-actions">
+                                <button id="engage-btn" class="btn btn-primary" type="button"><i data-lucide="activity" class="btn-icon"></i><span>Engage Bot</span></button>
+                            </div>
+
+                            <div class="sub-title">Pinterest Queue Status</div>
+                            <div id="pin-queue-list-mini" class="list">
+                                <div class="pulse-item">Checking queue...</div>
+                            </div>
+                        </article>
+                    </aside>
+                </div>
+            </section>
+
+            <section id="panel-history" class="panel hidden">
+                <article class="card">
+                    <div class="card-header-row">
+                        <h2><i data-lucide="history" class="heading-icon"></i>History</h2>
+                        <div class="button-row">
+                            <button id="export-history-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="download" class="btn-icon"></i><span>Export JSON</span></button>
+                            <button id="clear-history-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear History</span></button>
+                        </div>
+                    </div>
+
+                    <div class="control-row">
+                        <input type="text" id="history-search" placeholder="Search history by title or username">
+                        <select id="history-status-filter">
+                            <option value="all">All statuses</option>
+                            <option value="success">Posted</option>
+                            <option value="error">Failed</option>
+                            <option value="preview">Preview</option>
+                        </select>
+                    </div>
+
+                    <div id="history-list" class="list"></div>
+                </article>
+            </section>
+
+            <section id="panel-engagements" class="panel hidden">
+                <article class="card">
+                    <div class="card-title-wrap">
+                        <h2><i data-lucide="activity" class="heading-icon"></i>Engagement Logbook</h2>
+                        <p class="muted-text">Read-only stream of engagement activity in the last 24 hours.</p>
+                    </div>
+
+                    <div class="control-row">
+                        <input type="text" id="engagement-search" placeholder="Search Pinterest engagement logs">
+                    </div>
+
+                    <div class="button-row inline-actions-row">
+                        <button id="reset-engagement-guard-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="shield-check" class="btn-icon"></i><span>Reset Guard</span></button>
+                        <button id="clear-engagements-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="eraser" class="btn-icon"></i><span>Clear Logs</span></button>
+                    </div>
+
+                    <div id="engagement-summary" class="stats-mini-grid"></div>
+                    <div id="engagement-readonly-list" class="list audit-list"></div>
+
+                    <div class="sub-title">Raw Booster Stream</div>
+                    <div id="engagement-logs" class="list"></div>
+                </article>
+            </section>
+
+            <section id="panel-settings" class="panel hidden">
+                <div class="panel-grid panel-grid-secondary">
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <div class="heading-row">
+                                <h2><i data-lucide="camera" class="heading-icon"></i>Pinterest Setup</h2>
+                                <span id="settings-badge-pin" class="badge">Checking...</span>
+                            </div>
+                            <p class="muted-text">Connect your Pinterest account through OAuth or session cookie mode.</p>
+                        </div>
+
+                        <div class="field-wrap">
+                            <label>Method 1: Official API</label>
+                            <a href="/api/pinterest" class="btn btn-primary settings-link">
+                                <i data-lucide="shield-check" class="btn-icon"></i>
+                                <span>Link via OAuth</span>
+                            </a>
+                        </div>
+
+                        <div class="field-wrap section-divider">
+                            <label for="session-cookie">Method 2: Session Cookie</label>
+                            <div class="inline-field">
+                                <input type="password" id="session-cookie" placeholder="_pinterest_sess value">
+                                <button id="link-session-btn" class="btn btn-secondary" type="button">Link</button>
+                                <button id="unlink-session-btn" class="btn btn-danger hidden" type="button">Unlink</button>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="instagram" class="heading-icon"></i>Extraction Engine</h2>
+                            <p class="muted-text">Optional Instagram cookie for high-frequency or restricted reel extraction.</p>
+                        </div>
+
+                        <div class="field-wrap">
+                            <label for="ig-session-cookie">Instagram Cookie</label>
+                            <div class="inline-field">
+                                <input type="password" id="ig-session-cookie" placeholder="sessionid=...">
+                                <button id="link-ig-session-btn" class="btn btn-secondary" type="button">Save</button>
+                            </div>
+                            <div class="input-meta">Required only for stricter extraction scenarios.</div>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="stethoscope" class="heading-icon"></i>System Status</h2>
+                            <p class="muted-text">Runtime diagnostics and environment health.</p>
+                        </div>
+
+                        <div class="diag-list">
+                            <div class="diag-item"><span>Runtime</span><span id="diag-runtime" class="badge">Checking...</span></div>
+                            <div class="diag-item"><span>Posting</span><span id="diag-posting" class="badge">Checking...</span></div>
+                            <div class="diag-item"><span>Storage</span><span id="diag-storage" class="badge">Checking...</span></div>
+                        </div>
+                    </article>
+                </div>
+            </section>
+        </main>
+
+        <nav id="mobile-tab-nav" class="mobile-tab-nav" aria-label="Mobile tab navigation">
+            <button class="mobile-tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Home</span></button>
+            <button class="mobile-tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
+            <button class="mobile-tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
+            <button class="mobile-tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Create</span></button>
+            <button class="mobile-tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
+            <button class="mobile-tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
+        </nav>
+
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
