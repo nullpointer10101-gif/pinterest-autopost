@@ -231,7 +231,25 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
     }
     a { color: inherit; }
     button, input { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
     .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    .scroll-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      z-index: 80;
+      background: transparent;
+      pointer-events: none;
+    }
+    .scroll-progress span {
+      display: block;
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--pine), var(--gold), var(--brick));
+      transition: width .12s linear;
+    }
     .topbar {
       position: sticky; top: 0; z-index: 30;
       border-bottom: 1px solid var(--line);
@@ -359,6 +377,27 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       cursor: pointer;
       font-weight: 800;
     }
+    .mobile-hero-card {
+      display: none;
+      margin: 0 10px 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,250,241,.92);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: 0 14px 36px rgba(20,20,20,.1);
+    }
+    .mobile-hero-card strong {
+      display: block;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 24px;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    .mobile-hero-card span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
     .story-panel { padding-top: 12px; }
     .eyebrow {
       display: inline-flex; align-items: center; gap: 8px;
@@ -445,6 +484,41 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       width: var(--score, 72%);
       background: linear-gradient(90deg, var(--pine), var(--gold), var(--brick));
     }
+    .fit-progress-row {
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
+      margin-top: 16px;
+    }
+    .fit-ring {
+      width: 82px;
+      aspect-ratio: 1;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: conic-gradient(var(--pine) var(--ring, 0deg), rgba(20,20,20,.11) 0);
+      position: relative;
+    }
+    .fit-ring::after {
+      content: '';
+      position: absolute;
+      inset: 9px;
+      border-radius: inherit;
+      background: var(--paper-soft);
+    }
+    .fit-ring strong {
+      position: relative;
+      z-index: 1;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 18px;
+    }
+    .fit-progress-copy {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.5;
+    }
     .fit-tags {
       display: flex; flex-wrap: wrap; gap: 8px;
       margin-top: 14px;
@@ -456,6 +530,26 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       padding: 7px 10px;
       font-size: 12px;
       font-weight: 800;
+    }
+    .fit-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .fit-actions button {
+      min-height: 44px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--paper-soft);
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 900;
+    }
+    .fit-actions button:first-child {
+      background: var(--pine);
+      border-color: var(--pine);
+      color: white;
     }
     .selection-list {
       display: grid;
@@ -504,7 +598,9 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
     }
     .filter-pills {
       display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px;
+      scrollbar-width: none;
     }
+    .filter-pills::-webkit-scrollbar { display: none; }
     .filter-pill {
       border: 1px solid var(--line);
       background: rgba(255,250,241,.78);
@@ -553,6 +649,13 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
     .product-card.selected {
       outline: 3px solid rgba(31,93,75,.32);
       background: #fffdf7;
+    }
+    .product-card.match-highlight {
+      animation: matchPulse .65s ease;
+    }
+    @keyframes matchPulse {
+      0% { box-shadow: 0 0 0 0 rgba(201,74,50,.28); }
+      100% { box-shadow: 0 0 0 18px rgba(201,74,50,0); }
     }
     .product-card.hidden { display: none; }
     .img-wrap {
@@ -681,6 +784,41 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
     .sticky-bag.visible { display: flex; }
     .sticky-bag strong { display: block; }
     .sticky-bag span { color: rgba(246,241,232,.72); font-size: 13px; }
+    .mobile-dock {
+      display: none;
+      position: fixed;
+      left: 10px;
+      right: 10px;
+      bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      z-index: 36;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 12px;
+      background: rgba(20,20,20,.95);
+      color: var(--paper);
+      padding: 8px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.34);
+      grid-template-columns: 1fr 1fr 1.1fr;
+      gap: 8px;
+    }
+    .mobile-dock button,
+    .mobile-dock a {
+      min-height: 48px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.08);
+      color: var(--paper);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      text-decoration: none;
+      font-weight: 900;
+      font-size: 13px;
+    }
+    .mobile-dock .mobile-dock-primary {
+      background: var(--paper);
+      color: var(--ink);
+    }
     .toast {
       position: fixed;
       top: 82px;
@@ -711,24 +849,204 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 640px) {
-      .shell { width: min(100% - 20px, 1180px); }
+      body {
+        background:
+          linear-gradient(160deg, rgba(31,93,75,.2) 0 18%, transparent 18%),
+          linear-gradient(0deg, rgba(207,164,75,.14), transparent 32%),
+          var(--paper);
+        padding-bottom: 86px;
+      }
+      .shell { width: 100%; padding: 0 10px; }
+      .topbar {
+        border-bottom-color: rgba(20,20,20,.08);
+      }
       .topbar-inner { min-height: 58px; }
       .brand span { display: none; }
       .top-actions .ghost-btn { display: none; }
-      .hero { padding-top: 20px; }
+      .top-actions .primary-btn {
+        min-height: 40px;
+        padding: 0 13px;
+        box-shadow: 3px 3px 0 var(--brick);
+      }
+      .hero {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        padding: 10px 0 18px;
+      }
+      .media-card {
+        width: calc(100% + 20px);
+        margin: 0 -10px;
+        border-radius: 0 0 18px 18px;
+        border-left: 0;
+        border-right: 0;
+        box-shadow: 0 18px 50px rgba(20,20,20,.24);
+      }
+      .video-wrap {
+        height: min(68vh, 620px);
+        aspect-ratio: auto;
+      }
+      .video-overlay {
+        padding: 120px 14px 14px;
+      }
+      .media-tools {
+        position: absolute;
+        right: 10px;
+        bottom: 10px;
+        width: auto;
+        grid-template-columns: repeat(2, 76px);
+        border-radius: 999px;
+        overflow: hidden;
+        z-index: 5;
+        background: rgba(255,255,255,.2);
+      }
+      .media-tools button {
+        min-height: 42px;
+        background: rgba(20,20,20,.78);
+        backdrop-filter: blur(12px);
+        font-size: 12px;
+      }
+      .mobile-hero-card {
+        display: block;
+        transform: translateY(-14px);
+        margin-bottom: 0;
+      }
+      .story-panel {
+        padding: 0 4px;
+      }
+      .story-panel > .eyebrow,
+      .story-panel > h1,
+      .story-panel > .lede {
+        display: none;
+      }
       h1 { font-size: 40px; }
       .lede { font-size: 15px; }
-      .meta-grid { grid-template-columns: 1fr; }
-      .meta-item { border-right: 0; border-bottom: 1px solid var(--line); min-height: 74px; }
-      .meta-item:last-child { border-bottom: 0; }
-      .toolbar { grid-template-columns: 1fr; }
+      .meta-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin: 0 0 12px;
+      }
+      .meta-item {
+        min-height: 76px;
+        padding: 12px 10px;
+        border-bottom: 0;
+      }
+      .meta-label { font-size: 10px; }
+      .meta-value { font-size: 18px; }
+      .dynamic-panel {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin: 12px 0;
+      }
+      .fit-card, .selection-card {
+        padding: 14px;
+      }
+      .fit-actions button {
+        min-height: 48px;
+      }
+      .fit-card h2, .selection-card h2, .products-head h2 {
+        font-size: 20px;
+      }
+      .fit-progress-row {
+        grid-template-columns: 68px minmax(0,1fr);
+      }
+      .fit-ring {
+        width: 66px;
+      }
+      .selection-list {
+        max-height: 132px;
+        overflow: auto;
+      }
+      .toolbar {
+        position: sticky;
+        top: 58px;
+        z-index: 25;
+        grid-template-columns: 1fr;
+        gap: 9px;
+        margin: 0 -10px 14px;
+        padding: 10px;
+        background: rgba(246,241,232,.94);
+        border-top: 1px solid rgba(20,20,20,.06);
+        border-bottom: 1px solid rgba(20,20,20,.08);
+        backdrop-filter: blur(16px);
+      }
+      .search-wrap input {
+        min-height: 52px;
+        border-radius: 10px;
+        background: var(--paper-soft);
+      }
+      .filter-pill {
+        min-height: 42px;
+        padding: 0 13px;
+      }
       .products-head { align-items: start; flex-direction: column; }
-      .product-grid { grid-template-columns: 1fr; }
-      .sticky-bag { bottom: 10px; }
+      .products-head .ghost-btn { display: none; }
+      .products-section {
+        padding: 10px 0 112px;
+      }
+      .product-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .product-card {
+        display: grid;
+        grid-template-columns: minmax(118px, 38%) minmax(0, 1fr);
+        min-height: 178px;
+      }
+      .img-wrap {
+        aspect-ratio: auto;
+        height: 100%;
+        min-height: 178px;
+      }
+      .product-body {
+        padding: 13px;
+        align-content: space-between;
+        gap: 10px;
+      }
+      .product-name {
+        min-height: auto;
+        font-size: 14px;
+      }
+      .price-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .card-actions {
+        grid-template-columns: 1fr 42px;
+      }
+      .shop-link, .copy-product {
+        min-height: 46px;
+      }
+      .type-badge {
+        max-width: calc(100% - 18px);
+        right: 9px;
+        left: 9px;
+        text-align: center;
+      }
+      .select-toggle {
+        width: 42px;
+        height: 42px;
+        right: 8px;
+        bottom: 8px;
+        top: auto;
+      }
+      .sticky-bag {
+        display: none !important;
+      }
+      .mobile-dock {
+        display: grid;
+      }
+      .toast {
+        top: 68px;
+        left: 10px;
+        right: 10px;
+        text-align: center;
+      }
     }
   </style>
 </head>
 <body>
+  <div class="scroll-progress" aria-hidden="true"><span id="scroll-progress-bar"></span></div>
   <div class="topbar">
     <div class="shell topbar-inner">
       <div class="brand">
@@ -767,6 +1085,10 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       </aside>
 
       <section class="story-panel">
+        <div class="mobile-hero-card">
+          <strong>${safeTitle}</strong>
+          <span>${pieces.length || 0} pieces ready to shop${estimate ? ` - Rs ${estimate.toLocaleString('en-IN')} estimated` : ''}</span>
+        </div>
         <div class="eyebrow">${username ? `From @${escapeHtml(username)}` : 'Curated outfit edit'}</div>
         <h1>${safeTitle}</h1>
         <p class="lede">${escapeHtml(String(subtitle || 'A clean outfit board built from the reel, with shoppable pieces pulled together in one place.').replace(/\s+/g, ' ').slice(0, 220))}</p>
@@ -791,7 +1113,15 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
             <h2>Fit Builder</h2>
             <p class="lede" style="font-size:14px;margin:0;color:var(--muted)">Select pieces to build your version of the outfit. Your picks stay on this device for this look.</p>
             <div class="fit-meter" style="--score:${Math.min(96, Math.max(42, pieces.length * 22))}%"><span></span></div>
+            <div class="fit-progress-row">
+              <div class="fit-ring" id="fit-ring" style="--ring:0deg"><strong id="fit-percent">0%</strong></div>
+              <div class="fit-progress-copy" id="fit-progress-copy">Pick the pieces you want and the outfit builder will track your set.</div>
+            </div>
             <div class="fit-tags" id="fit-tags"></div>
+            <div class="fit-actions">
+              <button id="select-full-look" type="button">Select Full Look</button>
+              <button id="clear-selection" type="button">Clear</button>
+            </div>
           </div>
           <div class="selection-card">
             <h2>Your Picks</h2>
@@ -833,6 +1163,20 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
     </div>
     <button class="primary-btn" id="open-selected" type="button">Open</button>
   </div>
+  <div class="mobile-dock" id="mobile-dock">
+    <a href="#products">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg>
+      Pieces
+    </a>
+    <button id="mobile-share-btn" type="button">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></svg>
+      Share
+    </button>
+    <button class="mobile-dock-primary" id="mobile-open-selected" type="button">
+      <span id="mobile-selected-count">0</span>
+      Selected
+    </button>
+  </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
@@ -857,6 +1201,11 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
     const filterPills = document.getElementById('filter-pills');
     const resultsCopy = document.getElementById('results-copy');
     const toast = document.getElementById('toast');
+    const fitRing = document.getElementById('fit-ring');
+    const fitPercent = document.getElementById('fit-percent');
+    const fitProgressCopy = document.getElementById('fit-progress-copy');
+    const mobileSelectedCount = document.getElementById('mobile-selected-count');
+    const scrollProgressBar = document.getElementById('scroll-progress-bar');
     let activeFilter = 'all';
     let selected = new Set(readPicks());
 
@@ -1008,6 +1357,7 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
         const textMatch = !query || card.dataset.name.includes(query) || card.dataset.type.includes(query);
         const show = typeMatch && textMatch;
         card.classList.toggle('hidden', !show);
+        card.classList.toggle('match-highlight', show && !!query);
         if (show) visible += 1;
       });
       resultsCopy.textContent = visible + ' of ' + outfit.length + ' pieces showing.';
@@ -1029,6 +1379,14 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       bagTitle.textContent = items.length + (items.length === 1 ? ' piece selected' : ' pieces selected');
       bagSubtitle.textContent = total ? money(total) + ' estimated total' : 'Select pieces to build your outfit.';
       stickyBag.classList.toggle('visible', items.length > 0);
+      mobileSelectedCount.textContent = String(items.length);
+
+      const percent = outfit.length ? Math.round((items.length / outfit.length) * 100) : 0;
+      fitRing.style.setProperty('--ring', (percent * 3.6) + 'deg');
+      fitPercent.textContent = percent + '%';
+      fitProgressCopy.textContent = items.length
+        ? items.length + ' of ' + outfit.length + ' pieces selected. Add more pieces to complete the look.'
+        : 'Pick the pieces you want and the outfit builder will track your set.';
 
       document.querySelectorAll('.product-card').forEach(card => {
         const isSelected = selected.has(card.dataset.id);
@@ -1045,6 +1403,37 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
         return;
       }
       items.slice(0, 5).forEach(item => window.open(item.url, '_blank', 'noopener,noreferrer'));
+    }
+
+    function selectFullLook() {
+      outfit.forEach(item => selected.add(item.id));
+      savePicks();
+      renderSelection();
+      showToast('Full look selected.');
+    }
+
+    function clearSelection() {
+      selected.clear();
+      savePicks();
+      renderSelection();
+      showToast('Selection cleared.');
+    }
+
+    function updateScrollProgress() {
+      const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const progress = Math.min(100, Math.max(0, (window.scrollY / max) * 100));
+      scrollProgressBar.style.width = progress + '%';
+    }
+
+    async function sharePage() {
+      const shareData = { title: document.title, url: window.location.href };
+      try {
+        if (navigator.share) await navigator.share(shareData);
+        else {
+          await navigator.clipboard.writeText(window.location.href);
+          showToast('Page link copied.');
+        }
+      } catch {}
     }
 
     function tryPlayVideo(src) {
@@ -1113,6 +1502,9 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
     searchInput.addEventListener('input', filterProducts);
     document.getElementById('open-selected').addEventListener('click', openSelected);
     document.getElementById('open-selected-top').addEventListener('click', openSelected);
+    document.getElementById('mobile-open-selected').addEventListener('click', openSelected);
+    document.getElementById('select-full-look').addEventListener('click', selectFullLook);
+    document.getElementById('clear-selection').addEventListener('click', clearSelection);
     document.getElementById('replay-btn').addEventListener('click', () => {
       video.currentTime = 0;
       video.play().catch(() => {});
@@ -1121,21 +1513,16 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       video.muted = !video.muted;
       event.currentTarget.textContent = video.muted ? 'Sound' : 'Mute';
     });
-    document.getElementById('share-btn').addEventListener('click', async () => {
-      const shareData = { title: document.title, url: window.location.href };
-      try {
-        if (navigator.share) await navigator.share(shareData);
-        else {
-          await navigator.clipboard.writeText(window.location.href);
-          showToast('Page link copied.');
-        }
-      } catch {}
-    });
+    document.getElementById('share-btn').addEventListener('click', sharePage);
+    document.getElementById('mobile-share-btn').addEventListener('click', sharePage);
+    window.addEventListener('scroll', updateScrollProgress, { passive: true });
+    window.addEventListener('resize', updateScrollProgress);
 
     renderTags();
     renderFilters();
     renderProducts();
     renderSelection();
+    updateScrollProgress();
     initVideo();
   })();
   </script>
