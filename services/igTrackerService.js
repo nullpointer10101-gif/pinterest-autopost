@@ -177,6 +177,7 @@ async function fetchViaSessionApi(username) {
         username,
         mediaType: isVideo ? 'video' : 'image',
         isPinned: false,
+        pinnedStateKnown: true,
       };
     }).filter(r => r.shortcode && r.thumbnailUrl);
   } catch (err) {
@@ -307,6 +308,8 @@ async function fetchViaPuppeteer(username) {
             thumbnailUrl: node.thumbnail_src || node.display_url,
             caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
             mediaType: node.is_video ? 'video' : 'image',
+            isPinned: node.is_pinned === true,
+            pinnedStateKnown: typeof node.is_pinned === 'boolean',
           };
         }).filter(r => r.shortcode && r.mediaUrl);
         if (results.length > 0) return results;
@@ -354,6 +357,8 @@ async function fetchViaUnofficialApi(username) {
         caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
         username,
         mediaType: isVideo ? 'video' : 'image',
+        isPinned: node.is_pinned === true,
+        pinnedStateKnown: typeof node.is_pinned === 'boolean',
       };
     }).filter(r => r.shortcode && r.mediaUrl);
   } catch (err) {
@@ -529,6 +534,8 @@ async function fetchViaRapidAPI(username) {
         caption: item.caption?.text || '',
         username,
         mediaType: isVideo ? 'video' : 'image',
+        isPinned: item.is_pinned === true || item.isPinned === true,
+        pinnedStateKnown: typeof item.is_pinned === 'boolean' || typeof item.isPinned === 'boolean',
       };
     }).filter(r => r.shortcode && r.mediaUrl);
   } catch (err) {
@@ -567,6 +574,8 @@ async function fetchViaApify(username) {
         caption: item.caption || '',
         username,
         mediaType: isVideo ? 'video' : 'image',
+        isPinned: item.isPinned === true,
+        pinnedStateKnown: typeof item.isPinned === 'boolean',
       };
     }).filter(r => r.shortcode && r.mediaUrl);
   } catch (err) {

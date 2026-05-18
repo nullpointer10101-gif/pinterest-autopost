@@ -58,7 +58,7 @@ jobs:
           IG_REPOST_MODE: ${{ github.event.inputs.mode || 'scan' }}
           IG_REPOST_USERNAME: ${{ github.event.inputs.username || '' }}
           IG_REPOST_REASON: ${{ github.event.inputs.reason || '' }}
-          IG_REPOST_MAX_NEW_PER_ACCOUNT: 2
+          IG_REPOST_MAX_NEW_PER_ACCOUNT: 1
           IG_REPOST_MAX_POSTS_PER_RUN: 2
           IG_REPOST_MAX_ATTEMPTS: 3
           IG_REPOST_RETRY_BASE_MINUTES: 30

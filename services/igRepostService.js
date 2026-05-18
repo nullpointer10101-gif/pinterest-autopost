@@ -381,7 +381,7 @@ async function scanAccount(username, options = {}) {
   const validation = !!options.validation;
   const maxCandidates = Math.max(1, toInt(
     options.maxCandidates,
-    validation ? 1 : toInt(process.env.IG_REPOST_MAX_NEW_PER_ACCOUNT, 2)
+    validation ? 1 : toInt(process.env.IG_REPOST_MAX_NEW_PER_ACCOUNT, 1)
   ));
   const requirePinnedDetection = process.env.IG_REPOST_REQUIRE_PINNED_DETECTION !== 'false';
 
@@ -408,17 +408,30 @@ async function scanAccount(username, options = {}) {
   const pinnedDetectionUnavailable = !pinnedInfo.known && requirePinnedDetection;
   let warning = '';
   if (pinnedDetectionUnavailable) {
-    warning = 'Pinned reel detection unavailable; fresh reels skipped for safety';
-    await stateService.appendLog('warn', 'scan.pinned_unknown', `Pinned detection was unavailable for @${normalized}. Fresh reels will be skipped for safety.`, {
-      username: normalized,
-    });
+    warning = validation
+      ? 'Pinned detection unavailable; validation will use the latest fresh reel if needed.'
+      : 'Pinned detection unavailable; only reels with trusted non-pinned metadata will be considered.';
+    await stateService.appendLog(
+      'warn',
+      'scan.pinned_unknown',
+      validation
+        ? `Pinned detection was unavailable for @${normalized}. Validation will use the latest fresh reel if needed.`
+        : `Pinned detection was unavailable for @${normalized}. Only reels with trusted non-pinned metadata will be considered.`,
+      { username: normalized, validation }
+    );
   }
 
   const queueItems = [];
   let skipped = 0;
 
   for (const reel of reels) {
-    await stateService.upsertReelMeta(reel);
+    const sourcePinnedStateKnown = reel.pinnedStateKnown === true;
+    const isPinned = reel.isPinned === true || (pinnedInfo.known && pinnedInfo.shortcodes.has(reel.shortcode));
+    const hasTrustedNonPinnedState = sourcePinnedStateKnown && reel.isPinned === false;
+    await stateService.upsertReelMeta(reel, {
+      isPinned,
+      pinnedStateKnown: sourcePinnedStateKnown,
+    });
 
     const alreadyPosted = await stateService.hasSuccessfulPost(normalized, reel.shortcode);
     if (alreadyPosted) {
@@ -430,18 +443,33 @@ async function scanAccount(username, options = {}) {
       continue;
     }
 
-    if (reel.isPinned === true || (pinnedInfo.known && pinnedInfo.shortcodes.has(reel.shortcode))) {
+    if (validation) {
+      queueItems.push(buildQueueItem(reel, {
+        validationJob: true,
+        reason: 'new_account_validation',
+      }));
+
+      if (queueItems.length >= maxCandidates) break;
+      continue;
+    }
+
+    if (isPinned) {
       await stateService.markPinnedSkipped(reel, { username: normalized });
       skipped += 1;
       continue;
     }
 
-    if (pinnedDetectionUnavailable) {
+    if (pinnedDetectionUnavailable && !hasTrustedNonPinnedState) {
       skipped += 1;
-      await stateService.appendLog('warn', 'scan.skipped_without_pinned_detection', `Skipped fresh reel ${reel.shortcode} from @${normalized} because pinned detection was unavailable.`, {
-        username: normalized,
-        shortcode: reel.shortcode,
-      });
+      await stateService.appendLog(
+        'warn',
+        'scan.skipped_without_pinned_detection',
+        `Skipped fresh reel ${reel.shortcode} from @${normalized} because pinned detection was unavailable and the reel was not confirmed non-pinned by the source feed.`,
+        {
+          username: normalized,
+          shortcode: reel.shortcode,
+        }
+      );
       continue;
     }
 
@@ -454,9 +482,7 @@ async function scanAccount(username, options = {}) {
   }
 
   if (validation && queueItems.length === 0) {
-    const reason = pinnedDetectionUnavailable
-      ? 'Pinned reel detection unavailable; no safe reels available for validation'
-      : 'No fresh non-pinned reels available for validation';
+    const reason = 'No fresh unreposted reels available for validation';
     await stateService.markAccountFailed(normalized, reason, { keepPending: false, stage: 'scan' });
     return { username: normalized, queued: 0, skipped, scanned: reels.length, error: reason };
   }
