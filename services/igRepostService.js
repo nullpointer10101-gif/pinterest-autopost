@@ -525,6 +525,7 @@ async function processQueue(options = {}) {
   for (let i = 0; i < maxPosts; i += 1) {
     const item = await stateService.claimNextReadyQueueItem({
       username: filterUsername,
+      ignoreSchedule: options.ignoreSchedule === true,
     });
     if (!item) break;
 
@@ -665,6 +666,7 @@ async function runPipeline(options = {}) {
         ? 1
         : toInt(process.env.IG_REPOST_MAX_POSTS_PER_RUN, 2),
       username: mode === 'validate' ? username : null,
+      ignoreSchedule: mode === 'validate',
     });
 
     const scanErrors = scanResults.filter((item) => !!item.error);

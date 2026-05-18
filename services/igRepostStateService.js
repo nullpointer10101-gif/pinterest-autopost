@@ -554,6 +554,7 @@ async function claimNextReadyQueueItem(options = {}) {
   const state = await readState();
   const now = Date.now();
   const filterUsername = normalizeUsername(options.username || '');
+  const ignoreSchedule = options.ignoreSchedule === true;
 
   let chosenIndex = -1;
   for (let i = 0; i < state.queue.length; i += 1) {
@@ -561,7 +562,7 @@ async function claimNextReadyQueueItem(options = {}) {
     if (String(item.status || '') !== 'pending') continue;
     if (filterUsername && normalizeUsername(item.username) !== filterUsername) continue;
     const scheduledAt = new Date(item.scheduledAfter || item.addedAt || 0).getTime();
-    if (Number.isFinite(scheduledAt) && scheduledAt > now) continue;
+    if (!ignoreSchedule && Number.isFinite(scheduledAt) && scheduledAt > now) continue;
     if (chosenIndex === -1) {
       chosenIndex = i;
       continue;
