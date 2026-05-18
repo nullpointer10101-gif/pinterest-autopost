@@ -186,7 +186,7 @@ router.post('/channels', async (req, res) => {
 
     try {
       const profilePicUrl = await Promise.race([
-        igTrackerService.ensureChannelProfilePic(username),
+        igTrackerService.ensureChannelProfilePic(username, { allowApify: true }),
         new Promise((resolve) => setTimeout(() => resolve(null), 6500)),
       ]);
       if (profilePicUrl) {
@@ -210,12 +210,32 @@ router.post('/channels', async (req, res) => {
       reason: 'new_account_validation',
     });
 
+    let avatarSyncStarted = false;
+    try {
+      const avatarDispatch = await igRepostWorkflowService.triggerAvatarSync(username);
+      avatarSyncStarted = avatarDispatch.success;
+      if (avatarDispatch.success) {
+        await igRepostService.markDispatch({
+          username,
+          mode: 'sync-avatars',
+          reason: 'new_account_avatar_sync',
+        });
+      } else {
+        console.warn(`[API] Avatar sync dispatch failed for @${username}:`, avatarDispatch.error);
+      }
+    } catch (avatarErr) {
+      console.warn(`[API] Avatar sync dispatch failed for @${username}:`, avatarErr.message);
+    }
+
     const channels = await igRepostService.listChannels();
     res.json({
       success: true,
       username,
       channels,
-      message: `Channel @${username} added. Independent validation repost has started.`,
+      avatarSyncStarted,
+      message: avatarSyncStarted
+        ? `Channel @${username} added. Validation repost and profile picture sync have started.`
+        : `Channel @${username} added. Independent validation repost has started.`,
     });
   } catch (err) {
     if (err.code === 'DUPLICATE_ACCOUNT') {
