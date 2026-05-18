@@ -1,7 +1,6 @@
 const aiService = require('./aiService');
 const historyService = require('./historyService');
-const flipkartSearchService = require('./flipkartSearchService');
-const earnKaroService = require('./earnKaroService');
+const productCurationService = require('./productCurationService');
 
 let selectBoard = () => null; // safe default: no board forced
 try {
@@ -486,30 +485,15 @@ async function processNextInQueue() {
       });
       
       if (outfitData.found && outfitData.items) {
-        console.log(`[Queue] 🎯 Found outfit: "${outfitData.outfitName}"`);
-        outfitName = outfitData.outfitName;
-        for (const outItem of outfitData.items) {
-          const queries = {
-            exactMatchQuery: outItem.query,
-            similarMatchQuery: outItem.query,
-            broadMatchQuery: outItem.query.split(' ').slice(0, 3).join(' ')
-          };
-          
-          const fp = await flipkartSearchService.findProduct(queries, outItem.query);
-          if (fp) {
-            const ek = await earnKaroService.makeAffiliateLink(fp.url);
-            if (ek && ek.affiliateUrl) {
-              affiliateLinks.push({ 
-                type: outItem.type, 
-                name: fp.title, 
-                url: ek.affiliateUrl, 
-                image: fp.image, 
-                originalPrice: fp.price 
-              });
-              if (outItem.type === 'main') mainProductName = fp.title;
-            }
-          }
-        }
+        console.log(`[Queue] 🎯 Found product focus: "${outfitData.outfitName}"`);
+        const resolved = await productCurationService.buildSameTypeShelfFromOutfit(outfitData, {
+          limit: 4,
+          fallbackName: title,
+          logPrefix: '[Queue]',
+        });
+        affiliateLinks = resolved.affiliateLinks;
+        mainProductName = resolved.mainProductName;
+        outfitName = resolved.outfitName;
       } else {
         console.log(`[Queue] 🤖 Outfit not found. Trying single product identification...`);
         const productData = await aiService.identifyProduct({
@@ -522,32 +506,20 @@ async function processNextInQueue() {
         
         if (productData.found) {
            console.log(`[Queue] 🎯 Found single product: "${productData.productName}"`);
-           const queries = {
-             exactMatchQuery: productData.exactMatchQuery,
-             similarMatchQuery: productData.similarMatchQuery,
-             broadMatchQuery: productData.broadMatchQuery
-           };
-           const fp = await flipkartSearchService.findProduct(queries, productData.productName);
-           if (fp) {
-             const ek = await earnKaroService.makeAffiliateLink(fp.url);
-             if (ek && ek.affiliateUrl) {
-               affiliateLinks.push({
-                 type: 'Main Piece',
-                 name: fp.title,
-                 url: ek.affiliateUrl,
-                 image: fp.image,
-                 originalPrice: fp.price
-               });
-               mainProductName = fp.title;
-             }
-           }
+           const resolved = await productCurationService.buildSameTypeShelfFromProductData(productData, {
+             limit: 4,
+             logPrefix: '[Queue]',
+           });
+           affiliateLinks = resolved.affiliateLinks;
+           mainProductName = resolved.mainProductName;
+           outfitName = resolved.productTypeLabel ? `${resolved.productTypeLabel} Finds` : null;
         }
       }
       
       // If we found products, use storefront. Otherwise still use storefront as safe fallback.
       if (affiliateLinks.length > 0) {
         finalLink = storefrontUrl;
-        description = `${description}\n\n🛒 Shop the full outfit here → ${finalLink}`.substring(0, 800);
+        description = `${description}\n\nShop matching product finds here -> ${finalLink}`.substring(0, 800);
         console.log(`[Queue] ✨ Storefront with products: ${finalLink}`);
       } else if (storefrontUrl) {
         // Use storefront as safe fallback (prevents posting with empty/IG link)

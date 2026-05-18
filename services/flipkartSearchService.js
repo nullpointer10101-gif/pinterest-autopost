@@ -93,23 +93,186 @@ function extractFromHtmlLinks(html) {
   return products;
 }
 
+const STOP_WORDS = new Set([
+  'for', 'and', 'the', 'with', 'men', 'man', 'mens', 'boys', 'women', 'womens',
+  'shop', 'buy', 'online', 'pack', 'combo', 'set', 'new', 'latest', 'style',
+]);
+
+const PRODUCT_TYPE_RULES = [
+  {
+    key: 'tshirt',
+    label: 'T-Shirt',
+    queryTerm: 'men t shirt',
+    terms: ['t shirt', 'tshirt', 'tee', 'tees', 'polo tshirt', 'polo t shirt', 'round neck'],
+  },
+  {
+    key: 'shirt',
+    label: 'Shirt',
+    queryTerm: 'men shirt',
+    terms: ['shirt', 'shirts', 'button down', 'buttondown', 'overshirt', 'formal shirt', 'casual shirt'],
+    exclude: ['t shirt', 'tshirt', 'tee', 'tees', 'round neck'],
+  },
+  {
+    key: 'pants',
+    label: 'Pants',
+    queryTerm: 'men pants',
+    terms: ['pants', 'pant', 'trouser', 'trousers', 'track pants', 'cargo pants', 'chinos', 'joggers'],
+  },
+  {
+    key: 'jeans',
+    label: 'Jeans',
+    queryTerm: 'men jeans',
+    terms: ['jeans', 'denim jeans'],
+  },
+  {
+    key: 'shorts',
+    label: 'Shorts',
+    queryTerm: 'men shorts',
+    terms: ['shorts', 'bermuda'],
+  },
+  {
+    key: 'hoodie',
+    label: 'Hoodie',
+    queryTerm: 'men hoodie',
+    terms: ['hoodie', 'hoodies', 'hooded sweatshirt'],
+  },
+  {
+    key: 'sweatshirt',
+    label: 'Sweatshirt',
+    queryTerm: 'men sweatshirt',
+    terms: ['sweatshirt', 'sweatshirts', 'sweater'],
+  },
+  {
+    key: 'jacket',
+    label: 'Jacket',
+    queryTerm: 'men jacket',
+    terms: ['jacket', 'jackets', 'bomber', 'windcheater', 'shacket'],
+  },
+  {
+    key: 'blazer',
+    label: 'Blazer',
+    queryTerm: 'men blazer',
+    terms: ['blazer', 'blazers'],
+  },
+  {
+    key: 'kurta',
+    label: 'Kurta',
+    queryTerm: 'men kurta',
+    terms: ['kurta', 'kurtas', 'sherwani'],
+  },
+  {
+    key: 'shoes',
+    label: 'Shoes',
+    queryTerm: 'men shoes',
+    terms: ['shoe', 'shoes', 'sneaker', 'sneakers', 'loafer', 'loafers', 'boots', 'sandals', 'sliders'],
+  },
+  {
+    key: 'belt',
+    label: 'Belt',
+    queryTerm: 'men belt',
+    terms: ['belt', 'belts'],
+  },
+  {
+    key: 'watch',
+    label: 'Watch',
+    queryTerm: 'men watch',
+    terms: ['watch', 'watches'],
+  },
+  {
+    key: 'sunglasses',
+    label: 'Sunglasses',
+    queryTerm: 'men sunglasses',
+    terms: ['sunglasses', 'sunglass', 'shades'],
+  },
+  {
+    key: 'wallet',
+    label: 'Wallet',
+    queryTerm: 'men wallet',
+    terms: ['wallet', 'wallets'],
+  },
+  {
+    key: 'bag',
+    label: 'Bag',
+    queryTerm: 'men bag',
+    terms: ['bag', 'bags', 'backpack', 'sling bag', 'duffle'],
+  },
+  {
+    key: 'cap',
+    label: 'Cap',
+    queryTerm: 'men cap',
+    terms: ['cap', 'caps', 'hat', 'beanie'],
+  },
+];
+
+function normalizeText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasTerm(text, term) {
+  const normalizedTerm = normalizeText(term);
+  if (!normalizedTerm) return false;
+  return new RegExp(`(^|\\s)${normalizedTerm.replace(/\s+/g, '\\s+')}($|\\s)`, 'i').test(text);
+}
+
+function detectProductType(text) {
+  const normalized = normalizeText(text);
+  if (!normalized) return null;
+
+  for (const rule of PRODUCT_TYPE_RULES) {
+    const hasExcludedTerm = (rule.exclude || []).some((term) => hasTerm(normalized, term));
+    if (hasExcludedTerm) continue;
+
+    if (rule.terms.some((term) => hasTerm(normalized, term))) {
+      return rule.key;
+    }
+  }
+
+  return null;
+}
+
+function getProductTypeLabel(type) {
+  const rule = PRODUCT_TYPE_RULES.find((item) => item.key === type);
+  return rule?.label || 'Product';
+}
+
+function getProductTypeQueryTerm(type) {
+  const rule = PRODUCT_TYPE_RULES.find((item) => item.key === type);
+  return rule?.queryTerm || '';
+}
+
+function isProductTypeMatch(targetText, candidateText, expectedType = null) {
+  const targetType = expectedType || detectProductType(targetText);
+  if (!targetType) return true;
+
+  const candidateType = detectProductType(candidateText);
+  return candidateType === targetType;
+}
+
 /**
- * Calculate simple text similarity score (0 to 1) based on word overlap.
+ * Calculate text similarity score (0 to 1) based on meaningful word overlap.
  */
 function calculateSimilarity(target, candidate) {
   if (!target || !candidate) return 0;
-  
-  const normalize = (str) => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
-  const targetWords = normalize(target);
-  const candidateWords = normalize(candidate);
-  
+
+  const normalizeWords = (str) => normalizeText(str)
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !STOP_WORDS.has(word));
+
+  const targetWords = normalizeWords(target);
+  const candidateWords = new Set(normalizeWords(candidate));
+
   if (targetWords.length === 0) return 0;
-  
+
   let matches = 0;
   for (const word of targetWords) {
-    if (candidateWords.includes(word)) matches++;
+    if (candidateWords.has(word)) matches++;
   }
-  
+
   return matches / targetWords.length;
 }
 
@@ -142,12 +305,65 @@ async function searchFlipkart(query) {
  * @param {Object} queries - Object containing exactMatchQuery, similarMatchQuery, broadMatchQuery
  * @param {string} originalProductName - The full product name generated by AI for scoring baseline
  */
-async function findProduct(queries, originalProductName) {
-  const queryTiers = [
-    { name: 'Exact', text: queries.exactMatchQuery, minScore: 0.5 },
-    { name: 'Similar', text: queries.similarMatchQuery, minScore: 0.3 },
-    { name: 'Broad', text: queries.broadMatchQuery, minScore: 0.1 }
+function buildQueryTiers(queries, originalProductName, expectedType = null) {
+  const typeQueryTerm = getProductTypeQueryTerm(expectedType);
+  const baseExact = queries?.exactMatchQuery || originalProductName || '';
+  const baseSimilar = queries?.similarMatchQuery || baseExact;
+  const baseBroad = queries?.broadMatchQuery || baseSimilar;
+
+  return [
+    { name: 'Exact', text: baseExact, minScore: 0.5 },
+    { name: 'Similar', text: baseSimilar, minScore: 0.3 },
+    { name: 'Broad', text: baseBroad, minScore: 0.18 },
+    { name: 'Category', text: typeQueryTerm, minScore: 0.1 },
   ];
+}
+
+function normalizeProductUrl(url) {
+  return String(url || '').split('?')[0].replace(/\/$/, '');
+}
+
+function scoreProduct({ product, tierText, originalProductName, expectedType }) {
+  const productTitle = product?.title || '';
+  if (!productTitle || !product?.url) {
+    return { accepted: false, score: 0, reason: 'missing title/url' };
+  }
+
+  if (!isProductTypeMatch(originalProductName || tierText, productTitle, expectedType)) {
+    const candidateType = detectProductType(productTitle) || 'unknown';
+    return {
+      accepted: false,
+      score: 0,
+      reason: `type mismatch (${candidateType} != ${expectedType})`,
+    };
+  }
+
+  const scoreVsName = calculateSimilarity(originalProductName, productTitle);
+  const scoreVsQuery = calculateSimilarity(tierText, productTitle);
+  const finalScore = Math.max(scoreVsName, scoreVsQuery);
+  const typeBoost = expectedType ? 0.3 : 0;
+  const priceBoost = product.price ? 0.1 : 0;
+
+  return {
+    accepted: true,
+    score: finalScore + typeBoost + priceBoost,
+    reason: 'accepted',
+  };
+}
+
+async function findProduct(queries, originalProductName, options = {}) {
+  const expectedType = options.expectedType || detectProductType([
+    originalProductName,
+    queries?.exactMatchQuery,
+    queries?.similarMatchQuery,
+    queries?.broadMatchQuery,
+  ].filter(Boolean).join(' '));
+
+  if (expectedType) {
+    console.log(`[Flipkart] Product type guard active: ${getProductTypeLabel(expectedType)}`);
+  }
+
+  const queryTiers = buildQueryTiers(queries, originalProductName, expectedType);
 
   let bestMatch = null;
   let highestScore = -1;
@@ -160,19 +376,21 @@ async function findProduct(queries, originalProductName) {
     
     if (products.length === 0) continue;
 
-    // Score all products returned by this query
     for (const product of products) {
-      // Score against both the original name and the query itself
-      const scoreVsName = calculateSimilarity(originalProductName, product.title);
-      const scoreVsQuery = calculateSimilarity(tier.text, product.title);
-      const finalScore = Math.max(scoreVsName, scoreVsQuery);
+      const { accepted, score, reason } = scoreProduct({
+        product,
+        tierText: tier.text,
+        originalProductName,
+        expectedType,
+      });
 
-      // Boost score slightly if it has a price (filters out junk/accessories sometimes)
-      const priceBoost = product.price ? 0.1 : 0;
-      const totalScore = finalScore + priceBoost;
+      if (!accepted) {
+        console.log(`[Flipkart] Skipping "${product.title}" - ${reason}`);
+        continue;
+      }
 
-      if (totalScore > highestScore) {
-        highestScore = totalScore;
+      if (score > highestScore) {
+        highestScore = score;
         bestMatch = product;
       }
     }
@@ -194,4 +412,98 @@ async function findProduct(queries, originalProductName) {
   return null;
 }
 
-module.exports = { findProduct, searchFlipkart };
+function buildSameTypeQueries(queries, originalProductName, expectedType) {
+  const typeQueryTerm = getProductTypeQueryTerm(expectedType);
+  const seedQueries = [
+    queries?.exactMatchQuery,
+    queries?.similarMatchQuery,
+    queries?.broadMatchQuery,
+    originalProductName,
+  ].filter(Boolean);
+
+  const querySet = new Set();
+  for (const query of seedQueries) {
+    const clean = String(query || '').trim();
+    if (!clean || clean === 'other') continue;
+    querySet.add(clean);
+    if (expectedType && !hasTerm(normalizeText(clean), getProductTypeLabel(expectedType))) {
+      querySet.add(`${clean} ${typeQueryTerm}`.trim());
+    }
+  }
+
+  if (typeQueryTerm) {
+    querySet.add(typeQueryTerm);
+    querySet.add(`best ${typeQueryTerm}`);
+    querySet.add(`latest ${typeQueryTerm}`);
+  }
+
+  return Array.from(querySet).slice(0, 8);
+}
+
+async function findProductsForSameType(queries, originalProductName, options = {}) {
+  const limit = Number.isFinite(Number(options.limit)) ? Number(options.limit) : 4;
+  const expectedType = options.expectedType || detectProductType([
+    originalProductName,
+    queries?.exactMatchQuery,
+    queries?.similarMatchQuery,
+    queries?.broadMatchQuery,
+  ].filter(Boolean).join(' '));
+
+  if (expectedType) {
+    console.log(`[Flipkart] Same-type product shelf: ${getProductTypeLabel(expectedType)} x${limit}`);
+  } else {
+    console.log('[Flipkart] Same-type product shelf: type unknown, using similarity only.');
+  }
+
+  const queryList = buildSameTypeQueries(queries, originalProductName, expectedType);
+  const seen = new Set();
+  const scoredMatches = [];
+
+  for (const query of queryList) {
+    console.log(`\n[Flipkart] Shelf Query: "${query}"`);
+    const products = await searchFlipkart(query);
+
+    for (const product of products) {
+      const normalizedUrl = normalizeProductUrl(product.url);
+      if (!normalizedUrl || seen.has(normalizedUrl)) continue;
+
+      const { accepted, score, reason } = scoreProduct({
+        product,
+        tierText: query,
+        originalProductName,
+        expectedType,
+      });
+
+      if (!accepted) {
+        console.log(`[Flipkart] Shelf skip "${product.title}" - ${reason}`);
+        continue;
+      }
+
+      seen.add(normalizedUrl);
+      scoredMatches.push({
+        ...product,
+        matchedType: expectedType || detectProductType(product.title),
+        matchScore: score,
+      });
+    }
+
+    if (scoredMatches.length >= limit) break;
+  }
+
+  const winners = scoredMatches
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, limit);
+
+  console.log(`[Flipkart] Shelf selected ${winners.length}/${limit} same-type products.`);
+  return winners;
+}
+
+module.exports = {
+  findProduct,
+  findProductsForSameType,
+  searchFlipkart,
+  detectProductType,
+  getProductTypeLabel,
+  isProductTypeMatch,
+  calculateSimilarity,
+};

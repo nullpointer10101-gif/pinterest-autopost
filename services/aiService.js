@@ -496,7 +496,7 @@ Return ONLY the JSON object.`;
 }
 
 /**
- * Analyses an Instagram caption and image to extract a full "Shop The Look" outfit.
+ * Analyses an Instagram caption and image to extract one focused product family.
  * Returns { found: true, outfitName, items: [{ type, query }] } or { found: false }.
  */
 async function identifyOutfit({ caption = '', username = '', thumbnailUrl = '', mediaUrl = '', imageData = null }) {
@@ -506,25 +506,25 @@ async function identifyOutfit({ caption = '', username = '', thumbnailUrl = '', 
 
   const usefulCaption = cleanCaption(caption);
 
-  const systemPrompt = `You are an expert AI fashion stylist and visual product identifier. Your PRIMARY source is the IMAGE — identify what is VISIBLE in the photo. The caption is only secondary context; if it says "comment link" or "link in bio", treat the caption as empty and rely entirely on the image. Return only valid JSON.`;
+  const systemPrompt = `You are an expert AI fashion product identifier. Your PRIMARY source is the IMAGE: identify the single most visible product being shown. The caption is only secondary context; if it says "comment link" or "link in bio", treat the caption as empty and rely entirely on the image. Return only valid JSON.`;
 
   const textPrompt = `Instagram Reel from @${username}.
 ${usefulCaption ? `Caption context: "${usefulCaption.substring(0, 400)}"` : 'Caption: (not useful — identify from image only)'}
 
-Task: Look at the IMAGE and identify the FULL outfit of the person shown.
-1. 'main': The PRIMARY item they are wearing/showcasing (most prominent). Be SPECIFIC: color + style + type (e.g. "Brown Baggy Corduroy Pants", "White Oversized Cotton T-shirt").
-2. Curate 3 complementary items to complete the look. Each query must be a specific, searchable product description.
-3. IGNORE any caption text like "comment link", "link in bio", "shop link" — these are irrelevant.
+Task: Look at the IMAGE and identify ONE product family only.
+1. 'main': The PRIMARY item being worn/showcased (most prominent). Be SPECIFIC: color + style + product type (e.g. "Brown Baggy Corduroy Pants Men", "White Oversized Cotton T-shirt Men").
+2. Add 3 alternate search queries for the SAME product type only. If the main item is a shirt, every query must be a shirt. If it is pants, every query must be pants. NEVER add belts, watches, shoes, bags, or accessories unless the primary visible item itself is that category.
+3. IGNORE any caption text like "comment link", "link in bio", "shop link" - these are irrelevant.
 
 Return ONLY this JSON:
 {
   "found": true,
-  "outfitName": "Catchy outfit name (e.g. 'Relaxed Streetwear Look')",
+  "outfitName": "Focused product shelf name (e.g. 'Baggy Corduroy Pants Finds')",
   "items": [
     { "type": "main", "query": "Brown Baggy Corduroy Pants Men" },
-    { "type": "top", "query": "Oversized White T-shirt Men" },
-    { "type": "shoes", "query": "White Casual Sneakers Men" },
-    { "type": "accessory", "query": "Silver Chain Necklace Men" }
+    { "type": "variant", "query": "Men Brown Corduroy Pants" },
+    { "type": "variant", "query": "Men Baggy Corduroy Trousers" },
+    { "type": "variant", "query": "Loose Fit Corduroy Pants Men" }
   ]
 }
 

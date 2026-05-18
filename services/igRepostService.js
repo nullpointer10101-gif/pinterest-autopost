@@ -1,7 +1,6 @@
 const axios = require('axios');
 const aiService = require('./aiService');
-const flipkartSearchService = require('./flipkartSearchService');
-const earnKaroService = require('./earnKaroService');
+const productCurationService = require('./productCurationService');
 const igTrackerService = require('./igTrackerService');
 const publisherService = require('./igRepostPublisherService');
 const stateService = require('./igRepostStateService');
@@ -86,7 +85,7 @@ function buildStorefrontUrl(shortcode) {
 function appendStorefrontCta(description, storefrontUrl) {
   const base = String(description || '').trim();
   if (!storefrontUrl) return base.substring(0, 800);
-  const cta = `\n\nShop the full look here -> ${storefrontUrl}`;
+  const cta = `\n\nShop matching product finds here -> ${storefrontUrl}`;
   return `${base}${cta}`.trim().substring(0, 800);
 }
 
@@ -188,86 +187,18 @@ async function extractPostingFrame(item) {
 }
 
 async function buildAffiliateLinksFromOutfit(outfitData, fallbackName) {
-  const affiliateLinks = [];
-  let mainProductName = '';
-
-  for (const outfitItem of outfitData?.items || []) {
-    const query = String(outfitItem?.query || '').trim();
-    if (!query) continue;
-
-    const queries = {
-      exactMatchQuery: query,
-      similarMatchQuery: query,
-      broadMatchQuery: query.split(' ').slice(0, 3).join(' '),
-    };
-
-    const product = await flipkartSearchService.findProduct(queries, query);
-    if (!product?.url) continue;
-
-    const affiliate = await earnKaroService.makeAffiliateLink(product.url);
-    const affiliateUrl = String(affiliate?.affiliateUrl || product.url || '').trim();
-    if (!affiliateUrl) continue;
-
-    affiliateLinks.push({
-      type: outfitItem.type || 'item',
-      name: product.title || query,
-      url: affiliateUrl,
-      image: product.image || null,
-      originalPrice: product.price || null,
-    });
-
-    if (!mainProductName && outfitItem.type === 'main') {
-      mainProductName = product.title || query;
-    }
-  }
-
-  return {
-    affiliateLinks,
-    mainProductName: mainProductName || fallbackName || '',
-  };
+  return productCurationService.buildSameTypeShelfFromOutfit(outfitData, {
+    limit: 4,
+    fallbackName,
+    logPrefix: '[IG-Repost]',
+  });
 }
 
 async function buildAffiliateLinksFromSingleProduct(productData) {
-  if (!productData?.found) {
-    return {
-      affiliateLinks: [],
-      mainProductName: '',
-    };
-  }
-
-  const queries = {
-    exactMatchQuery: productData.exactMatchQuery,
-    similarMatchQuery: productData.similarMatchQuery,
-    broadMatchQuery: productData.broadMatchQuery,
-  };
-
-  const product = await flipkartSearchService.findProduct(queries, productData.productName);
-  if (!product?.url) {
-    return {
-      affiliateLinks: [],
-      mainProductName: productData.productName || '',
-    };
-  }
-
-  const affiliate = await earnKaroService.makeAffiliateLink(product.url);
-  const affiliateUrl = String(affiliate?.affiliateUrl || product.url || '').trim();
-  if (!affiliateUrl) {
-    return {
-      affiliateLinks: [],
-      mainProductName: productData.productName || '',
-    };
-  }
-
-  return {
-    affiliateLinks: [{
-      type: 'Main Piece',
-      name: product.title || productData.productName || 'Featured Item',
-      url: affiliateUrl,
-      image: product.image || null,
-      originalPrice: product.price || null,
-    }],
-    mainProductName: product.title || productData.productName || '',
-  };
+  return productCurationService.buildSameTypeShelfFromProductData(productData, {
+    limit: 4,
+    logPrefix: '[IG-Repost]',
+  });
 }
 
 async function preparePublishingPayload(item) {
@@ -299,7 +230,7 @@ async function preparePublishingPayload(item) {
         const resolved = await buildAffiliateLinksFromOutfit(outfitData, title);
         affiliateLinks = resolved.affiliateLinks;
         mainProductName = resolved.mainProductName;
-        outfitName = String(outfitData.outfitName || '').trim();
+        outfitName = String(resolved.outfitName || outfitData.outfitName || '').trim();
       } else {
         const productData = await aiService.identifyProduct({
           caption: item.caption || '',
@@ -311,6 +242,7 @@ async function preparePublishingPayload(item) {
         const resolved = await buildAffiliateLinksFromSingleProduct(productData);
         affiliateLinks = resolved.affiliateLinks;
         mainProductName = resolved.mainProductName;
+        outfitName = resolved.productTypeLabel ? `${resolved.productTypeLabel} Finds` : '';
       }
     } catch (err) {
       console.warn(`[IG-Repost] Product matching failed for ${item.shortcode}:`, err.message);

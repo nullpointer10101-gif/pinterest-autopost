@@ -1,17 +1,16 @@
 require('dotenv').config();
 const igTrackerService = require('../services/igTrackerService');
 const aiService = require('../services/aiService');
-const flipkartSearchService = require('../services/flipkartSearchService');
-const earnKaroService = require('../services/earnKaroService');
+const productCurationService = require('../services/productCurationService');
 const historyService = require('../services/historyService');
 const puppeteerService = require('../services/puppeteerService');
 
 /**
- * Pushes a single Instagram Reel through the full multi-item "Shop The Look" pipeline.
+ * Pushes a single Instagram Reel through the focused same-product-type pipeline.
  */
 async function pushSingleReel(reelUrl) {
     console.log('════════════════════════════════════════════════════════');
-    console.log(`[Push] Single Reel Pipeline (Shop The Look)`);
+    console.log(`[Push] Single Reel Pipeline (Same Product Type)`);
     console.log(`[Push] Target: ${reelUrl}`);
     console.log('════════════════════════════════════════════════════════\n');
 
@@ -37,7 +36,7 @@ async function pushSingleReel(reelUrl) {
         };
 
         // 2. Multi-Item AI Identification
-        console.log(`[2/6] 🤖 AI identifying full outfit (3-Layer Fallback active)...`);
+        console.log(`[2/6] 🤖 AI identifying primary product focus...`);
         const outfitData = await aiService.identifyOutfit({
             caption: reel.caption,
             username: reel.username,
@@ -55,33 +54,14 @@ async function pushSingleReel(reelUrl) {
         let mainProductName = "Style Inspo";
 
         if (outfitData.found && outfitData.items) {
-            console.log(`  🎯 Found outfit: "${outfitData.outfitName}"`);
-            for (const item of outfitData.items) {
-                console.log(`  🔍 Searching for ${item.type}: "${item.query}"...`);
-                const queries = {
-                    exactMatchQuery: item.query,
-                    similarMatchQuery: item.query,
-                    broadMatchQuery: item.query.split(' ').slice(0, 3).join(' ')
-                };
-                
-                const fp = await flipkartSearchService.findProduct(queries, item.query);
-                if (fp) {
-                    console.log(`    ✅ Match found: ${fp.title}`);
-                    const ek = await earnKaroService.makeAffiliateLink(fp.url);
-                    if (ek && ek.affiliateUrl) {
-                        affiliateLinks.push({ 
-                            type: item.type, 
-                            name: fp.title, 
-                            url: ek.affiliateUrl, 
-                            image: fp.image, 
-                            originalPrice: fp.price 
-                        });
-                        if (item.type === 'main') mainProductName = fp.title;
-                    }
-                } else {
-                    console.log(`    ❌ No match on Flipkart.`);
-                }
-            }
+            console.log(`  🎯 Found product focus: "${outfitData.outfitName}"`);
+            const resolved = await productCurationService.buildSameTypeShelfFromOutfit(outfitData, {
+                limit: 4,
+                fallbackName: mainProductName,
+                logPrefix: '[Push]',
+            });
+            affiliateLinks.push(...resolved.affiliateLinks);
+            mainProductName = resolved.mainProductName || mainProductName;
         }
 
         // 4. Content Generation
@@ -97,7 +77,7 @@ async function pushSingleReel(reelUrl) {
 
         let finalDescription = pinContent.description;
         if (affiliateLinks.length > 0) {
-            finalDescription = `${pinContent.description}\n\n🛒 Shop the full outfit here → ${landingPageUrl}`.substring(0, 800);
+            finalDescription = `${pinContent.description}\n\nShop matching product finds here -> ${landingPageUrl}`.substring(0, 800);
         }
 
         // 5. Post to Pinterest
