@@ -43,6 +43,8 @@ router.post('/', async (req, res) => {
           thumbnailUrl: reelData.thumbnailUrl,
           mediaType: reelData.mediaType,
         },
+        smartCover: true,
+        smartCoverSource: 'manual_url_autopost',
         isInstant: true,
       }], true);
 

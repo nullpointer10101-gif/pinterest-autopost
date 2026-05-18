@@ -957,6 +957,8 @@ async function handleQueue() {
       username: postPayload.reelMeta.username,
       caption: postPayload.reelMeta.caption,
       thumbnailUrl: postPayload.reelMeta.thumbnailUrl || postPayload.mediaUrl,
+      smartCover: true,
+      smartCoverSource: 'manual_url_queue',
       aiContent: {
         title: postPayload.title,
         description: postPayload.description,

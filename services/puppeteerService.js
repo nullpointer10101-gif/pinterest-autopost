@@ -16,6 +16,17 @@ const historyService = require('./historyService');
 const aiService = require('./aiService');
 const persistencePolicy = require('./persistencePolicy');
 
+let prepareVideoForPinterestCover = null;
+let cleanupSmartCoverFiles = null;
+try {
+  ({
+    prepareVideoForPinterestCover,
+    cleanupFiles: cleanupSmartCoverFiles,
+  } = require('./igRepostCoverService'));
+} catch (err) {
+  console.warn('[PuppeteerService] smart cover service unavailable:', err.message);
+}
+
 function getDefaultChromeUserDataDir() {
   if (process.env.CHROME_USER_DATA_DIR) return process.env.CHROME_USER_DATA_DIR;
   if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
@@ -303,7 +314,38 @@ async function createPinWithBot(pinData) {
   console.log('[Bot] Media downloaded successfully.');
 
   let coverPath = null;
-  if (ext === '.mp4') {
+  let mediaUploadPath = mediaPath;
+  let smartCoverCleanupPaths = [];
+  let coverPreferredPosition = Number.isFinite(Number(media_source.coverPreferredPosition))
+    ? Math.min(1, Math.max(0, Number(media_source.coverPreferredPosition)))
+    : null;
+  const smartCoverRequested = media_source.smartCover === true || media_source.smartCover === 'true';
+
+  if (ext === '.mp4' && smartCoverRequested && prepareVideoForPinterestCover) {
+    try {
+      console.log(`[Bot] Preparing product-focused smart cover${media_source.smartCoverSource ? ` (${media_source.smartCoverSource})` : ''}...`);
+      const preparedCover = await prepareVideoForPinterestCover(mediaPath, {
+        caption: pinData.description || pinData.title || '',
+        shortcode: pinData.shortcode || '',
+      });
+
+      if (preparedCover?.generated && preparedCover.uploadPath) {
+        mediaUploadPath = preparedCover.uploadPath;
+        smartCoverCleanupPaths = Array.isArray(preparedCover.cleanupPaths) ? preparedCover.cleanupPaths : [];
+        coverPath = preparedCover.coverPath || null;
+        coverPreferredPosition = Number.isFinite(preparedCover.preferredPosition)
+          ? Math.min(1, Math.max(0, preparedCover.preferredPosition))
+          : coverPreferredPosition;
+        console.log(`[Bot] ✅ Product-focused cover-first video ready. preferredPosition=${coverPreferredPosition ?? 'auto'}`);
+      } else {
+        console.log(`[Bot] Smart cover unavailable; using original video (${preparedCover?.reason || 'unknown'}).`);
+      }
+    } catch (err) {
+      console.warn('[Bot] Smart cover preparation failed; using original video:', err.message);
+    }
+  }
+
+  if (ext === '.mp4' && !coverPath) {
     try {
       console.log('[Bot] Extracting a frame from the video for the Cover Image...');
       coverPath = path.join(tempDir, `pin_cover_${Date.now()}.jpg`);
@@ -471,7 +513,7 @@ async function createPinWithBot(pinData) {
         await page.waitForSelector(fileInputSelector, { timeout: 20000 });
         const fileInputs = await page.$$(fileInputSelector);
         const fileInput = fileInputs[fileInputs.length - 1];
-        await fileInput.uploadFile(mediaPath);
+        await fileInput.uploadFile(mediaUploadPath);
         console.log('[Bot] uploadFile() called — polling for processing indicator...');
       } catch (uploadErr) {
         console.warn(`[Bot] uploadFile() error on attempt ${uploadAttempt}: ${uploadErr.message}`);
@@ -610,7 +652,7 @@ async function createPinWithBot(pinData) {
 
         if (framesLoaded) {
           // Step 2 — Click a frame from the middle of the grid
-          const clickResult = await page.evaluate(() => {
+          const clickResult = await page.evaluate((preferredPosition) => {
             const modal = document.querySelector('[role="dialog"], [aria-modal="true"]')
                          || document.body;
             const imgs = Array.from(modal.querySelectorAll('img'));
@@ -624,9 +666,12 @@ async function createPinWithBot(pinData) {
 
             if (frameThumbs.length === 0) return 'no_frames';
 
-            // Click frame at ~60% through the grid
+            // Click the smart product moment when available; otherwise keep the old safe middle-ish frame.
+            const position = Number.isFinite(preferredPosition)
+              ? Math.min(1, Math.max(0, preferredPosition))
+              : 0.6;
             const targetIndex = Math.min(
-              Math.floor(frameThumbs.length * 0.6),
+              Math.max(0, Math.round((frameThumbs.length - 1) * position)),
               frameThumbs.length - 1
             );
             const target = frameThumbs[targetIndex];
@@ -637,7 +682,7 @@ async function createPinWithBot(pinData) {
             target.click();
 
             return `clicked_frame_${targetIndex + 1}_of_${frameThumbs.length}`;
-          });
+          }, coverPreferredPosition);
 
           console.log(`[Bot] 📷 Cover frame selection: ${clickResult}`);
           await new Promise(r => setTimeout(r, 1500));
@@ -1360,9 +1405,19 @@ async function createPinWithBot(pinData) {
     throw new Error(`Browser Bot failed: ${error.message}`);
   } finally {
     // Cleanup temp files
-    await browser.close();
-    try { fs.unlinkSync(mediaPath); } catch (e) {}
-    if (coverPath) { try { fs.unlinkSync(coverPath); } catch (e) {} }
+    if (browser) await browser.close().catch(() => {});
+    const cleanupTargets = Array.from(new Set([
+      mediaPath,
+      coverPath,
+      ...smartCoverCleanupPaths,
+    ].filter(Boolean)));
+    if (cleanupSmartCoverFiles) {
+      cleanupSmartCoverFiles(...cleanupTargets);
+    } else {
+      cleanupTargets.forEach((targetPath) => {
+        try { fs.unlinkSync(targetPath); } catch (e) {}
+      });
+    }
   }
 }
 

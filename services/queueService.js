@@ -601,10 +601,13 @@ async function processNextInQueue() {
       alt_text: altText,
       link: finalLink,
       boardName: boardForPost,
+      shortcode: itemShortcode || item.shortcode || '',
       media_source: {
         url: mediaUrl,
-        // Pass smart thumbnail so the bot can upload it as the pin cover image
+        // URL-created reel missions opt into product-focused cover selection.
         thumbnailUrl: item.thumbnailUrl || '',
+        smartCover: item.smartCover === true,
+        smartCoverSource: item.smartCoverSource || '',
       },
     });
 

@@ -113,6 +113,8 @@ router.post('/post', async (req, res) => {
       username: reelMeta?.username || 'unknown',
       caption: reelMeta?.caption || '',
       thumbnailUrl: reelMeta?.thumbnailUrl || mediaUrl,
+      smartCover: true,
+      smartCoverSource: 'manual_url_post_now',
       reelMeta,
       isInstant: true,
     }], true); // true = prepend to front of queue
