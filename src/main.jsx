@@ -213,6 +213,8 @@ function Sidebar({ active, setActive }) {
 
 function Dashboard({ data, stats, refresh, setActive, activity, addLog }) {
   const [busy, setBusy] = useState(false);
+  const previewItem = data.queue[0] || data.history[0] || null;
+  const previewUrl = previewItem?.thumbnailUrl || previewItem?.imageUrl || previewItem?.mediaUrl || previewItem?.previewUrl || '';
 
   const runScan = async () => {
     setBusy(true);
@@ -235,18 +237,27 @@ function Dashboard({ data, stats, refresh, setActive, activity, addLog }) {
             Add Instagram targets, watch the queue, publish Pinterest pins, and run menswear engagement from one quiet dashboard.
           </p>
         </div>
-        <div className="hero-actions">
-          <button className="primary-button" type="button" onClick={() => setActive('channels')}>
-            <Plus size={16} />
-            Add target
-          </button>
-          <button className="secondary-button" type="button" onClick={runScan} disabled={busy}>
-            <RefreshCw size={16} />
-            {busy ? 'Scanning...' : 'Sync now'}
-          </button>
-          <button className="ghost-button" type="button" onClick={() => setActive('history')}>
-            View history
-          </button>
+        <div className="hero-side">
+          <div className="hero-thumbnail">
+            {previewUrl ? <img src={previewUrl} alt="Latest queued media thumbnail" /> : <Image size={30} />}
+            <div>
+              <span>{previewItem ? 'Latest media' : 'Thumbnail ready'}</span>
+              <strong>{previewItem?.title || previewItem?.username || 'Queue preview'}</strong>
+            </div>
+          </div>
+          <div className="hero-actions">
+            <button className="primary-button" type="button" onClick={() => setActive('channels')}>
+              <Plus size={16} />
+              Add target
+            </button>
+            <button className="secondary-button" type="button" onClick={runScan} disabled={busy}>
+              <RefreshCw size={16} />
+              {busy ? 'Scanning...' : 'Sync now'}
+            </button>
+            <button className="ghost-button" type="button" onClick={() => setActive('history')}>
+              View history
+            </button>
+          </div>
         </div>
       </section>
 
@@ -345,11 +356,11 @@ function StatusList({ data, stats }) {
 function ActivityList({ data, activity }) {
   const fromHistory = data.history.slice(0, 3).map((item) => ({
     title: item.title || item.username || 'Pinterest post',
-    meta: `${item.status || 'completed'} · ${formatDate(item.createdAt || item.timestamp)}`,
+    meta: `${item.status || 'completed'} - ${formatDate(item.createdAt || item.timestamp)}`,
   }));
   const fromQueue = data.queue.slice(0, 2).map((item) => ({
     title: item.title || item.username || 'Queued item',
-    meta: `${item.status || 'pending'} · ${formatDate(item.createdAt || item.timestamp)}`,
+    meta: `${item.status || 'pending'} - ${formatDate(item.createdAt || item.timestamp)}`,
   }));
   const manual = activity.slice(0, 3).map((item) => ({ title: item, meta: 'Just now' }));
   const entries = [...manual, ...fromQueue, ...fromHistory].slice(0, 6);
