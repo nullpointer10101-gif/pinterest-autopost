@@ -391,13 +391,20 @@ function renderStorePage(looks = []) {
       width: 42px;
       height: 42px;
       border-radius: 14px;
-      display: grid;
-      place-items: center;
-      color: #17130d;
-      background: linear-gradient(135deg, var(--gold), var(--green));
-      font-family: 'Space Grotesk', sans-serif;
-      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(circle at 70% 20%, rgba(255, 255, 255, .42), transparent 24%),
+        linear-gradient(135deg, var(--gold), var(--green));
       box-shadow: 0 0 34px rgba(240, 201, 90, .24);
+      border: 1px solid rgba(248, 240, 223, .28);
+      flex: 0 0 auto;
+    }
+    .mark svg {
+      width: 25px;
+      height: 25px;
+      display: block;
     }
     .brand strong {
       display: block;
@@ -709,6 +716,62 @@ function renderStorePage(looks = []) {
       font-size: 11px;
       font-weight: 950;
       text-transform: uppercase;
+    }
+    .style-finder {
+      position: relative;
+      z-index: 1;
+      margin-top: 14px;
+      border: 1px solid rgba(129, 214, 164, .22);
+      border-radius: 24px;
+      padding: 18px;
+      background:
+        radial-gradient(circle at 92% 12%, rgba(129, 214, 164, .16), transparent 34%),
+        rgba(7, 7, 6, .34);
+    }
+    .style-finder h2 {
+      margin: 0 0 6px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(24px, 3vw, 36px);
+      letter-spacing: -.05em;
+      line-height: 1;
+    }
+    .style-finder p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.5;
+    }
+    .finder-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .finder-btn {
+      min-height: 44px;
+      border: 1px solid rgba(248, 240, 223, .14);
+      border-radius: 16px;
+      background: rgba(248, 240, 223, .06);
+      color: var(--text);
+      cursor: pointer;
+      padding: 9px 10px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 950;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+    .finder-btn:hover {
+      transform: translateY(-2px);
+      border-color: rgba(240, 201, 90, .45);
+      background: rgba(240, 201, 90, .1);
+    }
+    .finder-btn span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 850;
     }
     .stat-card {
       min-height: 116px;
@@ -1029,7 +1092,13 @@ function renderStorePage(looks = []) {
   <header class="topbar">
     <div class="shell topbar-inner">
       <a class="brand" href="/">
-        <span class="mark">RO</span>
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" role="img" aria-label="Reel Orbit logo">
+            <path d="M16 4.8c6.2 0 11.2 5 11.2 11.2S22.2 27.2 16 27.2 4.8 22.2 4.8 16 9.8 4.8 16 4.8Z" fill="none" stroke="#15120c" stroke-width="2.4"/>
+            <path d="M10.4 16h11.2M16 10.4v11.2" stroke="#15120c" stroke-width="2.4" stroke-linecap="round"/>
+            <path d="M21.6 6.8 25.2 3.2M25.2 3.2h-5M25.2 3.2v5" stroke="#15120c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
         <span>
           <strong>Reel Orbit Store</strong>
           <span>Shop every posted menswear look</span>
@@ -1089,6 +1158,16 @@ function renderStorePage(looks = []) {
             <div class="mission-step"><span>1</span><p>Pick a reel from the archive grid.</p></div>
             <div class="mission-step"><span>2</span><p>Open the look page with product cards inside.</p></div>
             <div class="mission-step"><span>3</span><p>Shop matching Amazon and Flipkart finds directly.</p></div>
+          </div>
+        </div>
+        <div class="style-finder">
+          <h2>Style Finder</h2>
+          <p>Shortcut the archive by shopping intent.</p>
+          <div class="finder-grid">
+            <button class="finder-btn" type="button" data-style-filter="budget">Budget finds<span>value pieces</span></button>
+            <button class="finder-btn" type="button" data-style-filter="premium">Premium picks<span>higher quality</span></button>
+            <button class="finder-btn" type="button" data-style-filter="amazon">Amazon only<span>direct affiliate</span></button>
+            <button class="finder-btn" type="button" data-style-filter="flipkart">Flipkart only<span>local finds</span></button>
           </div>
         </div>
         <div class="source-row">
@@ -1213,6 +1292,23 @@ function renderStorePage(looks = []) {
       button.addEventListener('click', () => {
         document.querySelector('.toolbar')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         window.setTimeout(() => searchInput?.focus(), 320);
+      });
+    });
+
+    document.querySelectorAll('[data-style-filter]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const intent = button.dataset.styleFilter || '';
+        if (intent === 'amazon' || intent === 'flipkart') {
+          activeFilter = intent;
+          if (searchInput) searchInput.value = '';
+          document.querySelectorAll('[data-filter]').forEach((item) => item.classList.toggle('active', item.dataset.filter === intent));
+        } else {
+          activeFilter = 'all';
+          if (searchInput) searchInput.value = intent;
+          document.querySelectorAll('[data-filter]').forEach((item) => item.classList.toggle('active', item.dataset.filter === 'all'));
+        }
+        document.getElementById('looks')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        applyFilters();
       });
     });
 
