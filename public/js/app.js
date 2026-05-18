@@ -3,6 +3,7 @@ const state = {
   queue: [],
   history: [],
   channels: [],
+  igStatus: null,
   engagements: [],
   engagementSummary: null,
   lastExtracted: null,
@@ -144,6 +145,8 @@ function bindEvents() {
   on('unlink-session-btn', 'click', unlinkSessionCookie);
   on('link-ig-session-btn', 'click', linkIgSession);
   on('add-channel-btn', 'click', handleAddChannel);
+  on('run-ig-scan-btn', 'click', runIgScanNow);
+  on('channels-scan-now-btn', 'click', runIgScanNow);
 
   on('auto-refresh-toggle', 'change', (event) => {
     setAutoRefresh(!!event.target.checked);
@@ -183,18 +186,7 @@ function bindEvents() {
   on('history-search', 'input', renderHistoryList);
   on('history-status-filter', 'change', renderHistoryList);
   on('engagement-search', 'input', renderEngagementAuditList);
-  
-  const platformToggle = byId('engagement-platform-toggle');
-  if (platformToggle) {
-    platformToggle.addEventListener('click', (e) => {
-      const btn = e.target.closest('.segment-btn');
-      if (!btn) return;
-      
-      platformToggle.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderEngagementAuditList();
-    });
-  }
+
   on('field-title', 'input', updateComposerMeta);
   on('field-desc', 'input', updateComposerMeta);
   on('field-alt', 'input', updateComposerMeta);
@@ -207,7 +199,7 @@ function bindEvents() {
     if (event.key === 'Enter') handleAddChannel();
   });
 
-  ['wf-pinterest-posting', 'wf-pinterest-engagement', 'wf-x-posting', 'wf-x-engagement'].forEach(id => {
+  ['wf-pinterest-posting', 'wf-pinterest-engagement'].forEach(id => {
     on(id, 'change', (e) => handleWorkflowToggle(id, e.target.checked));
   });
 
@@ -404,7 +396,6 @@ function switchTab(tab) {
   if (tab === 'channels') refreshChannels();
   if (tab === 'engagements') {
       loadEngagements();
-      if (typeof window.refreshXData === 'function') window.refreshXData();
   }
   if (tab === 'settings') loadDiagnostics();
 }
@@ -457,7 +448,7 @@ function setAutoRefresh(enabled) {
   if (!enabled) return;
   const intervalMs = state.performance.enabled ? PERFORMANCE_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
   state.refreshTimer = setInterval(() => {
-    // Use window.refreshAll so x-app.js override is honored
+    // Use the public refresh hook so future modules can extend safely.
     if (typeof window.refreshAll === 'function') window.refreshAll();
     else refreshAll();
   }, intervalMs);
@@ -502,6 +493,8 @@ async function refreshOverview() {
     state.history = Array.isArray(historyResp.history) ? historyResp.history : [];
   }
 
+  state.igStatus = trackerStatusResp?.status || null;
+
   // Always update channel count from tracker status (not tab-dependent)
   if (trackerStatusResp?.status) {
     const chCount = Array.isArray(trackerStatusResp.status.channels)
@@ -509,7 +502,7 @@ async function refreshOverview() {
       : (trackerStatusResp.status.channelCount ?? 0);
     setText('hero-channel-count', String(chCount));
     // Sync state.channels so channel tab is pre-populated
-    if (Array.isArray(trackerStatusResp.status.channels) && trackerStatusResp.status.channels.length > 0) {
+    if (Array.isArray(trackerStatusResp.status.channels)) {
       state.channels = trackerStatusResp.status.channels;
     }
   }
@@ -517,6 +510,7 @@ async function refreshOverview() {
   updateStats(state.queue, state.history);
   updateConnectionBar(pinterestResp || {}, systemStatus || {});
   updateHealthDashboard(pinterestResp || {}, systemStatus || {});
+  updateIgPipelineUI();
   renderMiniQueue();
   renderDashboardHistory();
 
@@ -596,8 +590,6 @@ function updateHealthDashboard(pinterestStatus, systemStatus) {
   const pText = byId('status-text-pinterest');
   const aiLight = byId('light-ai');
   const aiText = byId('status-text-ai');
-  const xLight = byId('light-x');
-  const xText = byId('status-text-x');
 
   if (pLight && pText) {
     if (pinterestStatus.connected) {
@@ -616,12 +608,106 @@ function updateHealthDashboard(pinterestStatus, systemStatus) {
     aiLight.className = 'status-light active';
     aiText.textContent = 'Ready (Gemini 1.5)';
   }
-  
-  if (xLight && xText) {
-    const xActive = typeof xState !== 'undefined' && xState.connected;
-    xLight.className = xActive ? 'status-light active' : 'status-light warn';
-    xText.textContent = xActive ? 'Linked' : 'Check Session';
+
+  applyIgPipelineHealth(state.igStatus);
+}
+
+function getIgPipelineHealth(status = state.igStatus) {
+  if (!status) {
+    return { tone: 'warn', text: 'Status unavailable' };
   }
+
+  const queue = status.queue || {};
+  const scheduler = status.scheduler || {};
+  const channelCount = Array.isArray(status.channels)
+    ? status.channels.length
+    : Number(status.channelCount || 0);
+  const failed = Number(queue.failed || 0);
+  const running = String(scheduler.lastRunStatus || '').toLowerCase() === 'running';
+  const errored = failed > 0 || String(scheduler.lastRunStatus || '').toLowerCase() === 'failed';
+
+  if (running) return { tone: 'success', text: 'Scan running' };
+  if (errored) return { tone: 'warn', text: `${failed} failed job${failed === 1 ? '' : 's'}` };
+  if (channelCount <= 0) return { tone: 'warn', text: 'No channels added' };
+  return { tone: 'success', text: 'Watching channels' };
+}
+
+function applyIgPipelineHealth(status = state.igStatus) {
+  const health = getIgPipelineHealth(status);
+  const light = byId('light-ig');
+  const text = byId('status-text-ig');
+  const badge = byId('ig-workflow-badge');
+
+  if (light) {
+    light.className = `status-light ${health.tone === 'success' ? 'active' : health.tone}`;
+  }
+  if (text) text.textContent = health.text;
+  if (badge) {
+    const badgeTone = health.tone === 'success' ? 'success' : health.tone === 'error' ? 'error' : 'warn';
+    setBadge(badge, health.text, badgeTone);
+  }
+}
+
+function updateIgPipelineUI(status = state.igStatus) {
+  const queue = status?.queue || {};
+  const scheduler = status?.scheduler || {};
+  const channels = Array.isArray(status?.channels) ? status.channels : [];
+  const channelCount = channels.length || Number(status?.channelCount || 0);
+  const ready = Math.max(0, Number(queue.ready || 0));
+  const failed = Math.max(0, Number(queue.failed || 0));
+  const totalPosts = Math.max(0, Number(status?.totalPosts || 0));
+
+  setText('ig-dashboard-accounts', String(channelCount));
+  setText('ig-dashboard-ready', String(ready));
+  setText('ig-dashboard-posts', String(totalPosts));
+  setText('ig-dashboard-failed', String(failed));
+  setText('channels-status-accounts', String(channelCount));
+  setText('channels-status-ready', String(ready));
+  setText('channels-status-failed', String(failed));
+
+  const lastRun = scheduler.lastRunCompletedAt || scheduler.lastRunStartedAt || scheduler.lastDispatchAt;
+  setText('ig-dashboard-last-run', lastRun ? `Last activity ${formatTimeAgo(lastRun)}` : 'No runs yet');
+  applyIgPipelineHealth(status);
+
+  const list = byId('ig-dashboard-logs');
+  if (!list) return;
+
+  const logs = Array.isArray(status?.recentLogs) ? status.recentLogs : [];
+  if (!status) {
+    list.innerHTML = '<div class="pulse-item error-text">IG pipeline status is unavailable.</div>';
+    return;
+  }
+
+  if (!logs.length) {
+    list.innerHTML = '<div class="pulse-item">No IG pipeline logs yet.</div>';
+    return;
+  }
+
+  list.innerHTML = logs.slice(0, 5).map((log) => {
+    const level = String(log.level || 'info').toLowerCase();
+    const badgeClass = level === 'error'
+      ? 'badge badge-error'
+      : level === 'warn'
+        ? 'badge badge-warn'
+        : 'badge badge-success';
+    const when = log.createdAt || log.at || log.timestamp || '';
+    const metaBits = [
+      log.type || 'pipeline',
+      when ? formatTimeAgo(when) : '',
+    ].filter(Boolean);
+
+    return `
+      <div class="list-item pipeline-log-item">
+        <div class="list-item-main">
+          <div>
+            <div class="item-title">${escHtml(log.message || 'Pipeline event')}</div>
+            <div class="item-meta">${escHtml(metaBits.join(' - '))}</div>
+          </div>
+        </div>
+        <span class="${badgeClass}">${escHtml(level.toUpperCase())}</span>
+      </div>
+    `;
+  }).join('');
 }
 
 async function handleExtract() {
@@ -1392,20 +1478,15 @@ function renderEngagements() {
       `;
     })
     .join('');
-}function renderEngagementAuditList() {
+}
+
+function renderEngagementAuditList() {
   const list = byId('engagement-readonly-list');
   const summary = byId('engagement-summary');
   if (!list || !summary) return;
 
   const search = String(byId('engagement-search')?.value || '').trim().toLowerCase();
-  
-  const activeBtn = document.querySelector('#engagement-platform-toggle .segment-btn.active');
-  const platform = activeBtn ? activeBtn.dataset.platform : 'pinterest';
-  
-  let sourceArray = state.engagements;
-  if (platform === 'x_twitter') {
-    sourceArray = typeof xState !== 'undefined' ? xState.engagements : [];
-  }
+  const sourceArray = state.engagements;
   
   const now = Date.now();
   const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
@@ -1425,10 +1506,10 @@ function renderEngagements() {
 
   const shownCount = rows.length;
   const latestTime = rows[0]?.when ? formatTime12h(rows[0].when) : 'None';
-  const platformLabel = platform === 'x_twitter' ? 'X (Twitter)' : 'Pinterest';
+  const platformLabel = 'Pinterest';
   const pinterestSummary = state.engagementSummary || null;
 
-  if (platform === 'pinterest' && pinterestSummary) {
+  if (pinterestSummary) {
     const guardText = pinterestSummary.guard?.active
       ? `Paused until ${formatTime12h(pinterestSummary.guard.until)}`
       : 'Ready';
@@ -1607,22 +1688,6 @@ async function loadDiagnostics() {
       pinUnlinkBtn?.classList.add('hidden');
     }
 
-    // X Console Setup Card (Mock check using system status or global xState)
-    const xBadge = byId('settings-badge-x');
-    const xLinkBtn = byId('link-x-session-btn');
-    const xUnlinkBtn = byId('unlink-x-session-btn');
-    const xActive = typeof xState !== 'undefined' && xState.connected;
-
-    if (xActive) {
-      setBadge(xBadge, 'Linked', 'success');
-      xLinkBtn?.classList.add('hidden');
-      xUnlinkBtn?.classList.remove('hidden');
-    } else {
-      setBadge(xBadge, 'Not Linked', 'error');
-      xLinkBtn?.classList.remove('hidden');
-      xUnlinkBtn?.classList.add('hidden');
-    }
-
   } catch (error) {
     console.error('Diagnostics failed', error);
   }
@@ -1642,6 +1707,31 @@ async function linkIgSession() {
     byId('ig-session-cookie').value = '';
   } catch (error) {
     showToast(error.message || 'Failed to save IG session', 'error');
+  }
+}
+
+async function runIgScanNow() {
+  const buttons = [byId('run-ig-scan-btn'), byId('channels-scan-now-btn')].filter(Boolean);
+  const originalHtml = new Map(buttons.map((button) => [button, button.innerHTML]));
+
+  buttons.forEach((button) => {
+    button.disabled = true;
+    button.innerHTML = '<i data-lucide="loader-2" class="btn-icon animate-spin"></i><span>Dispatching...</span>';
+  });
+  hydrateIcons();
+
+  try {
+    const response = await apiRequest('/api/ig-tracker/scan', { method: 'POST' });
+    showToast(response.message || 'Independent IG repost scan dispatched.', 'success');
+    await refreshOverview();
+  } catch (error) {
+    showToast(error.message || 'Failed to dispatch IG repost scan.', 'error');
+  } finally {
+    buttons.forEach((button) => {
+      button.disabled = false;
+      button.innerHTML = originalHtml.get(button) || 'Run Scan';
+    });
+    hydrateIcons();
   }
 }
 
@@ -2229,11 +2319,13 @@ function renderAlertCenter(pinterestStatus = {}, systemStatus = {}) {
 function getCommandItems() {
   return [
     { title: 'Open Dashboard', meta: 'Tab', run: () => switchTab('dashboard') },
+    { title: 'Open Target Channels', meta: 'Tab', run: () => switchTab('channels') },
     { title: 'Open Queue', meta: 'Tab', run: () => switchTab('queue') },
     { title: 'Open Pinterest Builder', meta: 'Tab', run: () => switchTab('pinterest') },
     { title: 'Open History', meta: 'Tab', run: () => switchTab('history') },
     { title: 'Open Settings', meta: 'Tab', run: () => switchTab('settings') },
     { title: 'Refresh Everything', meta: 'Action', run: () => refreshAll({ force: true }) },
+    { title: 'Run IG Repost Scan', meta: 'Action', run: () => runIgScanNow() },
     { title: 'Run Queue Bot', meta: 'Action', run: () => processQueueNow() },
     { title: 'Retry Failed Queue Items', meta: 'Action', run: () => retryFailed() },
     { title: 'Toggle Performance Mode', meta: 'System', run: () => applyPerformanceMode(!state.performance.enabled, { persist: true, notify: true }) },
@@ -2470,14 +2562,11 @@ function getAutosaveFieldIds() {
     'field-desc',
     'field-link',
     'field-alt',
-    'x-field-text',
     'session-cookie',
-    'x-session-cookie',
     'ig-session-cookie',
     'engage-niche',
     'engage-count-manual',
     'engage-comment-target',
-    'x-engage-count',
     'new-channel-input',
   ];
 }
@@ -2504,9 +2593,6 @@ function writeAutosaveValues(values = {}) {
   state.autosave.applying = false;
 
   updateComposerMeta();
-  if (typeof window.updateXTextMeta === 'function') {
-    try { window.updateXTextMeta(); } catch {}
-  }
 
   const manualCount = byId('engage-count-manual');
   const dashboardCount = byId('engage-count');
@@ -2753,6 +2839,14 @@ function renderChannelsList() {
     const username = String(typeof ch === 'string' ? ch : ch.username || '').trim();
     if (!username) return '';
     const pic = typeof ch === 'object' && ch.profilePicUrl ? ch.profilePicUrl : '';
+    const channelStatus = typeof ch === 'object' ? String(ch.status || 'active') : 'active';
+    const statusTone = getChannelStatusTone(channelStatus);
+    const statusLabel = formatChannelStatusLabel(channelStatus);
+    const lastScan = typeof ch === 'object' && ch.lastScannedAt ? `Last scan ${formatTimeAgo(ch.lastScannedAt)}` : '';
+    const lastPost = typeof ch === 'object' && ch.lastSuccessfulPostAt ? `Last post ${formatTimeAgo(ch.lastSuccessfulPostAt)}` : '';
+    const lastError = typeof ch === 'object' && ch.validation?.lastError ? String(ch.validation.lastError) : '';
+    const metaLine = [lastPost, lastScan].filter(Boolean).join(' - ') || 'Awaiting next scan';
+    const errorLine = lastError ? `<div class="item-meta error-text">${escHtml(lastError)}</div>` : '';
     const avatarLabel = (username.charAt(0) || '@').toUpperCase();
     const avatarHtml = `
       <div class="avatar-circle avatar-stack channel-avatar ${pic ? 'has-avatar' : ''}" data-avatar-username="${escAttr(normalizeUsernameValue(username))}" data-avatar-state="${pic ? 'ready' : 'pending'}">
@@ -2767,10 +2861,13 @@ function renderChannelsList() {
           ${avatarHtml}
           <div>
             <div class="item-title">@${escHtml(username)}</div>
-            <div class="item-meta">Instagram Target Channel</div>
+            <div class="item-meta">Instagram target channel - ${escHtml(statusLabel)}</div>
+            <div class="item-meta">${escHtml(metaLine)}</div>
+            ${errorLine}
           </div>
         </div>
         <div class="item-actions">
+          <span class="badge ${escAttr(statusTone.badgeClass)}">${escHtml(statusLabel)}</span>
           <a href="https://www.instagram.com/${escHtml(username)}" target="_blank" class="pill-btn">View Profile</a>
           <button class="btn btn-danger compact-btn" onclick="handleRemoveChannel('${escAttr(username)}')">
             <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
@@ -2784,6 +2881,19 @@ function renderChannelsList() {
   void hydrateChannelAvatars();
   
   if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function formatChannelStatusLabel(status) {
+  const clean = String(status || '').replace(/_/g, ' ').trim();
+  if (!clean) return 'Active';
+  return clean.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getChannelStatusTone(status) {
+  const clean = String(status || '').toLowerCase();
+  if (clean === 'active') return { badgeClass: 'badge-success' };
+  if (clean.includes('error') || clean.includes('failed')) return { badgeClass: 'badge-error' };
+  return { badgeClass: 'badge-warn' };
 }
 
 function applyChannelAvatar(username, profilePicUrl) {
@@ -2878,6 +2988,7 @@ async function handleAddChannel() {
     showToast(res.message || `Channel @${res.username} added. Verification started.`, 'success');
     input.value = '';
     await refreshChannels();
+    await refreshOverview();
   } catch (err) {
     showToast(err.message || 'Failed to add channel.', 'error');
   } finally {
@@ -2897,6 +3008,7 @@ async function handleRemoveChannel(username) {
     });
     showToast(`Channel @${username} removed.`, 'success');
     await refreshChannels();
+    await refreshOverview();
   } catch (err) {
     showToast(err.message || 'Failed to remove channel.', 'error');
   }
@@ -2908,8 +3020,6 @@ async function handleWorkflowToggle(id, enabled) {
   const mapping = {
     'wf-pinterest-posting': 'pinterestPosting',
     'wf-pinterest-engagement': 'pinterestEngagement',
-    'wf-x-posting': 'xPosting',
-    'wf-x-engagement': 'xEngagement'
   };
   
   const key = mapping[id];
@@ -2934,8 +3044,6 @@ function updateWorkflowUI(config) {
   const mapping = {
     'pinterestPosting': 'wf-pinterest-posting',
     'pinterestEngagement': 'wf-pinterest-engagement',
-    'xPosting': 'wf-x-posting',
-    'xEngagement': 'wf-x-engagement'
   };
 
   for (const [key, id] of Object.entries(mapping)) {

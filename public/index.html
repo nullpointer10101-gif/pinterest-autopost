@@ -17,7 +17,7 @@
                     <i data-lucide="radar" class="brand-icon"></i>
                     <span>Pinterest Mission Control</span>
                 </div>
-                <p class="brand-subtitle">Advanced automation cockpit for Pinterest and X pipelines with real-time operational controls.</p>
+                <p class="brand-subtitle">Advanced automation cockpit for Pinterest posting, engagement, and the isolated Instagram repost pipeline.</p>
                 <div class="status-wrap">
                     <span id="connection-status" class="badge badge-success">ONLINE</span>
                     <span id="active-mode" class="badge">MODE: AUTO</span>
@@ -46,7 +46,6 @@
             <button class="tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
             <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
             <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
-            <button class="tab-btn" data-tab="x-dashboard" type="button"><i data-lucide="twitter" class="tab-icon"></i><span>X</span></button>
             <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Engagement</span></button>
             <button class="tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
             <button class="tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
@@ -62,7 +61,7 @@
                                 <span class="hero-pill hero-pill-secondary">Dark + Light Modes</span>
                             </div>
                             <h1 class="hero-title">High-tech command center built for speed and control.</h1>
-                            <p class="hero-description">Manage queue pressure, automate posting cycles, and monitor engagement operations from a single modern mission surface.</p>
+                            <p class="hero-description">Manage Pinterest publishing, target-channel reposting, and men's outfit engagement from one clean mission surface.</p>
 
                             <div class="hero-actions">
                                 <button id="hero-open-channels-btn" class="btn btn-primary hero-action" type="button">
@@ -158,7 +157,7 @@
                     <article class="card dashboard-card dashboard-card-workflow">
                         <div class="card-title-wrap">
                             <h2><i data-lucide="workflow" class="heading-icon"></i>Workflow Control Center</h2>
-                            <p class="muted-text">Master switches for all background automations.</p>
+                            <p class="muted-text">Controls for active Pinterest automations plus read-only IG repost health.</p>
                         </div>
 
                         <div class="workflow-grid">
@@ -167,7 +166,7 @@
                                     <i data-lucide="camera" class="workflow-icon"></i>
                                     <div>
                                         <div class="workflow-name">Pinterest Posting</div>
-                                        <div class="workflow-desc">IG scraping and auto publishing</div>
+                                        <div class="workflow-desc">Manual pin builder and queue engine</div>
                                     </div>
                                 </div>
                                 <label class="master-switch">
@@ -181,7 +180,7 @@
                                     <i data-lucide="thumbs-up" class="workflow-icon"></i>
                                     <div>
                                         <div class="workflow-name">Pinterest Engagement</div>
-                                        <div class="workflow-desc">Auto likes and comments</div>
+                                        <div class="workflow-desc">Men's outfit likes and comments</div>
                                     </div>
                                 </div>
                                 <label class="master-switch">
@@ -190,33 +189,56 @@
                                 </label>
                             </div>
 
-                            <div class="workflow-item">
-                                <div class="workflow-info">
-                                    <i data-lucide="twitter" class="workflow-icon"></i>
-                                    <div>
-                                        <div class="workflow-name">X Posting</div>
-                                        <div class="workflow-desc">Queue and fire-post tasks</div>
-                                    </div>
-                                </div>
-                                <label class="master-switch">
-                                    <input type="checkbox" id="wf-x-posting" checked>
-                                    <span class="master-slider"></span>
-                                </label>
-                            </div>
-
-                            <div class="workflow-item">
+                            <div class="workflow-item workflow-item-readonly">
                                 <div class="workflow-info">
                                     <i data-lucide="zap" class="workflow-icon"></i>
                                     <div>
-                                        <div class="workflow-name">X Engagement</div>
-                                        <div class="workflow-desc">Automated interactions</div>
+                                        <div class="workflow-name">Independent IG Repost</div>
+                                        <div class="workflow-desc">Own scheduler, queue, duplicate guard</div>
                                     </div>
                                 </div>
-                                <label class="master-switch">
-                                    <input type="checkbox" id="wf-x-engagement" checked>
-                                    <span class="master-slider"></span>
-                                </label>
+                                <span id="ig-workflow-badge" class="badge">Checking...</span>
                             </div>
+                        </div>
+                    </article>
+
+                    <article class="card dashboard-card dashboard-card-ig">
+                        <div class="card-header-row">
+                            <div class="card-title-wrap">
+                                <h2><i data-lucide="instagram" class="heading-icon"></i>IG Repost Pipeline</h2>
+                                <p class="muted-text">Standalone scraper/reposter status with manual scan dispatch.</p>
+                            </div>
+                            <button id="run-ig-scan-btn" class="btn btn-secondary compact-btn" type="button">
+                                <i data-lucide="radar" class="btn-icon"></i>
+                                <span>Run Scan</span>
+                            </button>
+                        </div>
+
+                        <div class="pipeline-metrics-grid">
+                            <div class="pipeline-metric">
+                                <span>Accounts</span>
+                                <strong id="ig-dashboard-accounts">0</strong>
+                            </div>
+                            <div class="pipeline-metric">
+                                <span>Ready Jobs</span>
+                                <strong id="ig-dashboard-ready">0</strong>
+                            </div>
+                            <div class="pipeline-metric">
+                                <span>Posted</span>
+                                <strong id="ig-dashboard-posts">0</strong>
+                            </div>
+                            <div class="pipeline-metric">
+                                <span>Failed</span>
+                                <strong id="ig-dashboard-failed">0</strong>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-log-head">
+                            <span>Latest Activity</span>
+                            <span id="ig-dashboard-last-run" class="input-meta">Waiting...</span>
+                        </div>
+                        <div id="ig-dashboard-logs" class="list compact-list">
+                            <div class="pulse-item">Loading IG pipeline activity...</div>
                         </div>
                     </article>
 
@@ -265,10 +287,10 @@
                                 </div>
                             </div>
                             <div class="health-item">
-                                <div id="light-x" class="status-light"></div>
+                                <div id="light-ig" class="status-light"></div>
                                 <div>
-                                    <div class="stat-label">X Token</div>
-                                    <div id="status-text-x" class="input-meta">Checking...</div>
+                                    <div class="stat-label">IG Repost Pipeline</div>
+                                    <div id="status-text-ig" class="input-meta">Checking...</div>
                                 </div>
                             </div>
                             <div class="health-item">
@@ -305,6 +327,24 @@
                             <button id="add-channel-btn" class="btn btn-primary" type="button">
                                 <i data-lucide="plus" class="btn-icon"></i>
                                 <span>Add Channel</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="channel-pipeline-panel">
+                        <div>
+                            <div class="sub-title">Independent Repost Monitor</div>
+                            <p class="muted-text">New channels validate instantly; scheduled scans continue separately from FirePost.</p>
+                        </div>
+                        <div class="channel-pipeline-actions">
+                            <div class="pipeline-mini-stats">
+                                <span><strong id="channels-status-accounts">0</strong> accounts</span>
+                                <span><strong id="channels-status-ready">0</strong> ready</span>
+                                <span><strong id="channels-status-failed">0</strong> failed</span>
+                            </div>
+                            <button id="channels-scan-now-btn" class="btn btn-secondary compact-btn" type="button">
+                                <i data-lucide="radar" class="btn-icon"></i>
+                                <span>Run IG Scan</span>
                             </button>
                         </div>
                     </div>
@@ -461,88 +501,6 @@
                 </div>
             </section>
 
-            <section id="panel-x-dashboard" class="panel hidden">
-                <div class="panel-grid panel-grid-main">
-                    <article class="card">
-                        <div class="card-title-wrap">
-                            <h2><i data-lucide="twitter" class="heading-icon"></i>X Mission Builder</h2>
-                            <p class="muted-text">Load media, craft tweet copy, and schedule posts on X.</p>
-                        </div>
-
-                        <div class="field-wrap">
-                            <label for="x-manual-media-url">Media URL (Image/Video)</label>
-                            <div class="inline-field">
-                                <input type="text" id="x-manual-media-url" placeholder="Direct image or video URL">
-                                <button id="x-manual-load-btn" class="btn btn-secondary" type="button"><i data-lucide="download" class="btn-icon"></i><span>Load</span></button>
-                            </div>
-                        </div>
-
-                        <section id="x-preview-section" class="preview-shell hidden">
-                            <div class="preview-media-wrap">
-                                <img id="x-preview-img" class="preview-img" alt="X mission preview">
-                                <video id="x-preview-video" class="preview-video hidden" muted loop playsinline preload="metadata"></video>
-                            </div>
-                            <div class="preview-fields">
-                                <div class="field-wrap">
-                                    <label for="x-field-text">Tweet Text</label>
-                                    <textarea id="x-field-text" rows="5" maxlength="280"></textarea>
-                                    <div id="x-field-text-meta" class="input-meta">0/280 chars</div>
-                                </div>
-                                <div class="button-row">
-                                    <button id="x-queue-btn" class="btn btn-secondary" type="button">Queue Tweet</button>
-                                </div>
-                            </div>
-                        </section>
-                    </article>
-
-                    <aside class="sidebar-col">
-                        <article class="card">
-                            <div class="card-title-wrap">
-                                <h2><i data-lucide="zap" class="heading-icon"></i>X Quick Actions</h2>
-                                <p class="muted-text">Run engagement and fire queue posting instantly.</p>
-                            </div>
-
-                            <div class="field-wrap">
-                                <label for="x-engage-count">Direct Engagement Count</label>
-                                <input type="number" id="x-engage-count" min="1" max="20" value="20">
-                            </div>
-
-                            <div class="quick-actions">
-                                <button id="x-engage-btn" class="btn btn-primary" type="button"><i data-lucide="activity" class="btn-icon"></i><span>Engage Bot</span></button>
-                                <button id="x-run-bot-btn" class="btn btn-secondary" type="button"><i data-lucide="flame" class="btn-icon"></i><span>Run X Queue Bot</span></button>
-                            </div>
-
-                            <div class="sub-title">X Queue Status</div>
-                            <div id="x-queue-list-mini" class="list">
-                                <div class="pulse-item">No pending X missions.</div>
-                            </div>
-                        </article>
-
-                        <article class="card">
-                            <div class="card-title-wrap">
-                                <h2><i data-lucide="receipt-text" class="heading-icon"></i>X Post History</h2>
-                                <p class="muted-text">Latest queued and posted mission history.</p>
-                            </div>
-                            <div id="x-history-list" class="list">
-                                <div class="pulse-item">No X history yet.</div>
-                            </div>
-                        </article>
-
-                        <article class="card">
-                            <div class="card-title-wrap">
-                                <h2><i data-lucide="hand-heart" class="heading-icon"></i>X Engagement Feed</h2>
-                                <p class="muted-text">Recent actions from X engagement bot.</p>
-                            </div>
-                            <div id="x-engagements-list" class="list">
-                                <div class="pulse-item">No X engagements yet.</div>
-                            </div>
-                        </article>
-                    </aside>
-                </div>
-
-                <div class="panel-grid panel-grid-secondary hidden"></div>
-            </section>
-
             <section id="panel-history" class="panel hidden">
                 <article class="card">
                     <div class="card-header-row">
@@ -575,11 +533,7 @@
                     </div>
 
                     <div class="control-row">
-                        <div class="segmented-control" id="engagement-platform-toggle">
-                            <button class="segment-btn active" data-platform="pinterest">Pinterest</button>
-                            <button class="segment-btn" data-platform="x_twitter">X (Twitter)</button>
-                        </div>
-                        <input type="text" id="engagement-search" placeholder="Search logs">
+                        <input type="text" id="engagement-search" placeholder="Search Pinterest engagement logs">
                     </div>
 
                     <div class="button-row inline-actions-row">
@@ -626,25 +580,6 @@
 
                     <article class="card">
                         <div class="card-title-wrap">
-                            <div class="heading-row">
-                                <h2><i data-lucide="twitter" class="heading-icon"></i>X Console Setup</h2>
-                                <span id="settings-badge-x" class="badge">Checking...</span>
-                            </div>
-                            <p class="muted-text">Link your X account using browser auth_token cookie value.</p>
-                        </div>
-
-                        <div class="field-wrap">
-                            <label for="x-session-cookie">Auth Token</label>
-                            <div class="inline-field">
-                                <input type="password" id="x-session-cookie" placeholder="auth_token=...">
-                                <button id="link-x-session-btn" class="btn btn-secondary" type="button">Link</button>
-                                <button id="unlink-x-session-btn" class="btn btn-danger hidden" type="button">Unlink</button>
-                            </div>
-                        </div>
-                    </article>
-
-                    <article class="card">
-                        <div class="card-title-wrap">
                             <h2><i data-lucide="instagram" class="heading-icon"></i>Extraction Engine</h2>
                             <p class="muted-text">Optional Instagram cookie for high-frequency or restricted reel extraction.</p>
                         </div>
@@ -677,6 +612,7 @@
 
         <nav id="mobile-tab-nav" class="mobile-tab-nav" aria-label="Mobile tab navigation">
             <button class="mobile-tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Home</span></button>
+            <button class="mobile-tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
             <button class="mobile-tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
             <button class="mobile-tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Create</span></button>
             <button class="mobile-tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
@@ -688,6 +624,5 @@
 
     <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
     <script src="/js/app.js"></script>
-    <script src="/js/x-app.js"></script>
 </body>
 </html>
