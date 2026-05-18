@@ -24,7 +24,11 @@ async function main() {
     engagementCount: process.env.AUTOMATION_ENGAGEMENTS_PER_HOUR,
     engagementNiche: process.env.AUTOMATION_ENGAGEMENT_NICHE || 'all',
     timeZone: process.env.AUTOMATION_TIMEZONE || 'Asia/Calcutta',
-    force: process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || process.argv.includes('--force'),
+    engagementOnly: process.env.AUTOMATION_ENGAGEMENT_ONLY === 'true',
+    requireEngagementSuccess: process.env.AUTOMATION_REQUIRE_ENGAGEMENT_SUCCESS === 'true',
+    force: process.env.GITHUB_EVENT_NAME === 'workflow_dispatch'
+      || process.argv.includes('--force')
+      || process.env.AUTOMATION_FORCE_RUN === 'true',
   });
 
   console.log('[Automation] Hourly run result:');

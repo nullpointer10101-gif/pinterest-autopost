@@ -1601,7 +1601,11 @@ async function clickLikeOnPin(page) {
   const selectors = [
     'button[aria-label="React"]',
     'button[aria-label="react"]',
+    'button[aria-label*="Like" i]',
+    'button[aria-label*="reaction" i]',
     'button[data-test-id="pin-rep-reaction-button"]',
+    '[data-test-id*="reaction"] button',
+    '[data-test-id*="like"] button',
   ];
 
   for (const selector of selectors) {
@@ -1611,13 +1615,32 @@ async function clickLikeOnPin(page) {
     return true;
   }
 
-  return false;
+  return page.evaluate(() => {
+    const isVisible = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.right > 0;
+    };
+
+    const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+    const blocked = ['save', 'share', 'send', 'more', 'follow', 'visit', 'open'];
+    const target = buttons.find((button) => {
+      const label = `${button.getAttribute('aria-label') || ''} ${button.innerText || ''} ${button.dataset?.testid || ''}`.toLowerCase();
+      if (!isVisible(button) || blocked.some((word) => label.includes(word))) return false;
+      return label.includes('react') || label.includes('reaction') || label.includes('like') || label.includes('love');
+    });
+
+    if (!target) return false;
+    target.click();
+    return true;
+  });
 }
 
 async function submitCommentOnPin(page, commentText, loadMultiplier = 1) {
   const openSelectors = [
     'button[aria-label="Comments"]',
+    'button[aria-label*="comment" i]',
     '[data-test-id="community-comment-button"]',
+    '[data-test-id*="comment"] button',
   ];
   let opened = false;
   for (const selector of openSelectors) {
@@ -1628,14 +1651,34 @@ async function submitCommentOnPin(page, commentText, loadMultiplier = 1) {
     break;
   }
 
+  if (!opened) {
+    opened = await page.evaluate(() => {
+      const isVisible = (element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.right > 0;
+      };
+      const button = Array.from(document.querySelectorAll('button, [role="button"]')).find((element) => {
+        const label = `${element.getAttribute('aria-label') || ''} ${element.innerText || ''} ${element.dataset?.testid || ''}`.toLowerCase();
+        return isVisible(element) && label.includes('comment');
+      });
+      if (!button) return false;
+      button.click();
+      return true;
+    });
+  }
+
   if (!opened) return false;
 
   await sleep(1500 * loadMultiplier);
 
   const boxSelectors = [
     'div[aria-label="Add a comment"]',
+    'div[contenteditable="true"]',
+    '[contenteditable="true"][role="textbox"]',
+    '[role="textbox"]',
     '[data-test-id="comment-composer"]',
     'input[placeholder="Add a comment"]',
+    'input[placeholder*="comment" i]',
     '[data-test-id="comment-input-box"]',
     'textarea',
   ];
@@ -1664,6 +1707,26 @@ async function submitCommentOnPin(page, commentText, loadMultiplier = 1) {
     const disabled = await page.evaluate((element) => !!element.disabled, button);
     if (disabled) continue;
     await button.click();
+    await sleep(randomInt(3500, 6500) * loadMultiplier);
+    return true;
+  }
+
+  const clickedFallbackSubmit = await page.evaluate(() => {
+    const isVisible = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.right > 0;
+    };
+    const button = Array.from(document.querySelectorAll('button, [role="button"]')).find((element) => {
+      const label = `${element.getAttribute('aria-label') || ''} ${element.innerText || ''} ${element.dataset?.testid || ''}`.toLowerCase().trim();
+      if (!isVisible(element) || element.disabled) return false;
+      return label === 'post' || label === 'send' || label.includes('post comment') || label.includes('submit comment');
+    });
+    if (!button) return false;
+    button.click();
+    return true;
+  });
+
+  if (clickedFallbackSubmit) {
     await sleep(randomInt(3500, 6500) * loadMultiplier);
     return true;
   }
@@ -1700,6 +1763,10 @@ function isPinRelevant(title, description, boardName = '', fallbackMode = false,
   const hasOutfitKeyword = outfitKeywords.some((word) => combined.includes(word));
   const hasStreetwearKeyword = streetwearKeywords.some((word) => combined.includes(word));
   const hasFormalKeyword = formalKeywords.some((word) => combined.includes(word));
+
+  if (fallbackMode && normalizedNiche === 'mens_outfits') {
+    return { relevant: true, reason: 'trusted mens search feed fallback', subNiche: 'casual', matchCount: 1 };
+  }
 
   if (!hasMenKeyword || !hasOutfitKeyword) {
     const fallbackPass = fallbackMode && strongIdentifiers.some((word) => combined.includes(word));
@@ -1780,8 +1847,14 @@ async function runAutoEngagerSafe(options = {}) {
     return { success: false, message: 'Circuit breaker active.', likesCompleted: 0, commentsCompleted: 0, niche: targetNiche };
   }
 
-  const DAILY_MAX_LIKES = 25;
-  const DAILY_MAX_COMMENTS = 12;
+  const DAILY_MAX_LIKES = Math.max(
+    targets.likeTarget,
+    toInt(process.env.AUTOMATION_DAILY_MAX_LIKES, 120)
+  );
+  const DAILY_MAX_COMMENTS = Math.max(
+    targets.commentTarget,
+    toInt(process.env.AUTOMATION_DAILY_MAX_COMMENTS, 72)
+  );
 
   if (likesToday >= DAILY_MAX_LIKES && commentsToday >= DAILY_MAX_COMMENTS) {
     console.log('[Bot] Daily hard caps reached. Exiting.');
@@ -1894,7 +1967,7 @@ async function runAutoEngagerSafe(options = {}) {
       const pinData = await extractPinSnapshot(page);
       console.log(`[Bot] Extracted -> Title: "${pinData.title}" | Desc: "${pinData.desc.substring(0, 70)}..." | Board: "${pinData.boardName}"`);
 
-      const fallbackMode = cycle > 10;
+      const fallbackMode = cycle > 4 || ((hourlyLikes + hourlyComments) === 0 && cycle > 2);
       const relevancy = isPinRelevant(pinData.title, pinData.desc, pinData.boardName, fallbackMode, targetNiche);
       if (!relevancy.relevant) {
         console.log(`[Bot] Skipped irrelevant pin: "${pinData.title}" Reason: ${relevancy.reason}`);

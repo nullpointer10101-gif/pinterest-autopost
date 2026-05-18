@@ -50,7 +50,10 @@ async function runHourlyAutomation(options = {}) {
     options.engagementCommentTarget ?? process.env.AUTOMATION_ENGAGEMENT_COMMENT_TARGET ?? process.env.AUTOMATION_ENGAGEMENT_COMMENTS_PER_HOUR,
     3
   ));
-  const maxPostsPerDay = Math.max(1, toInt(options.maxPostsPerDay ?? process.env.AUTOMATION_MAX_POSTS_PER_DAY, 10));
+  const engagementOnly = options.engagementOnly === true || process.env.AUTOMATION_ENGAGEMENT_ONLY === 'true';
+  const requireEngagementSuccess = options.requireEngagementSuccess === true
+    || process.env.AUTOMATION_REQUIRE_ENGAGEMENT_SUCCESS === 'true';
+  const maxPostsPerDay = Math.max(0, toInt(options.maxPostsPerDay ?? process.env.AUTOMATION_MAX_POSTS_PER_DAY, 10));
   const maxPostsPerRun = Math.max(0, toInt(options.maxPostsPerRun ?? process.env.AUTOMATION_MAX_POSTS_PER_RUN, 2));
   const requestedEngagementCount = Math.max(
     0,
@@ -82,11 +85,12 @@ async function runHourlyAutomation(options = {}) {
     console.log('[Automation] Pinterest engagement is disabled in workflow config. Skipping bot session unless forced.');
   }
 
-  if (!options.force && automation.lastRunAt) {
-    const lastRunTime = new Date(automation.lastRunAt).getTime();
+  const runGuardField = engagementOnly ? 'lastEngagementRunAt' : 'lastRunAt';
+  if (!options.force && automation[runGuardField]) {
+    const lastRunTime = new Date(automation[runGuardField]).getTime();
     const minutesSinceLastRun = (Date.now() - lastRunTime) / (1000 * 60);
     if (minutesSinceLastRun < 45) {
-      console.log(`[Automation] Skipped: last run was ${Math.round(minutesSinceLastRun)}m ago (min 45m).`);
+      console.log(`[Automation] Skipped: last ${engagementOnly ? 'engagement' : 'automation'} run was ${Math.round(minutesSinceLastRun)}m ago (min 45m).`);
       return {
         success: true,
         skipped: true,
@@ -108,7 +112,7 @@ async function runHourlyAutomation(options = {}) {
   const maxAttempts = Math.max(3, targetPostsThisRun * 4);
   const processedItems = [];
 
-  if (targetPostsThisRun > 0) {
+  if (!engagementOnly && targetPostsThisRun > 0) {
     if (config.pinterestPosting === false && !options.force) {
       console.log('[Automation] Pinterest posting is disabled. Skipping queue processing.');
     } else {
@@ -151,12 +155,14 @@ async function runHourlyAutomation(options = {}) {
   }
 
   postsToday += postsProcessed;
-  await historyService.setAutomationState({
-    ...automation,
-    dateKey,
-    postsToday,
-    lastRunAt: new Date().toISOString(),
-  });
+  if (!engagementOnly) {
+    await historyService.setAutomationState({
+      ...automation,
+      dateKey,
+      postsToday,
+      lastRunAt: new Date().toISOString(),
+    });
+  }
 
   let engagement = {
     requested: requestedEngagementCount,
@@ -167,7 +173,26 @@ async function runHourlyAutomation(options = {}) {
     startDelayMs: 0,
   };
 
-  if (engagementCount > 0) {
+  let shouldRunEngagement = engagementCount > 0;
+  if (shouldRunEngagement && !engagementOnly && !options.force && automation.lastEngagementRunAt) {
+    const lastEngagementTime = new Date(automation.lastEngagementRunAt).getTime();
+    const minutesSinceEngagement = (Date.now() - lastEngagementTime) / (1000 * 60);
+    if (Number.isFinite(minutesSinceEngagement) && minutesSinceEngagement < 45) {
+      console.log(`[Automation] Skipping engagement: dedicated engagement ran ${Math.round(minutesSinceEngagement)}m ago.`);
+      engagement = {
+        requested: requestedEngagementCount,
+        attempted: 0,
+        executed: 0,
+        success: true,
+        skipped: true,
+        message: `Skipped because engagement ran ${Math.round(minutesSinceEngagement)}m ago.`,
+        startDelayMs: 0,
+      };
+      shouldRunEngagement = false;
+    }
+  }
+
+  if (shouldRunEngagement) {
     if (config.pinterestEngagement === false && !options.force) {
       console.log('[Automation] Pinterest engagement is disabled. Skipping bot.');
     } else if (puppeteerService && typeof puppeteerService.runAutoEngagerSafe === 'function') {
@@ -214,6 +239,13 @@ async function runHourlyAutomation(options = {}) {
           },
           niche: result?.niche || options.engagementNiche || 'all',
         };
+        if (executedTotal > 0) {
+          const automationState = await historyService.getAutomationState();
+          await historyService.setAutomationState({
+            ...automationState,
+            lastEngagementRunAt: new Date().toISOString(),
+          });
+        }
       } catch (err) {
         engagement = {
           requested: requestedEngagementCount,
@@ -245,9 +277,15 @@ async function runHourlyAutomation(options = {}) {
   }
 
   const queueStats = await queueService.getQueueStats();
+  const engagementFailedRequired = requireEngagementSuccess
+    && engagementCount > 0
+    && (!engagement.success || Number(engagement.executed || 0) <= 0);
 
   return {
-    success: true,
+    success: !engagementFailedRequired,
+    message: engagementFailedRequired
+      ? `Engagement did not complete any actions: ${engagement.message || '0 actions'}`
+      : undefined,
     timeZone,
     dateKey,
     limits: {

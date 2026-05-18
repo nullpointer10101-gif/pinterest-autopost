@@ -336,10 +336,18 @@ router.post('/engage', async (req, res) => {
         actor: 'dashboard_user',
         engagedAt: new Date().toISOString(),
       });
-      githubService.triggerInstantEngagement({ likeTarget, commentTarget, niche }).catch(() => {});
+      const dispatch = await githubService.triggerInstantEngagement({ likeTarget, commentTarget, niche });
+      if (!dispatch.success) {
+        return res.status(502).json({
+          success: false,
+          queued: true,
+          error: `Engagement mission was recorded, but GitHub Actions did not start: ${dispatch.error || 'dispatch failed'}`,
+        });
+      }
       return res.json({
         success: true,
         queued: true,
+        engagementDispatched: true,
         message: `Pinterest engagement mission launched for ${likeTarget} likes and ${commentTarget} comments.`,
       });
     }

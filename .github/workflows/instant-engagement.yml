@@ -1,6 +1,9 @@
 name: Instant Pinterest Engagement (Algorithm Booster)
 
 on:
+  schedule:
+    # Dedicated hourly engagement wake-up. Runs separately from posting/FirePost.
+    - cron: '23 * * * *'
   workflow_dispatch:
     inputs:
       like_target:
@@ -19,7 +22,10 @@ on:
 jobs:
   engagement-mission:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
+    concurrency:
+      group: pinterest-engagement
+      cancel-in-progress: false
 
     steps:
       - name: Checkout
@@ -49,6 +55,9 @@ jobs:
         run: node scripts/run-hourly-automation.js
         env:
           NODE_ENV: production
+          AUTOMATION_ENGAGEMENT_ONLY: true
+          AUTOMATION_FORCE_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+          AUTOMATION_REQUIRE_ENGAGEMENT_SUCCESS: true
           AUTOMATION_TIMEZONE: ${{ secrets.AUTOMATION_TIMEZONE || 'Asia/Calcutta' }}
           AUTOMATION_MAX_POSTS_PER_DAY: 0 # Skip posts
           AUTOMATION_MAX_POSTS_PER_RUN: 0 # Skip posts
@@ -56,10 +65,12 @@ jobs:
           AUTOMATION_ENGAGEMENT_NICHE: ${{ github.event.inputs.niche || 'mens_outfits' }}
           AUTOMATION_ENGAGEMENT_LIKE_TARGET: ${{ github.event.inputs.like_target || '5' }}
           AUTOMATION_ENGAGEMENT_COMMENT_TARGET: ${{ github.event.inputs.comment_target || '3' }}
+          AUTOMATION_DAILY_MAX_LIKES: 120
+          AUTOMATION_DAILY_MAX_COMMENTS: 72
           AUTOMATION_ENGAGEMENT_START_JITTER_MIN_MS: 0 # No wait for manual trigger
           AUTOMATION_ENGAGEMENT_START_JITTER_MAX_MS: 5000 # Max 5s wait
-          AUTOMATION_ENGAGEMENT_MIN_GAP_MS: 15000 # Fast gaps for manual booster
-          AUTOMATION_ENGAGEMENT_MAX_GAP_MS: 45000
+          AUTOMATION_ENGAGEMENT_MIN_GAP_MS: 10000 # Fast enough to finish reliably
+          AUTOMATION_ENGAGEMENT_MAX_GAP_MS: 25000
           AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
           PINTEREST_POSTING_MODE: bot
           PINTEREST_SESSION_COOKIE: ${{ secrets.PINTEREST_SESSION_COOKIE }}
