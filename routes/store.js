@@ -254,6 +254,67 @@ function buildStats(looks = []) {
   };
 }
 
+function buildTopShelves(looks = [], limit = 6) {
+  const counts = new Map();
+  for (const look of looks) {
+    const type = String(look.productType || '').trim();
+    if (!type || type.toLowerCase() === 'look') continue;
+    counts.set(type, (counts.get(type) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([label, count]) => ({ label, count }));
+}
+
+function renderFeaturedLook(look) {
+  if (!look) {
+    return `
+      <div class="featured-card empty-feature">
+        <div class="featured-copy">
+          <span class="mini-label">Latest drop</span>
+          <h2>No looks yet</h2>
+          <p>Once FirePost or the independent IG repost pipeline publishes a reel, it will become a shoppable store card here.</p>
+          <a class="primary-cta" href="/">Open dashboard</a>
+        </div>
+      </div>
+    `;
+  }
+
+  const image = look.thumbnail
+    ? `<img src="${escapeHtml(look.thumbnail)}" alt="${escapeHtml(look.title)}" onerror="this.closest('.featured-media').classList.add('image-failed'); this.remove();">`
+    : '';
+  const products = look.productNames.slice(0, 3)
+    .map((name) => `<li>${escapeHtml(name)}</li>`)
+    .join('') || '<li>Open this look to see its product cards.</li>';
+
+  return `
+    <a class="featured-card" href="${escapeHtml(look.href)}">
+      <div class="featured-media">
+        ${image}
+        <div class="image-fallback featured-fallback">
+          <span>NEW</span>
+          <strong>${escapeHtml(look.productType)}</strong>
+        </div>
+        <div class="featured-float">
+          <span>${escapeHtml(look.sourceLabel)}</span>
+          <strong>${look.productCount || 0} products</strong>
+        </div>
+      </div>
+      <div class="featured-copy">
+        <span class="mini-label">Latest shoppable drop</span>
+        <h2>${escapeHtml(look.title)}</h2>
+        <p>${escapeHtml(look.description).slice(0, 145)}${look.description.length > 145 ? '...' : ''}</p>
+        <ul>${products}</ul>
+        <div class="featured-foot">
+          <span>${look.username ? `@${escapeHtml(look.username)}` : 'Reel Orbit'}</span>
+          <strong>Open products</strong>
+        </div>
+      </div>
+    </a>
+  `;
+}
+
 function renderCard(look, index) {
   const image = look.thumbnail
     ? `<img src="${escapeHtml(look.thumbnail)}" alt="${escapeHtml(look.title)}" loading="${index < 8 ? 'eager' : 'lazy'}" onerror="this.closest('.look-media').classList.add('image-failed'); this.remove();">`
@@ -306,6 +367,8 @@ function renderCard(look, index) {
 function renderStorePage(looks = []) {
   const stats = buildStats(looks);
   const latest = looks[0]?.displayDate || 'No looks yet';
+  const featuredLook = looks[0] || null;
+  const topShelves = buildTopShelves(looks);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -414,7 +477,7 @@ function renderStorePage(looks = []) {
     .hero {
       padding: 52px 0 26px;
       display: grid;
-      grid-template-columns: minmax(320px, .78fr) minmax(420px, 1.22fr);
+      grid-template-columns: minmax(320px, .78fr) minmax(440px, 1.22fr);
       gap: 34px;
       align-items: stretch;
     }
@@ -473,16 +536,197 @@ function renderStorePage(looks = []) {
       border: 0;
       box-shadow: 0 18px 42px rgba(240, 201, 90, .18);
     }
+    .quick-shelves {
+      margin-top: 28px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+    }
+    .quick-shelves strong {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 950;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .shelf-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .shelf-chip {
+      min-height: 34px;
+      border: 1px solid rgba(248, 240, 223, .16);
+      border-radius: 999px;
+      padding: 0 11px;
+      background: rgba(248, 240, 223, .07);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 950;
+      text-transform: uppercase;
+      transition: transform .18s ease, background .18s ease, border-color .18s ease;
+    }
+    .shelf-chip:hover {
+      transform: translateY(-2px);
+      background: rgba(129, 214, 164, .16);
+      border-color: rgba(129, 214, 164, .42);
+    }
+    .benefit-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 22px;
+    }
+    .benefit-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(7, 7, 6, .28);
+      padding: 13px;
+    }
+    .benefit-card span {
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+    .benefit-card p {
+      margin: 6px 0 0;
+      color: rgba(248, 240, 223, .78);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .hero-stage {
+      display: grid;
+      grid-template-columns: minmax(0, 1.16fr) minmax(210px, .84fr);
+      gap: 12px;
+    }
+    .featured-card {
+      min-height: 100%;
+      border: 1px solid rgba(240, 201, 90, .22);
+      border-radius: 30px;
+      background:
+        linear-gradient(150deg, rgba(240, 201, 90, .12), transparent 32%),
+        linear-gradient(160deg, rgba(25, 25, 21, .98), rgba(12, 12, 10, .98));
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: minmax(260px, 1.05fr) auto;
+      transition: transform .22s ease, border-color .22s ease;
+    }
+    .featured-card:hover {
+      transform: translateY(-5px);
+      border-color: rgba(240, 201, 90, .5);
+    }
+    .empty-feature {
+      display: flex;
+      align-items: center;
+      padding: 26px;
+    }
+    .featured-media {
+      position: relative;
+      min-height: 260px;
+      background:
+        radial-gradient(circle at 40% 28%, rgba(240, 201, 90, .22), transparent 42%),
+        linear-gradient(145deg, #201d18, #0f0f0d);
+      overflow: hidden;
+    }
+    .featured-media img {
+      width: 100%;
+      height: 100%;
+      min-height: 260px;
+      object-fit: cover;
+      display: block;
+      transition: transform .35s ease;
+    }
+    .featured-card:hover .featured-media img { transform: scale(1.04); }
+    .featured-fallback span {
+      color: rgba(240, 201, 90, .16);
+    }
+    .featured-float {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      border: 1px solid rgba(248, 240, 223, .18);
+      border-radius: 18px;
+      padding: 12px 14px;
+      background: rgba(7, 7, 6, .68);
+      backdrop-filter: blur(14px);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    .featured-float span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+    .featured-float strong {
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+    .featured-copy {
+      padding: 20px;
+    }
+    .mini-label {
+      display: inline-flex;
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 950;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .featured-copy h2 {
+      margin: 10px 0 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(26px, 3.2vw, 44px);
+      line-height: .98;
+      letter-spacing: -.05em;
+    }
+    .featured-copy p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .featured-copy ul {
+      margin: 14px 0 0;
+      padding: 0 0 0 18px;
+      color: rgba(248, 240, 223, .78);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .featured-foot {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .featured-foot strong {
+      color: var(--gold);
+      text-transform: uppercase;
+    }
     .hero-board {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
       gap: 12px;
     }
     .stat-card {
-      min-height: 164px;
+      min-height: 116px;
       border: 1px solid var(--line);
       border-radius: 24px;
-      padding: 22px;
+      padding: 18px;
       background: linear-gradient(145deg, rgba(25, 25, 21, .92), rgba(17, 17, 15, .72));
       position: relative;
       overflow: hidden;
@@ -505,10 +749,35 @@ function renderStorePage(looks = []) {
     }
     .stat-card strong {
       display: block;
-      margin-top: 22px;
+      margin-top: 14px;
       font-family: 'Space Grotesk', sans-serif;
-      font-size: clamp(36px, 5vw, 66px);
+      font-size: clamp(32px, 4vw, 54px);
       line-height: .9;
+    }
+    .insight-strip {
+      margin: 0 0 22px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .insight-card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(17, 17, 15, .66);
+      padding: 16px;
+    }
+    .insight-card strong {
+      display: block;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      letter-spacing: -.03em;
+      margin-bottom: 6px;
+    }
+    .insight-card span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.45;
     }
     .toolbar {
       margin: 18px 0 26px;
@@ -748,6 +1017,7 @@ function renderStorePage(looks = []) {
     .toast.visible { opacity: 1; transform: translateY(0); }
     @media (max-width: 980px) {
       .hero { grid-template-columns: 1fr; padding-top: 28px; }
+      .hero-stage { grid-template-columns: 1fr; }
       .hero-board { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .stat-card { min-height: 124px; padding: 16px; border-radius: 20px; }
       .toolbar { grid-template-columns: 1fr; }
@@ -759,6 +1029,8 @@ function renderStorePage(looks = []) {
       .top-actions { width: 100%; }
       .nav-btn { flex: 1; min-width: 0; }
       .hero-copy { border-radius: 24px; padding: 24px; }
+      .benefit-grid,
+      .insight-strip { grid-template-columns: 1fr; }
       .hero-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .stat-card strong { font-size: 38px; }
       .section-head { align-items: flex-start; flex-direction: column; }
@@ -794,13 +1066,35 @@ function renderStorePage(looks = []) {
           <a class="primary-cta" href="#looks">Browse looks</a>
           <a class="nav-btn" href="/">Dashboard</a>
         </div>
+        <div class="quick-shelves">
+          <strong>Quick shelves</strong>
+          <div class="shelf-row">
+            ${topShelves.length
+              ? topShelves.map((shelf) => `<button class="shelf-chip" type="button" data-search-chip="${escapeHtml(shelf.label)}">${escapeHtml(shelf.label)} · ${shelf.count}</button>`).join('')
+              : '<button class="shelf-chip" type="button" data-search-chip="shirt">Shirts</button><button class="shelf-chip" type="button" data-search-chip="shoes">Shoes</button><button class="shelf-chip" type="button" data-search-chip="pants">Pants</button>'}
+          </div>
+        </div>
+        <div class="benefit-grid">
+          <div class="benefit-card"><span>Matched products</span><p>Cards open into exact look pages with curated product links.</p></div>
+          <div class="benefit-card"><span>Fast discovery</span><p>Search by item, color, creator, Amazon, or Flipkart instantly.</p></div>
+          <div class="benefit-card"><span>No dead archive</span><p>New posted reels appear here from the same history records.</p></div>
+        </div>
       </div>
-      <div class="hero-board">
-        <div class="stat-card"><span>Total looks</span><strong>${stats.looks}</strong></div>
-        <div class="stat-card"><span>With products</span><strong>${stats.withProducts}</strong></div>
-        <div class="stat-card"><span>Product cards</span><strong>${stats.products}</strong></div>
-        <div class="stat-card"><span>Latest drop</span><strong style="font-size:clamp(24px,3.5vw,42px)">${escapeHtml(latest)}</strong></div>
+      <div class="hero-stage">
+        ${renderFeaturedLook(featuredLook)}
+        <div class="hero-board">
+          <div class="stat-card"><span>Total looks</span><strong>${stats.looks}</strong></div>
+          <div class="stat-card"><span>With products</span><strong>${stats.withProducts}</strong></div>
+          <div class="stat-card"><span>Product cards</span><strong>${stats.products}</strong></div>
+          <div class="stat-card"><span>Latest drop</span><strong style="font-size:clamp(22px,3vw,36px)">${escapeHtml(latest)}</strong></div>
+        </div>
       </div>
+    </section>
+
+    <section class="insight-strip" aria-label="Store benefits">
+      <div class="insight-card"><strong>Reel first</strong><span>Visitors browse by the content they saw, then open products inside the look.</span></div>
+      <div class="insight-card"><strong>Affiliate ready</strong><span>Amazon and Flipkart cards stay attached to each shoppable reel page.</span></div>
+      <div class="insight-card"><strong>Mobile friendly</strong><span>Wide on laptop, single-column and touch friendly on phones.</span></div>
     </section>
 
     <section class="toolbar" aria-label="Store filters">
@@ -892,6 +1186,16 @@ function renderStorePage(looks = []) {
       button.addEventListener('click', () => {
         activeFilter = button.dataset.filter || 'all';
         document.querySelectorAll('[data-filter]').forEach((item) => item.classList.toggle('active', item === button));
+        applyFilters();
+      });
+    });
+
+    document.querySelectorAll('[data-search-chip]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (searchInput) searchInput.value = button.dataset.searchChip || '';
+        activeFilter = 'all';
+        document.querySelectorAll('[data-filter]').forEach((item) => item.classList.toggle('active', item.dataset.filter === 'all'));
+        document.getElementById('looks')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         applyFilters();
       });
     });
