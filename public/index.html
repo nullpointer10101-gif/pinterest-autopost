@@ -9,15 +9,24 @@
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
 <body>
+    <div class="scene-layer" aria-hidden="true">
+        <div class="scene-gradient scene-gradient-a"></div>
+        <div class="scene-gradient scene-gradient-b"></div>
+        <div class="scene-grid"></div>
+        <div class="scene-orbit scene-orbit-one"></div>
+        <div class="scene-orbit scene-orbit-two"></div>
+        <div class="scene-noise"></div>
+    </div>
+
     <div class="app-shell">
         <header class="topbar">
             <div class="brand-wrap">
-                <p class="brand-tag">Mission Deck v3</p>
+                <p class="brand-tag">Atlas Ops v4</p>
                 <div class="brand-title">
                     <i data-lucide="radar" class="brand-icon"></i>
                     <span>Pinterest Mission Control</span>
                 </div>
-                <p class="brand-subtitle">Advanced automation cockpit for Pinterest posting, engagement, and the isolated Instagram repost pipeline.</p>
+                <p class="brand-subtitle">A focused control room for Pinterest publishing, target-channel reposting, and safe engagement automation.</p>
                 <div class="status-wrap">
                     <span id="connection-status" class="badge badge-success">ONLINE</span>
                     <span id="active-mode" class="badge">MODE: AUTO</span>
@@ -35,7 +44,7 @@
                 </button>
                 <button id="visual-mode-btn" class="btn btn-secondary compact-btn visual-mode-btn" type="button" title="Cycle visual modes">
                     <i data-lucide="moon-star" class="btn-icon"></i>
-                    <span id="visual-mode-label">Dark</span>
+                    <span id="visual-mode-label">Atlas</span>
                 </button>
                 <div id="live-time" class="clock">00:00</div>
             </div>
@@ -52,16 +61,29 @@
         </nav>
 
         <main>
+            <section class="ops-ribbon" aria-live="polite">
+                <div class="ops-ribbon-main">
+                    <span class="ops-kicker">Live Ops</span>
+                    <strong id="ops-ticker-text">Booting mission systems...</strong>
+                </div>
+                <div class="ops-ribbon-meter">
+                    <span id="ops-progress-label">Success 0%</span>
+                    <div class="ops-meter-track">
+                        <div id="ops-progress-fill" class="ops-meter-fill"></div>
+                    </div>
+                </div>
+            </section>
+
             <section id="panel-dashboard" class="panel">
                 <article class="card hero-panel">
                     <div class="hero-grid">
                         <div class="hero-content">
                             <div class="hero-pill-row">
-                                <span class="hero-pill hero-pill-primary">Ultra Modern UI</span>
-                                <span class="hero-pill hero-pill-secondary">Dark + Light Modes</span>
+                                <span class="hero-pill hero-pill-primary">Independent Pipelines</span>
+                                <span class="hero-pill hero-pill-secondary">Live Signal UI</span>
                             </div>
-                            <h1 class="hero-title">High-tech command center built for speed and control.</h1>
-                            <p class="hero-description">Manage Pinterest publishing, target-channel reposting, and men's outfit engagement from one clean mission surface.</p>
+                            <h1 class="hero-title">A sharper automation cockpit for everyday control.</h1>
+                            <p class="hero-description">Watch target channels, queue pressure, publishing health, and engagement behavior from a fast, mobile-friendly command deck.</p>
 
                             <div class="hero-actions">
                                 <button id="hero-open-channels-btn" class="btn btn-primary hero-action" type="button">
@@ -82,7 +104,7 @@
                         <aside class="hero-side">
                             <div class="hero-mode-box">
                                 <span class="hero-mode-label">Current Theme</span>
-                                <strong id="hero-mode-label" class="hero-mode-value">Dark</strong>
+                                <strong id="hero-mode-label" class="hero-mode-value">Atlas</strong>
                             </div>
 
                             <div class="hero-side-grid">
@@ -121,6 +143,16 @@
                         <strong id="hero-queue-failed" class="hero-metric-value">0</strong>
                     </article>
                 </section>
+
+                <article class="card alert-center">
+                    <div class="alert-center-head">
+                        <h2><i data-lucide="siren" class="heading-icon"></i>Mission Alerts</h2>
+                        <span id="alert-center-count" class="badge">0 ALERTS</span>
+                    </div>
+                    <div id="alert-center-list" class="alert-list">
+                        <div class="pulse-item">Checking live automation health...</div>
+                    </div>
+                </article>
 
                 <section class="stats-grid">
                     <article class="stat-card">
@@ -389,6 +421,17 @@
                             <p class="muted-text">Extract reels, generate high-conversion copy, and launch posting operations.</p>
                         </div>
 
+                        <div class="autosave-bar">
+                            <div>
+                                <strong>Composer Safety Net</strong>
+                                <div id="autosave-status" class="input-meta">Autosave standing by</div>
+                            </div>
+                            <div class="autosave-actions">
+                                <button id="autosave-undo-btn" class="pill-btn" type="button">Undo Draft</button>
+                                <button id="autosave-redo-btn" class="pill-btn" type="button">Redo Draft</button>
+                            </div>
+                        </div>
+
                         <div class="field-wrap">
                             <label for="reel-url">Instagram Reel URL</label>
                             <div class="inline-field inline-field-reel">
@@ -618,6 +661,41 @@
             <button class="mobile-tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
             <button class="mobile-tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
         </nav>
+
+        <div class="action-dock" aria-label="Quick action dock">
+            <button id="open-command-palette-btn" class="btn btn-primary compact-btn" type="button">
+                <i data-lucide="command" class="btn-icon"></i>
+                <span>Command</span>
+            </button>
+            <button id="dock-refresh-btn" class="btn btn-secondary compact-btn" type="button">
+                <i data-lucide="refresh-cw" class="btn-icon"></i>
+                <span>Refresh</span>
+            </button>
+            <button id="dock-run-ig-scan-btn" class="btn btn-secondary compact-btn" type="button">
+                <i data-lucide="radar" class="btn-icon"></i>
+                <span>IG Scan</span>
+            </button>
+            <button id="dock-open-channels-btn" class="btn btn-secondary compact-btn" type="button">
+                <i data-lucide="rss" class="btn-icon"></i>
+                <span>Channels</span>
+            </button>
+            <label class="switch-wrap dock-switch" for="performance-mode-toggle">
+                <input id="performance-mode-toggle" type="checkbox">
+                <span>Lite Motion</span>
+            </label>
+        </div>
+    </div>
+
+    <div id="command-palette" class="command-palette hidden" role="dialog" aria-modal="true" aria-label="Command palette">
+        <div id="command-palette-backdrop" class="command-palette-backdrop"></div>
+        <div class="command-palette-panel">
+            <div class="command-palette-input-wrap">
+                <i data-lucide="search" class="heading-icon"></i>
+                <input id="command-input" type="text" placeholder="Type a command, e.g. scan, queue, theme">
+                <button id="command-close-btn" class="pill-btn" type="button">Esc</button>
+            </div>
+            <div id="command-results" class="command-results"></div>
+        </div>
     </div>
 
     <div id="toast-container"></div>

@@ -10,7 +10,7 @@ const add = (block = '') => {
 };
 
 add(`
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Sora:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 :root {
   color-scheme: dark;
@@ -2223,8 +2223,12 @@ add(`
 .u-select-none{user-select:none !important;}
 `);
 
-const output = `${lines.join('\n')}\n`;
 const outPath = path.join(__dirname, '..', 'public', 'css', 'style.css');
+const atlasOverrideMarker = '/* Dynamic cockpit extensions */';
+const existingStyle = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8') : '';
+const atlasOverrideIndex = existingStyle.indexOf(atlasOverrideMarker);
+const atlasOverride = atlasOverrideIndex >= 0 ? existingStyle.slice(atlasOverrideIndex).trim() : '';
+const output = `${lines.join('\n')}\n${atlasOverride ? `\n${atlasOverride}\n` : ''}`;
 fs.writeFileSync(outPath, output, 'utf8');
 console.log(`Generated ${outPath}`);
 console.log(`Line count: ${output.split('\n').length - 1}`);

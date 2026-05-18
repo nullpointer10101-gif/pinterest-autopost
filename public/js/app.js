@@ -23,6 +23,11 @@ const state = {
     pointerRaf: null,
     pointerBound: false,
   },
+  ui: {
+    tickerIndex: 0,
+    tickerTimer: null,
+    tickerMessages: [],
+  },
   performance: {
     enabled: false,
     lastRefreshAt: 0,
@@ -57,28 +62,28 @@ const AUTOSAVE_MAX_STACK = 40;
 const QUEUE_PRIORITY_ORDER = ['low', 'normal', 'high', 'urgent'];
 const VISUAL_MODES = {
   dark: {
-    label: 'Dark',
-    themeColor: '#050b16',
-    icon: 'moon-star',
+    label: 'Atlas',
+    themeColor: '#080907',
+    icon: 'radar',
   },
   light: {
-    label: 'Light',
-    themeColor: '#edf3fb',
+    label: 'Paper',
+    themeColor: '#f4eddb',
     icon: 'sun-medium',
   },
   neon: {
-    label: 'Neon',
-    themeColor: '#0a0317',
-    icon: 'sparkles',
+    label: 'Signal',
+    themeColor: '#071109',
+    icon: 'radio-tower',
   },
   graphite: {
     label: 'Graphite',
-    themeColor: '#121316',
+    themeColor: '#0d0e0d',
     icon: 'hexagon',
   },
   aurora: {
     label: 'Aurora',
-    themeColor: '#07131f',
+    themeColor: '#04100f',
     icon: 'atom',
   },
 };
@@ -93,7 +98,10 @@ const PINTEREST_LIMITS = {
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   initVisualSystem();
+  initCommandPalette();
+  initDynamicHud();
   loadDrafts();
+  initAutosaveSystem();
   switchTab('dashboard');
   startClock();
   refreshAll({ force: true });
@@ -137,7 +145,14 @@ function bindEvents() {
   on('reset-engagement-guard-btn', 'click', resetEngagementGuard);
   on('clear-engagements-btn', 'click', clearEngagements);
   on('manual-refresh-btn', 'click', () => refreshAll({ force: true }));
+  on('dock-refresh-btn', 'click', () => refreshAll({ force: true }));
   on('visual-mode-btn', 'click', handleVisualModeToggle);
+  on('performance-mode-toggle', 'change', handlePerformanceToggle);
+  on('open-command-palette-btn', 'click', openCommandPalette);
+  on('command-close-btn', 'click', closeCommandPalette);
+  on('command-palette-backdrop', 'click', closeCommandPalette);
+  on('dock-run-ig-scan-btn', 'click', runIgScanNow);
+  on('dock-open-channels-btn', 'click', () => switchTab('channels'));
   on('hero-open-channels-btn', 'click', () => switchTab('channels'));
   on('hero-open-history-btn', 'click', () => switchTab('history'));
   on('hero-refresh-btn', 'click', () => refreshAll({ force: true }));
@@ -186,6 +201,8 @@ function bindEvents() {
   on('history-search', 'input', renderHistoryList);
   on('history-status-filter', 'change', renderHistoryList);
   on('engagement-search', 'input', renderEngagementAuditList);
+  on('autosave-undo-btn', 'click', undoAutosaveSnapshot);
+  on('autosave-redo-btn', 'click', redoAutosaveSnapshot);
 
   on('field-title', 'input', updateComposerMeta);
   on('field-desc', 'input', updateComposerMeta);
@@ -201,6 +218,11 @@ function bindEvents() {
 
   ['wf-pinterest-posting', 'wf-pinterest-engagement'].forEach(id => {
     on(id, 'change', (e) => handleWorkflowToggle(id, e.target.checked));
+  });
+
+  getAutosaveFieldIds().forEach((id) => {
+    on(id, 'input', handleAutosaveTrackedInput);
+    on(id, 'change', handleAutosaveTrackedInput);
   });
 
   document.querySelectorAll('.mobile-tab-btn').forEach((button) => {
@@ -511,6 +533,8 @@ async function refreshOverview() {
   updateConnectionBar(pinterestResp || {}, systemStatus || {});
   updateHealthDashboard(pinterestResp || {}, systemStatus || {});
   updateIgPipelineUI();
+  renderAlertCenter(pinterestResp || {}, systemStatus || {});
+  updateOpsRibbon(pinterestResp || {}, systemStatus || {});
   renderMiniQueue();
   renderDashboardHistory();
 
@@ -549,6 +573,63 @@ function updateStats(queue, history) {
   setText('hero-queue-pending', String(pendingCount));
   setText('hero-success-rate', `${successRate}%`);
   setText('hero-queue-failed', String(queueFailedCount));
+}
+
+function getSuccessRatePercent() {
+  const successCount = state.history.filter((item) => item.status === 'success' || item.status === 'completed').length;
+  const failedCount = state.history.filter((item) => item.status === 'error' || item.status === 'failed').length;
+  const total = successCount + failedCount;
+  return total > 0 ? Math.round((successCount / total) * 100) : 0;
+}
+
+function initDynamicHud() {
+  if (state.ui.tickerTimer) clearInterval(state.ui.tickerTimer);
+  state.ui.tickerTimer = setInterval(() => {
+    rotateOpsTicker();
+  }, 4600);
+}
+
+function updateOpsRibbon(pinterestStatus = {}, systemStatus = {}) {
+  const pendingCount = state.queue.filter((item) => ['pending', 'processing'].includes(String(item.status || '').toLowerCase())).length;
+  const failedCount = state.queue.filter((item) => ['failed', 'error'].includes(String(item.status || '').toLowerCase())).length;
+  const channelCount = Array.isArray(state.igStatus?.channels)
+    ? state.igStatus.channels.length
+    : Number(state.igStatus?.channelCount || state.channels.length || 0);
+  const readyIgJobs = Number(state.igStatus?.queue?.ready || 0);
+  const successRate = getSuccessRatePercent();
+  const runtime = systemStatus?.runtime?.isServerless ? 'Cloud runner' : 'Local runner';
+  const pinterestMode = pinterestStatus.connected
+    ? 'Pinterest API linked'
+    : pinterestStatus.sessionLinked
+      ? 'Pinterest session mode'
+      : 'Pinterest needs linking';
+
+  state.ui.tickerMessages = [
+    `${runtime} online - ${pinterestMode}.`,
+    `${channelCount} Instagram target channel${channelCount === 1 ? '' : 's'} watched independently.`,
+    `${pendingCount} Pinterest queue item${pendingCount === 1 ? '' : 's'} pending; ${failedCount} need attention.`,
+    `${readyIgJobs} IG repost job${readyIgJobs === 1 ? '' : 's'} ready; FirePost remains isolated.`,
+  ];
+
+  const fill = byId('ops-progress-fill');
+  if (fill) fill.style.width = `${Math.max(0, Math.min(100, successRate))}%`;
+  setText('ops-progress-label', `Success ${successRate}%`);
+  renderOpsTicker();
+}
+
+function renderOpsTicker() {
+  const messages = state.ui.tickerMessages.length
+    ? state.ui.tickerMessages
+    : ['Mission systems are standing by.'];
+  if (state.ui.tickerIndex >= messages.length) state.ui.tickerIndex = 0;
+  setText('ops-ticker-text', messages[state.ui.tickerIndex]);
+}
+
+function rotateOpsTicker() {
+  const messages = state.ui.tickerMessages;
+  if (!messages.length) return;
+  state.ui.tickerIndex = (state.ui.tickerIndex + 1) % messages.length;
+  renderOpsTicker();
 }
 
 function updateConnectionBar(pinterestStatus, systemStatus) {
@@ -1711,7 +1792,7 @@ async function linkIgSession() {
 }
 
 async function runIgScanNow() {
-  const buttons = [byId('run-ig-scan-btn'), byId('channels-scan-now-btn')].filter(Boolean);
+  const buttons = [byId('run-ig-scan-btn'), byId('channels-scan-now-btn'), byId('dock-run-ig-scan-btn')].filter(Boolean);
   const originalHtml = new Map(buttons.map((button) => [button, button.innerHTML]));
 
   buttons.forEach((button) => {
@@ -2440,7 +2521,20 @@ function runPaletteCommand(index) {
 }
 
 function handleGlobalKeyDown(event) {
-  if (event.key === 'Escape') setPreviewScrollLock(false);
+  const key = String(event.key || '').toLowerCase();
+  if ((event.ctrlKey || event.metaKey) && key === 'k') {
+    event.preventDefault();
+    openCommandPalette();
+    return;
+  }
+
+  if (event.key === 'Escape') {
+    if (state.commandPalette.open) {
+      closeCommandPalette();
+      return;
+    }
+    setPreviewScrollLock(false);
+  }
 }
 
 function hydrateIcons() {
