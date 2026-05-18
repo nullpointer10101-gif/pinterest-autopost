@@ -2,8 +2,11 @@ name: Unlimited Pinterest Automation (Public Mode)
 
 on:
   schedule:
-    # Executes exactly every hour
-    - cron: '0 * * * *'
+    # Every 2 hours on off-peak minutes. The second entry is a backup wake-up;
+    # automationService skips if the first run already happened recently.
+    - cron: '7 */2 * * *'
+    - cron: '37 */2 * * *'
+  workflow_dispatch:
 # Prevent multiple automation missions or fire-posts from running at the same time
 concurrency:
   group: fire-post

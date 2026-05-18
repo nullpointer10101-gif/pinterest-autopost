@@ -1,9 +1,8 @@
 name: Unlimited X Automation (Public Mode)
 
 on:
-  schedule:
-    - cron: '29 * * * *'
-    - cron: '59 * * * *'
+  # X automation is no longer part of the live product. Keep manual dispatch only
+  # so this legacy workflow cannot wake automatically.
   workflow_dispatch:
 
 jobs:

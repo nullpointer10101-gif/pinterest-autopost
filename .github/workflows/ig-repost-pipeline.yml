@@ -2,7 +2,10 @@ name: Instagram Repost Pipeline
 
 on:
   schedule:
-    - cron: '20 */2 * * *'
+    # Every 2 hours on off-peak minutes. The second entry is a backup wake-up;
+    # the pipeline skips if a successful/partial scan already ran recently.
+    - cron: '17 */2 * * *'
+    - cron: '47 */2 * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -55,6 +58,7 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
 
       - name: Test smart cover extraction
+        if: ${{ github.event.inputs.mode == 'cover-test' }}
         run: node scripts/test-ig-cover-service.js
 
       - name: Run IG repost pipeline
@@ -68,6 +72,7 @@ jobs:
           IG_REPOST_MAX_NEW_PER_ACCOUNT: 1
           IG_REPOST_MAX_POSTS_PER_RUN: 2
           IG_REPOST_MAX_ATTEMPTS: 3
+          IG_REPOST_MIN_SCHEDULE_GAP_MINUTES: 90
           IG_REPOST_RETRY_BASE_MINUTES: 30
           IG_REPOST_REQUIRE_PINNED_DETECTION: 'true'
           IG_REPOST_PINTEREST_SESSION_COOKIE: ${{ secrets.IG_REPOST_PINTEREST_SESSION_COOKIE }}

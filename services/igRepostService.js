@@ -618,6 +618,32 @@ async function runPipeline(options = {}) {
   const mode = String(options.mode || 'scan').trim().toLowerCase();
   const username = options.username ? stateService.normalizeUsername(options.username) : null;
   const runId = options.runId || `igrepost_${Date.now()}`;
+  const isScheduledScan = mode === 'scan' && !username && options.source === 'github_actions';
+  const minScheduleGapMinutes = Math.max(
+    30,
+    toInt(process.env.IG_REPOST_MIN_SCHEDULE_GAP_MINUTES, 90)
+  );
+
+  if (isScheduledScan) {
+    const status = await stateService.getStatus();
+    const scheduler = status?.scheduler || {};
+    const lastRunAt = scheduler.lastRunCompletedAt || scheduler.lastRunStartedAt || scheduler.lastWakeAt;
+    const lastRunTime = lastRunAt ? new Date(lastRunAt).getTime() : 0;
+    const minutesSinceLastRun = lastRunTime > 0 ? (Date.now() - lastRunTime) / (1000 * 60) : Infinity;
+    const lastStatus = String(scheduler.lastRunStatus || '').toLowerCase();
+    const recentGoodRun = ['success', 'partial_failure', 'running'].includes(lastStatus);
+
+    if (recentGoodRun && minutesSinceLastRun < minScheduleGapMinutes) {
+      console.log(`[IG-Repost] Skipping backup scheduled scan. Last ${lastStatus} run was ${Math.round(minutesSinceLastRun)}m ago.`);
+      return {
+        success: true,
+        skipped: true,
+        mode,
+        runId,
+        message: `Skipped backup scan; last ${lastStatus} run was ${Math.round(minutesSinceLastRun)}m ago.`,
+      };
+    }
+  }
 
   const lockResult = await stateService.acquireRunLock(
     runId,
