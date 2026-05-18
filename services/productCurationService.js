@@ -8,12 +8,42 @@ function cleanQuery(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function buildQueriesFromText(query) {
+function titleizeQuery(query) {
+  return cleanQuery(query)
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function includesAllWords(base, phrase) {
+  const words = new Set(cleanQuery(base).toLowerCase().split(/\s+/).filter(Boolean));
+  return cleanQuery(phrase).toLowerCase().split(/\s+/).filter(Boolean).every((word) => words.has(word));
+}
+
+function buildFlipkartSearchUrl(query) {
   const clean = cleanQuery(query);
+  return clean ? `https://www.flipkart.com/search?q=${encodeURIComponent(clean)}` : '';
+}
+
+function getBalancedTargets(limit) {
+  const total = Math.max(1, Number.isFinite(Number(limit)) ? Number(limit) : 4);
+  if (total >= 4) {
+    return { flipkartTarget: 2, amazonTarget: 2 };
+  }
+  const flipkartTarget = Math.ceil(total / 2);
+  return { flipkartTarget, amazonTarget: total - flipkartTarget };
+}
+
+function buildQueriesFromText(query, extraQueries = []) {
+  const clean = cleanQuery(query);
+  const extras = (Array.isArray(extraQueries) ? extraQueries : [])
+    .map(cleanQuery)
+    .filter(Boolean);
   return {
     exactMatchQuery: clean,
-    similarMatchQuery: clean,
-    broadMatchQuery: clean.split(' ').slice(0, 4).join(' '),
+    similarMatchQuery: extras[0] || clean,
+    broadMatchQuery: extras[1] || clean.split(' ').slice(0, 4).join(' '),
   };
 }
 
@@ -55,6 +85,8 @@ async function buildAffiliateShelf(products, { typeLabel, fallbackType = 'Main P
         url: affiliateUrl,
         image: product.image || null,
         originalPrice: product.price || null,
+        source: product.source || 'flipkart_product',
+        affiliateProvider: affiliate?.source === 'earnkaro' ? 'earnkaro' : 'raw_or_existing',
       });
     } catch (err) {
       console.warn(`${logPrefix} Affiliate link failed for "${product.title || product.url}": ${err.message}`);
@@ -64,33 +96,101 @@ async function buildAffiliateShelf(products, { typeLabel, fallbackType = 'Main P
   return affiliateLinks;
 }
 
-function fillWithAmazonFallback(affiliateLinks, {
+function buildFlipkartSearchFallbackProducts({
+  query,
+  typeQuery,
+  typeLabel = 'Product',
+  limit,
+} = {}) {
+  const maxItems = Math.max(0, Number.isFinite(Number(limit)) ? Number(limit) : 0);
+  if (maxItems <= 0) return [];
+
+  const clean = cleanQuery(query);
+  const typedQuery = clean && typeQuery && !includesAllWords(clean, typeQuery)
+    ? `${clean} ${typeQuery}`
+    : '';
+  const seeds = [
+    clean,
+    clean ? `best ${clean}` : '',
+    clean ? `latest ${clean}` : '',
+    typedQuery,
+    typedQuery ? `best ${typedQuery}` : '',
+  ].filter(Boolean);
+
+  const seen = new Set();
+  const products = [];
+
+  for (const seed of seeds) {
+    const normalized = seed.toLowerCase();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+
+    const url = buildFlipkartSearchUrl(seed);
+    if (!url) continue;
+
+    products.push({
+      title: `${typeLabel}: ${titleizeQuery(seed)}`,
+      url,
+      image: null,
+      price: null,
+      source: 'flipkart_search',
+    });
+
+    if (products.length >= maxItems) break;
+  }
+
+  return products;
+}
+
+async function buildBalancedMarketplaceShelf(products, {
   query,
   expectedType,
   productTypeLabel,
   limit,
   logPrefix = '[Product Curation]',
 } = {}) {
-  const remaining = Math.max(0, Number(limit || 0) - affiliateLinks.length);
-  if (remaining <= 0) return affiliateLinks;
-  if (!expectedType) return affiliateLinks;
+  if (!expectedType) return [];
 
+  const { flipkartTarget, amazonTarget } = getBalancedTargets(limit);
   const typeQuery = flipkartSearchService.getProductTypeQueryTerm(expectedType);
+
+  let flipkartLinks = await buildAffiliateShelf((products || []).slice(0, flipkartTarget), {
+    typeLabel: productTypeLabel,
+    logPrefix,
+  });
+
+  if (flipkartLinks.length < flipkartTarget) {
+    const fallbackProducts = buildFlipkartSearchFallbackProducts({
+      query,
+      typeQuery,
+      typeLabel: productTypeLabel,
+      limit: flipkartTarget - flipkartLinks.length,
+    });
+    const fallbackLinks = await buildAffiliateShelf(fallbackProducts, {
+      typeLabel: productTypeLabel,
+      logPrefix,
+    });
+    flipkartLinks = flipkartLinks.concat(fallbackLinks).slice(0, flipkartTarget);
+  }
+
   const amazonLinks = amazonAffiliateService.buildSameTypeSearchShelf({
     query,
     typeQuery,
     typeLabel: productTypeLabel,
-    limit: remaining,
+    limit: amazonTarget,
     logPrefix,
   });
 
-  return affiliateLinks.concat(amazonLinks);
+  const balanced = flipkartLinks.concat(amazonLinks).slice(0, Number(limit || 4));
+  console.log(`${logPrefix} Balanced product shelf: ${flipkartLinks.length} Flipkart + ${amazonLinks.length} Amazon.`);
+  return balanced;
 }
 
 async function buildSameTypeShelfFromQuery(query, {
   limit = 4,
   logPrefix = '[Product Curation]',
   fallbackName = '',
+  extraQueries = [],
 } = {}) {
   const clean = cleanQuery(query || fallbackName);
   if (!clean) {
@@ -104,7 +204,13 @@ async function buildSameTypeShelfFromQuery(query, {
 
   const expectedType = flipkartSearchService.detectProductType(clean);
   const productTypeLabel = flipkartSearchService.getProductTypeLabel(expectedType);
-  const queries = buildQueriesFromText(clean);
+  const sameTypeExtraQueries = (Array.isArray(extraQueries) ? extraQueries : [])
+    .map(cleanQuery)
+    .filter((candidate) => {
+      const candidateType = flipkartSearchService.detectProductType(candidate);
+      return !candidateType || candidateType === expectedType;
+    });
+  const queries = buildQueriesFromText(clean, sameTypeExtraQueries);
 
   if (!expectedType) {
     console.warn(`${logPrefix} Product type unclear for "${clean}". Skipping storefront products to avoid mixed/wrong categories.`);
@@ -118,15 +224,11 @@ async function buildSameTypeShelfFromQuery(query, {
 
   console.log(`${logPrefix} Building same-type shelf from "${clean}"${expectedType ? ` (${productTypeLabel})` : ''}`);
   const products = await flipkartSearchService.findProductsForSameType(queries, clean, {
-    limit,
+    limit: getBalancedTargets(limit).flipkartTarget,
     expectedType,
   });
 
-  const affiliateLinks = await buildAffiliateShelf(products, {
-    typeLabel: productTypeLabel,
-    logPrefix,
-  });
-  const completedLinks = fillWithAmazonFallback(affiliateLinks, {
+  const completedLinks = await buildBalancedMarketplaceShelf(products, {
     query: clean,
     expectedType,
     productTypeLabel,
@@ -145,6 +247,10 @@ async function buildSameTypeShelfFromQuery(query, {
 async function buildSameTypeShelfFromOutfit(outfitData, options = {}) {
   const primaryItem = pickPrimaryItem(outfitData);
   const primaryQuery = cleanQuery(primaryItem?.query);
+  const extraQueries = (Array.isArray(outfitData?.items) ? outfitData.items : [])
+    .filter((item) => item !== primaryItem)
+    .map((item) => item?.query)
+    .filter(Boolean);
 
   if (!primaryQuery) {
     return {
@@ -156,7 +262,10 @@ async function buildSameTypeShelfFromOutfit(outfitData, options = {}) {
     };
   }
 
-  const resolved = await buildSameTypeShelfFromQuery(primaryQuery, options);
+  const resolved = await buildSameTypeShelfFromQuery(primaryQuery, {
+    ...options,
+    extraQueries,
+  });
 
   return {
     ...resolved,
@@ -200,15 +309,11 @@ async function buildSameTypeShelfFromProductData(productData, {
 
   console.log(`${logPrefix} Building same-type shelf from single product "${productName}"${expectedType ? ` (${productTypeLabel})` : ''}`);
   const products = await flipkartSearchService.findProductsForSameType(queries, productName, {
-    limit,
+    limit: getBalancedTargets(limit).flipkartTarget,
     expectedType,
   });
 
-  const affiliateLinks = await buildAffiliateShelf(products, {
-    typeLabel: productTypeLabel,
-    logPrefix,
-  });
-  const completedLinks = fillWithAmazonFallback(affiliateLinks, {
+  const completedLinks = await buildBalancedMarketplaceShelf(products, {
     query: productName,
     expectedType,
     productTypeLabel,

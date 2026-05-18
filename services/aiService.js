@@ -452,6 +452,8 @@ ${usefulCaption ? `Additional context from caption: "${usefulCaption.substring(0
 Task: Identify the PRIMARY product visible in the image.
 - Look at what the person is WEARING or HOLDING in the photo.
 - Identify the EXACT item: type, color, style, and brand if visible (e.g. "Brown Baggy Corduroy Pants", "White Puma Sneakers", "Oversized Denim Jacket").
+- If the color is visible, include that same color in exactMatchQuery and similarMatchQuery.
+- broadMatchQuery must still keep the SAME product type. If exact item is a red shirt, broadMatchQuery should be "Red Shirt Men" or "Men Shirt", never belt/trouser/watch.
 - If the caption is vague (e.g. "Comment link", "Link in bio"), IGNORE it completely and rely only on the image.
 - DO NOT return generic phrases. Be specific about what you SEE.
 
@@ -530,7 +532,8 @@ ${usefulCaption ? `Caption context: "${usefulCaption.substring(0, 400)}"` : 'Cap
 Task: Look at the IMAGE and identify ONE product family only.
 1. 'main': The PRIMARY item being worn/showcased (most prominent). Be SPECIFIC: color + style + product type (e.g. "Brown Baggy Corduroy Pants Men", "White Oversized Cotton T-shirt Men").
 2. Add 3 alternate search queries for the SAME product type only. If the main item is a shirt, every query must be a shirt. If it is pants, every query must be pants. NEVER add belts, watches, shoes, bags, or accessories unless the primary visible item itself is that category.
-3. IGNORE any caption text like "comment link", "link in bio", "shop link" - these are irrelevant.
+3. If a color is visible, keep that color in every query where possible. Example: if the image shows a red shirt, return red shirt queries only; do not return black shirts, trousers, belts, or full outfit pieces.
+4. IGNORE any caption text like "comment link", "link in bio", "shop link" - these are irrelevant.
 
 Return ONLY this JSON:
 {

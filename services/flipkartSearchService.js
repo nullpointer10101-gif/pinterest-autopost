@@ -98,6 +98,20 @@ const STOP_WORDS = new Set([
   'shop', 'buy', 'online', 'pack', 'combo', 'set', 'new', 'latest', 'style',
 ]);
 
+const COLOR_TERMS = [
+  'black', 'white', 'red', 'blue', 'navy', 'green', 'olive', 'grey', 'gray',
+  'brown', 'beige', 'cream', 'khaki', 'maroon', 'burgundy', 'yellow', 'orange',
+  'pink', 'purple', 'violet', 'teal', 'cyan', 'charcoal', 'tan', 'camel',
+  'mustard', 'lavender', 'ivory', 'off white', 'sky blue',
+];
+
+const STYLE_TERMS = [
+  'oversized', 'slim fit', 'regular fit', 'relaxed fit', 'loose fit', 'baggy',
+  'formal', 'casual', 'printed', 'solid', 'striped', 'checked', 'denim',
+  'corduroy', 'linen', 'cotton', 'cargo', 'track', 'polo', 'graphic',
+  'satin', 'leather', 'suede', 'high top', 'low top',
+];
+
 const PRODUCT_TYPE_RULES = [
   {
     key: 'tshirt',
@@ -235,6 +249,21 @@ function detectProductType(text) {
   return null;
 }
 
+function detectAllProductTypes(text) {
+  const normalized = normalizeText(text);
+  if (!normalized) return [];
+
+  const matches = [];
+  for (const rule of PRODUCT_TYPE_RULES) {
+    const hasExcludedTerm = (rule.exclude || []).some((term) => hasTerm(normalized, term));
+    if (hasExcludedTerm) continue;
+    if (rule.terms.some((term) => hasTerm(normalized, term))) {
+      matches.push(rule.key);
+    }
+  }
+  return Array.from(new Set(matches));
+}
+
 function getProductTypeLabel(type) {
   const rule = PRODUCT_TYPE_RULES.find((item) => item.key === type);
   return rule?.label || 'Product';
@@ -249,8 +278,29 @@ function isProductTypeMatch(targetText, candidateText, expectedType = null) {
   const targetType = expectedType || detectProductType(targetText);
   if (!targetType) return true;
 
-  const candidateType = detectProductType(candidateText);
-  return candidateType === targetType;
+  const candidateTypes = detectAllProductTypes(candidateText);
+  if (!candidateTypes.length) return false;
+  return candidateTypes.length === 1 && candidateTypes[0] === targetType;
+}
+
+function extractVisualSignals(text) {
+  const normalized = normalizeText(text);
+  const colors = COLOR_TERMS.filter((term) => hasTerm(normalized, term));
+  const styles = STYLE_TERMS.filter((term) => hasTerm(normalized, term));
+  return {
+    colors: Array.from(new Set(colors)),
+    styles: Array.from(new Set(styles)),
+  };
+}
+
+function buildVisualQuery(originalProductName, expectedType) {
+  const typeQueryTerm = getProductTypeQueryTerm(expectedType);
+  const signals = extractVisualSignals(originalProductName);
+  return [
+    ...signals.colors.slice(0, 2),
+    ...signals.styles.slice(0, 3),
+    typeQueryTerm,
+  ].filter(Boolean).join(' ');
 }
 
 /**
@@ -330,7 +380,7 @@ function scoreProduct({ product, tierText, originalProductName, expectedType }) 
   }
 
   if (!isProductTypeMatch(originalProductName || tierText, productTitle, expectedType)) {
-    const candidateType = detectProductType(productTitle) || 'unknown';
+    const candidateType = detectAllProductTypes(productTitle).join(', ') || 'unknown';
     return {
       accepted: false,
       score: 0,
@@ -343,10 +393,14 @@ function scoreProduct({ product, tierText, originalProductName, expectedType }) 
   const finalScore = Math.max(scoreVsName, scoreVsQuery);
   const typeBoost = expectedType ? 0.3 : 0;
   const priceBoost = product.price ? 0.1 : 0;
+  const signals = extractVisualSignals(originalProductName);
+  const productText = normalizeText(productTitle);
+  const colorBoost = signals.colors.some((color) => hasTerm(productText, color)) ? 0.22 : 0;
+  const styleBoost = signals.styles.some((style) => hasTerm(productText, style)) ? 0.12 : 0;
 
   return {
     accepted: true,
-    score: finalScore + typeBoost + priceBoost,
+    score: finalScore + typeBoost + priceBoost + colorBoost + styleBoost,
     reason: 'accepted',
   };
 }
@@ -414,11 +468,13 @@ async function findProduct(queries, originalProductName, options = {}) {
 
 function buildSameTypeQueries(queries, originalProductName, expectedType) {
   const typeQueryTerm = getProductTypeQueryTerm(expectedType);
+  const visualQuery = buildVisualQuery(originalProductName, expectedType);
   const seedQueries = [
     queries?.exactMatchQuery,
     queries?.similarMatchQuery,
     queries?.broadMatchQuery,
     originalProductName,
+    visualQuery,
   ].filter(Boolean);
 
   const querySet = new Set();
@@ -432,9 +488,11 @@ function buildSameTypeQueries(queries, originalProductName, expectedType) {
   }
 
   if (typeQueryTerm) {
+    if (visualQuery && visualQuery !== typeQueryTerm) {
+      querySet.add(`${visualQuery} for men`);
+      querySet.add(`similar ${visualQuery}`);
+    }
     querySet.add(typeQueryTerm);
-    querySet.add(`best ${typeQueryTerm}`);
-    querySet.add(`latest ${typeQueryTerm}`);
   }
 
   return Array.from(querySet).slice(0, 8);

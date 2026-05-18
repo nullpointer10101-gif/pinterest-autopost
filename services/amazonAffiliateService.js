@@ -62,6 +62,9 @@ function buildSameTypeSearchShelf({
   limit = 4,
   logPrefix = '[Amazon]',
 } = {}) {
+  const maxItems = Math.max(0, Number.isFinite(Number(limit)) ? Number(limit) : 4);
+  if (maxItems <= 0) return [];
+
   if (!isConfigured()) {
     console.warn(`${logPrefix} Amazon fallback skipped: AMAZON_ASSOCIATE_TAG is not configured.`);
     return [];
@@ -74,9 +77,10 @@ function buildSameTypeSearchShelf({
     : '';
   const seeds = [
     cleanQuery,
+    cleanQuery ? `best ${cleanQuery}` : '',
+    cleanQuery ? `latest ${cleanQuery}` : '',
     typedQuery,
-    cleanTypeQuery ? `best ${cleanTypeQuery}` : '',
-    cleanTypeQuery ? `latest ${cleanTypeQuery}` : '',
+    typedQuery ? `best ${typedQuery}` : '',
     cleanTypeQuery ? `${cleanTypeQuery} fashion` : '',
   ].filter(Boolean);
 
@@ -101,10 +105,10 @@ function buildSameTypeSearchShelf({
       affiliateProvider: 'amazon_associates',
     });
 
-    if (shelf.length >= limit) break;
+    if (shelf.length >= maxItems) break;
   }
 
-  console.log(`${logPrefix} Amazon fallback generated ${shelf.length}/${limit} affiliate search link(s).`);
+  console.log(`${logPrefix} Amazon fallback generated ${shelf.length}/${maxItems} affiliate search link(s).`);
   return shelf;
 }
 
