@@ -227,7 +227,10 @@ async function runHourlyAutomation(options = {}) {
           attempted: engagementCount,
           executed: executedTotal,
           success: true,
-          message: `Completed ${executedTotal} engagements in a single session.`,
+          partial: Boolean(result?.partial),
+          message: result?.partial
+            ? `Completed ${executedTotal} engagement(s) before Pinterest slowed down; counted as a safe partial success.`
+            : `Completed ${executedTotal} engagements in a single session.`,
           startDelayMs,
           targets: {
             likes: engagementLikeTarget,

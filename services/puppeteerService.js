@@ -1542,7 +1542,9 @@ async function openRandomEngagementSearch(page, queries, reason = 'refresh') {
   const query = pickRandomItem(queries, queries[0] || 'mens outfit inspiration');
   const url = buildPinterestSearchUrl(query);
   console.log(`[Bot] Loading ${reason} search feed: ${query}`);
-  await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.waitForSelector('a[href*="/pin/"]', { timeout: 25000 }).catch(() => null);
+  await sleep(1200);
   return { query, url };
 }
 
@@ -1876,6 +1878,11 @@ async function runAutoEngagerSafe(options = {}) {
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--window-size=1920,1080', '--disable-gpu']
   });
 
+  let hourlyLikes = 0;
+  let hourlyComments = 0;
+  let cycle = 0;
+  let loadMultiplier = 1;
+
   try {
     const page = await browser.newPage();
     page.on('console', (msg) => {
@@ -1886,13 +1893,21 @@ async function runAutoEngagerSafe(options = {}) {
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
     await page.setCookie({ name: '_pinterest_sess', value: sessionCookie, domain: '.pinterest.com', path: '/', secure: true, httpOnly: true });
 
-    let hourlyLikes = 0;
-    let hourlyComments = 0;
-    let cycle = 0;
-    let loadMultiplier = 1;
     const maxCycles = Math.max(36, targets.totalTarget * 10);
     const seenThisSession = new Set((Array.isArray(engagedUrls) ? engagedUrls : []).map(normalizePinUrl).filter(Boolean));
     let { query: activeQuery, url: activeFeedUrl } = await openRandomEngagementSearch(page, searchQueries, 'initial');
+    const returnToActiveFeed = async (reason) => {
+      try {
+        await page.goto(activeFeedUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.waitForSelector('a[href*="/pin/"]', { timeout: 20000 }).catch(() => null);
+        await sleep(1000 * loadMultiplier);
+      } catch (err) {
+        console.warn(`[Bot] Could not return to search feed after ${reason}: ${err.message}. Opening a fresh feed.`);
+        const nextSearch = await openRandomEngagementSearch(page, searchQueries, `recovery-${reason}`);
+        activeQuery = nextSearch.query;
+        activeFeedUrl = nextSearch.url;
+      }
+    };
 
     while ((hourlyLikes < targets.likeTarget || hourlyComments < targets.commentTarget) && cycle < maxCycles) {
       cycle += 1;
@@ -1931,7 +1946,7 @@ async function runAutoEngagerSafe(options = {}) {
       console.log(`[Bot] Viewing pin: ${normalizedPin}`);
 
       const loadStart = Date.now();
-      const response = await page.goto(randomPin, { waitUntil: 'networkidle2', timeout: 45000 });
+      const response = await page.goto(randomPin, { waitUntil: 'domcontentloaded', timeout: 45000 });
       if (response && response.status() === 429) {
         console.log('[Bot] HTTP 429 Too Many Requests detected. Triggering 2-hour circuit breaker.');
         automationState = await historyService.setAutomationState({
@@ -1971,14 +1986,14 @@ async function runAutoEngagerSafe(options = {}) {
       const relevancy = isPinRelevant(pinData.title, pinData.desc, pinData.boardName, fallbackMode, targetNiche);
       if (!relevancy.relevant) {
         console.log(`[Bot] Skipped irrelevant pin: "${pinData.title}" Reason: ${relevancy.reason}`);
-        await page.goto(activeFeedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+        await returnToActiveFeed('irrelevant-pin');
         continue;
       }
 
       const score = scorePin(pinData, relevancy.matchCount);
       if (score < 25 && !fallbackMode) {
         console.log(`[Bot] Skipped low-quality pin (score ${score}).`);
-        await page.goto(activeFeedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+        await returnToActiveFeed('low-quality-pin');
         continue;
       }
 
@@ -2002,11 +2017,13 @@ async function runAutoEngagerSafe(options = {}) {
 
       if (hourlyComments < targets.commentTarget && commentsToday < DAILY_MAX_COMMENTS) {
         try {
+          console.log('[Bot] Generating a niche-safe comment...');
           generatedComment = await aiService.generateEngagementComment({
             title: pinData.title,
             description: pinData.desc,
             subNiche: relevancy.subNiche,
           });
+          console.log('[Bot] Submitting comment...');
           commented = await submitCommentOnPin(page, generatedComment, loadMultiplier);
           if (commented) {
             hourlyComments += 1;
@@ -2058,7 +2075,7 @@ async function runAutoEngagerSafe(options = {}) {
       }
 
       await sleep(randomInt(3000, 7000) * loadMultiplier);
-      await page.goto(activeFeedUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+      await returnToActiveFeed('engagement-action');
     }
 
     const executed = hourlyLikes + hourlyComments;
@@ -2075,9 +2092,27 @@ async function runAutoEngagerSafe(options = {}) {
     };
   } catch (error) {
     console.error('[Bot] Refreshed engager failed:', error.message);
+    const executed = hourlyLikes + hourlyComments;
+    if (executed > 0) {
+      console.warn(`[Bot] Returning partial engagement success after ${executed} completed action(s).`);
+      return {
+        success: true,
+        partial: true,
+        executed,
+        likesCompleted: hourlyLikes,
+        commentsCompleted: hourlyComments,
+        likeTarget: targets.likeTarget,
+        commentTarget: targets.commentTarget,
+        niche: targetNiche,
+        message: `Partial success after Pinterest slowdown: ${hourlyLikes} likes, ${hourlyComments} comments.`,
+        error: error.message,
+      };
+    }
     throw new Error(`Booster failed: ${error.message}`);
   } finally {
-    await browser.close();
+    await browser.close().catch((err) => {
+      console.warn('[Bot] Browser close warning:', err.message);
+    });
   }
 }
 

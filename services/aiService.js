@@ -50,9 +50,25 @@ const primaryConfig = getPrimaryAIConfig();
 const secondaryConfig = getSecondaryAIConfig();
 const tertiaryConfig = getTertiaryAIConfig();
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
+
 function createClient(config) {
   if (!config || !config.apiKey) return null;
-  const clientOptions = { apiKey: config.apiKey };
+  const clientOptions = {
+    apiKey: config.apiKey,
+    timeout: parsePositiveInt(process.env.AI_REQUEST_TIMEOUT_MS, 30000),
+  };
   if (config.baseURL) clientOptions.baseURL = config.baseURL;
   return new OpenAI(clientOptions);
 }
@@ -617,16 +633,21 @@ async function generateEngagementComment({ title, description, subNiche = 'casua
 
   try {
     let retries = 3;
+    const commentTimeoutMs = parsePositiveInt(process.env.AUTOMATION_COMMENT_AI_TIMEOUT_MS, 25000);
     while (retries > 0) {
       try {
-        const response = await tryTextCompletion({
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.85,
-          max_tokens: 100,
-        });
+        const response = await withTimeout(
+          tryTextCompletion({
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.85,
+            max_tokens: 100,
+          }),
+          commentTimeoutMs,
+          'Engagement comment generation'
+        );
 
         let comment = response.choices[0].message.content.trim().replace(/^"/, '').replace(/"$/, '');
         if (validateComment(comment)) {
