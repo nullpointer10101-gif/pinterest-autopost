@@ -362,7 +362,7 @@ async function createCoverFirstVideo(videoPath, coverPath, options = {}) {
       outputPath,
     ], { timeout: 90000, maxBuffer: 1024 * 1024 });
 
-    if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size < 10000) {
+    if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size < 1000) {
       throw new Error('Cover-first video output is empty');
     }
 
