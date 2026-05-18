@@ -22,6 +22,7 @@ const state = {
     pointerY: null,
     pointerRaf: null,
     pointerBound: false,
+    cursorBound: false,
   },
   ui: {
     tickerIndex: 0,
@@ -87,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initVisualSystem();
   initDynamicHud();
   initKineticCards();
+  initDesktopCursorEffects();
   loadDrafts();
   switchTab('dashboard');
   startClock();
@@ -135,6 +137,9 @@ function bindEvents() {
   on('hero-open-channels-btn', 'click', () => switchTab('channels'));
   on('hero-open-history-btn', 'click', () => switchTab('history'));
   on('hero-refresh-btn', 'click', () => refreshAll({ force: true }));
+  on('mobile-open-channels-btn', 'click', () => switchTab('channels'));
+  on('mobile-run-scan-btn', 'click', runIgScanNow);
+  on('mobile-refresh-btn', 'click', () => refreshAll({ force: true }));
   on('link-session-btn', 'click', linkSessionCookie);
   on('unlink-session-btn', 'click', unlinkSessionCookie);
   on('link-ig-session-btn', 'click', linkIgSession);
@@ -423,6 +428,7 @@ function updateClock() {
     const countdownText = `${String(displayMins).padStart(2, '0')}:${String(displaySecs).padStart(2, '0')}`;
     countdown.textContent = countdownText;
     setText('hero-next-cycle', countdownText);
+    setText('mobile-next-cycle', countdownText);
   }
 }
 
@@ -488,6 +494,7 @@ async function refreshOverview() {
       ? trackerStatusResp.status.channels.length
       : (trackerStatusResp.status.channelCount ?? 0);
     setText('hero-channel-count', String(chCount));
+    setText('mobile-channel-count', String(chCount));
     // Sync state.channels so channel tab is pre-populated
     if (Array.isArray(trackerStatusResp.status.channels)) {
       state.channels = trackerStatusResp.status.channels;
@@ -538,6 +545,9 @@ function updateStats(queue, history) {
   setText('hero-queue-pending', String(pendingCount));
   setText('hero-success-rate', `${successRate}%`);
   setText('hero-queue-failed', String(queueFailedCount));
+  setText('mobile-total-posts', String(successCount));
+  setText('mobile-queue-pending', String(pendingCount));
+  setText('mobile-success-rate', `${successRate}%`);
 }
 
 function getSuccessRatePercent() {
@@ -575,6 +585,137 @@ function initKineticCards() {
       card.style.setProperty('--glow-x', '50%');
       card.style.setProperty('--glow-y', '50%');
     });
+  });
+}
+
+function isDesktopPointerExperience() {
+  const hasMatchMedia = typeof window.matchMedia === 'function';
+  const coarsePointer = hasMatchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const reducedMotion = hasMatchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return !coarsePointer && !reducedMotion && window.innerWidth >= 900;
+}
+
+function initDesktopCursorEffects() {
+  if (state.visual.cursorBound) return;
+  state.visual.cursorBound = true;
+
+  if (!isDesktopPointerExperience()) {
+    document.body?.classList.add('touch-experience');
+    return;
+  }
+
+  bindPointerGlow();
+  document.body?.classList.add('cursor-effects-on');
+
+  const lab = document.createElement('div');
+  lab.id = 'cursor-lab';
+  lab.className = 'cursor-lab';
+  lab.setAttribute('aria-hidden', 'true');
+
+  const orb = document.createElement('div');
+  orb.id = 'cursor-orb';
+  orb.className = 'cursor-orb';
+  lab.appendChild(orb);
+  document.body.appendChild(lab);
+
+  let raf = null;
+  let lastBubbleAt = 0;
+  let lastSparkAt = 0;
+  let lastX = window.innerWidth * 0.5;
+  let lastY = window.innerHeight * 0.34;
+
+  const moveOrb = () => {
+    orb.style.transform = `translate3d(${Math.round(lastX)}px, ${Math.round(lastY)}px, 0)`;
+    raf = null;
+  };
+
+  window.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch') return;
+    const now = performance.now();
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    const velocity = Math.min(1, Math.hypot(dx, dy) / 48);
+
+    lastX = event.clientX;
+    lastY = event.clientY;
+    orb.style.setProperty('--cursor-scale', String(0.78 + velocity * 0.42));
+
+    if (!raf) raf = window.requestAnimationFrame(moveOrb);
+
+    if (now - lastBubbleAt > 42 && Math.hypot(dx, dy) > 4) {
+      spawnCursorParticle(lab, event.clientX, event.clientY, 'bubble', velocity);
+      lastBubbleAt = now;
+    }
+
+    if (now - lastSparkAt > 78 && Math.hypot(dx, dy) > 10) {
+      spawnCursorParticle(lab, event.clientX, event.clientY, 'spark', velocity);
+      lastSparkAt = now;
+    }
+  }, { passive: true });
+
+  bindMagneticHover();
+}
+
+function spawnCursorParticle(lab, x, y, type = 'bubble', velocity = 0.4) {
+  const particle = document.createElement('span');
+  const isSpark = type === 'spark';
+  const size = isSpark ? 4 + Math.random() * 7 : 12 + Math.random() * 28;
+  const driftX = (Math.random() - 0.5) * (isSpark ? 118 : 58) * (1 + velocity);
+  const driftY = (Math.random() - 0.5) * (isSpark ? 118 : 58) * (1 + velocity);
+
+  particle.className = isSpark ? 'cursor-particle cursor-spark' : 'cursor-particle cursor-bubble';
+  particle.style.setProperty('--particle-size', `${size.toFixed(1)}px`);
+  particle.style.setProperty('--particle-x', `${(x - size / 2).toFixed(1)}px`);
+  particle.style.setProperty('--particle-y', `${(y - size / 2).toFixed(1)}px`);
+  particle.style.setProperty('--particle-drift-x', `${driftX.toFixed(1)}px`);
+  particle.style.setProperty('--particle-drift-y', `${driftY.toFixed(1)}px`);
+  lab.appendChild(particle);
+
+  while (lab.childElementCount > 74) {
+    const removable = Array.from(lab.children).find((child) => !child.classList.contains('cursor-orb'));
+    if (!removable) break;
+    removable.remove();
+  }
+
+  const removeParticle = () => particle.remove();
+  particle.addEventListener('animationend', removeParticle, { once: true });
+  window.setTimeout(removeParticle, isSpark ? 980 : 840);
+}
+
+function bindMagneticHover() {
+  const selector = [
+    '.btn',
+    '.tab-btn',
+    '.flow-card',
+    '.orbit-stat',
+    '.orbit-signal',
+    '.pipeline-metric',
+    '.workflow-item',
+    '.health-item',
+  ].join(', ');
+
+  document.querySelectorAll(selector).forEach((node) => {
+    if (node.dataset.magneticReady === 'true') return;
+    node.dataset.magneticReady = 'true';
+
+    node.addEventListener('pointermove', (event) => {
+      if (event.pointerType === 'touch') return;
+      const rect = node.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const strength = node.matches('.btn, .tab-btn') ? 7 : 12;
+      const x = ((event.clientX - centerX) / Math.max(1, rect.width)) * strength;
+      const y = ((event.clientY - centerY) / Math.max(1, rect.height)) * strength;
+      node.style.setProperty('--magnet-x', `${x.toFixed(2)}px`);
+      node.style.setProperty('--magnet-y', `${y.toFixed(2)}px`);
+      node.classList.add('is-magnetic');
+    }, { passive: true });
+
+    node.addEventListener('pointerleave', () => {
+      node.style.setProperty('--magnet-x', '0px');
+      node.style.setProperty('--magnet-y', '0px');
+      node.classList.remove('is-magnetic');
+    }, { passive: true });
   });
 }
 
@@ -734,6 +875,7 @@ function updateIgPipelineUI(status = state.igStatus) {
   setText('channels-status-accounts', String(channelCount));
   setText('channels-status-ready', String(ready));
   setText('channels-status-failed', String(failed));
+  setText('mobile-channel-count', String(channelCount));
 
   const lastRun = scheduler.lastRunCompletedAt || scheduler.lastRunStartedAt || scheduler.lastDispatchAt;
   setText('ig-dashboard-last-run', lastRun ? `Last activity ${formatTimeAgo(lastRun)}` : 'No runs yet');
@@ -1781,7 +1923,7 @@ async function linkIgSession() {
 }
 
 async function runIgScanNow() {
-  const buttons = [byId('run-ig-scan-btn'), byId('channels-scan-now-btn')].filter(Boolean);
+  const buttons = [byId('run-ig-scan-btn'), byId('channels-scan-now-btn'), byId('mobile-run-scan-btn')].filter(Boolean);
   const originalHtml = new Map(buttons.map((button) => [button, button.innerHTML]));
 
   buttons.forEach((button) => {
@@ -2632,6 +2774,7 @@ function renderChannelsList() {
   if (state.channels.length === 0) {
     list.innerHTML = '<div class="pulse-item">No target channels added yet.</div>';
     setText('hero-channel-count', '0');
+    setText('mobile-channel-count', '0');
     return;
   }
 
@@ -2678,6 +2821,7 @@ function renderChannelsList() {
   }).join('');
 
   setText('hero-channel-count', String(state.channels.length));
+  setText('mobile-channel-count', String(state.channels.length));
   void hydrateChannelAvatars();
   
   if (typeof lucide !== 'undefined') lucide.createIcons();

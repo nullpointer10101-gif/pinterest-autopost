@@ -149,6 +149,55 @@
                     </div>
                 </section>
 
+                <section class="mobile-command-sheet" aria-label="Mobile automation overview">
+                    <div class="mobile-sheet-glow" aria-hidden="true"></div>
+                    <div class="mobile-sheet-head">
+                        <span class="mobile-kicker">Pocket Control</span>
+                        <h1>Reel Orbit</h1>
+                        <p>Fast checks for targets, queue pressure, and safe repost status without the heavy desktop cockpit.</p>
+                    </div>
+                    <div class="mobile-mission-stack">
+                        <div class="mobile-mission-card mobile-mission-card-primary">
+                            <span>Published</span>
+                            <strong id="mobile-total-posts">0</strong>
+                            <small>Pins completed</small>
+                        </div>
+                        <div class="mobile-mission-card">
+                            <span>Targets</span>
+                            <strong id="mobile-channel-count">0</strong>
+                            <small>IG channels</small>
+                        </div>
+                        <div class="mobile-mission-card">
+                            <span>Pending</span>
+                            <strong id="mobile-queue-pending">0</strong>
+                            <small>Queue items</small>
+                        </div>
+                        <div class="mobile-mission-card">
+                            <span>Health</span>
+                            <strong id="mobile-success-rate">0%</strong>
+                            <small>Success rate</small>
+                        </div>
+                    </div>
+                    <div class="mobile-cycle-pill">
+                        <span>Next automation wake</span>
+                        <strong id="mobile-next-cycle">--:--</strong>
+                    </div>
+                    <div class="mobile-action-grid">
+                        <button id="mobile-open-channels-btn" class="btn btn-primary" type="button">
+                            <i data-lucide="plus-circle" class="btn-icon"></i>
+                            <span>Add Target</span>
+                        </button>
+                        <button id="mobile-run-scan-btn" class="btn btn-secondary" type="button">
+                            <i data-lucide="radar" class="btn-icon"></i>
+                            <span>Scan</span>
+                        </button>
+                        <button id="mobile-refresh-btn" class="btn btn-secondary" type="button">
+                            <i data-lucide="refresh-cw" class="btn-icon"></i>
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                </section>
+
                 <section class="flow-board">
                     <article class="flow-card flow-card-hot" data-kinetic-card>
                         <span class="flow-index">01</span>
