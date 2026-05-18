@@ -91,12 +91,54 @@ function isLookPageUrl(value = '') {
   }
 }
 
+function isAmazonSearchUrl(value = '') {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    const host = parsed.hostname.toLowerCase();
+    return host.includes('amazon.') && parsed.pathname === '/s' && parsed.searchParams.has('k');
+  } catch {
+    return false;
+  }
+}
+
+function normalizeProductKey(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\b(flipkart|amazon|assured|prime|buy online|online)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function dedupeOutfitItems(items = []) {
+  const seen = new Set();
+  const deduped = [];
+
+  for (const item of items || []) {
+    const keys = [];
+    try {
+      const parsed = new URL(String(item.url || '').trim());
+      keys.push(`url:${parsed.hostname.toLowerCase()}${parsed.pathname.toLowerCase().replace(/\/$/, '')}`);
+    } catch {}
+    const nameKey = normalizeProductKey(item.name);
+    const imageKey = String(item.image || '').split('?')[0].toLowerCase();
+    if (nameKey) keys.push(`name:${nameKey}`);
+    if (imageKey) keys.push(`image:${imageKey}`);
+
+    if (keys.some((key) => seen.has(key))) continue;
+    keys.forEach((key) => seen.add(key));
+    deduped.push(item);
+  }
+
+  return deduped;
+}
+
 function normalizeOutfitItem(item = {}, index = 0) {
   const rawUrl = String(item.url || item.affiliateUrl || '').trim();
   let safeUrl = rawUrl;
   try {
     const parsed = new URL(rawUrl);
-    safeUrl = ['http:', 'https:'].includes(parsed.protocol) && !isLookPageUrl(parsed.toString())
+    safeUrl = ['http:', 'https:'].includes(parsed.protocol) && !isLookPageUrl(parsed.toString()) && !isAmazonSearchUrl(parsed.toString())
       ? parsed.toString()
       : '';
   } catch {
@@ -196,7 +238,7 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
   const safeThumb = escapeHtml(thumbnailUrl);
   const displayThumbnailUrl = toProxyImageUrl(shortcode, thumbnailUrl) || thumbnailUrl;
   const subtitle = lookData?.aiContent?.description || lookData?.description || lookData?.caption || '';
-  const pieces = outfit.map(normalizeOutfitItem).filter(item => item.name && item.url);
+  const pieces = dedupeOutfitItems(outfit.map(normalizeOutfitItem).filter(item => item.name && item.url));
   const pricedItems = pieces.filter(item => item.originalPrice);
   const estimate = pricedItems.reduce((sum, item) => sum + item.originalPrice, 0);
   const createdAt = lookData?.createdAt || lookData?.updatedAt || lookData?.reelData?.createdAt || null;
@@ -1356,6 +1398,11 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
           imgEl.onerror = () => {
             imgEl.style.opacity = '0';
             if (placeholder) placeholder.style.display = 'grid';
+            const card = imgEl.closest('.product-card');
+            if (card) {
+              card.classList.add('image-missing', 'hidden');
+              filterProducts();
+            }
           };
           imgEl.src = src;
         }
@@ -1369,8 +1416,23 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
         const encodedUrl = encodeURIComponent(item.url || '');
         fetch('/look/' + SHORTCODE + '/product-image?name=' + encodedName + '&url=' + encodedUrl)
           .then(r => r.json())
-          .then(data => reveal(data.image || ''))
-          .catch(() => {});
+          .then(data => {
+            if (data.image) reveal(data.image);
+            else {
+              const card = imgEl.closest('.product-card');
+              if (card) {
+                card.classList.add('image-missing', 'hidden');
+                filterProducts();
+              }
+            }
+          })
+          .catch(() => {
+            const card = imgEl.closest('.product-card');
+            if (card) {
+              card.classList.add('image-missing', 'hidden');
+              filterProducts();
+            }
+          });
       });
     }
 
@@ -1378,6 +1440,10 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       const query = (searchInput.value || '').trim().toLowerCase();
       let visible = 0;
       document.querySelectorAll('.product-card').forEach(card => {
+        if (card.classList.contains('image-missing')) {
+          card.classList.add('hidden');
+          return;
+        }
         const typeMatch = activeFilter === 'all' || card.dataset.type === activeFilter;
         const textMatch = !query || card.dataset.name.includes(query) || card.dataset.type.includes(query);
         const show = typeMatch && textMatch;
@@ -1656,7 +1722,7 @@ router.get('/:shortcode/products', async (req, res) => {
         outfit = [{ type: 'Main Piece', name: lookData.productInfo?.name || 'Featured Item', url: fallbackAffiliateUrl, image: null }];
       }
     }
-    const safeOutfit = outfit.map(normalizeOutfitItem).filter(item => item.name && item.url);
+    const safeOutfit = dedupeOutfitItems(outfit.map(normalizeOutfitItem).filter(item => item.name && item.url));
     return res.json({ found: !!lookData, outfit: safeOutfit });
   } catch (err) {
     return res.status(500).json({ found: false, outfit: [], error: err.message });

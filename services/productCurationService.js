@@ -8,22 +8,64 @@ function cleanQuery(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function titleizeQuery(query) {
-  return cleanQuery(query)
-    .split(' ')
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
+function fetchWithTimeout(url, init = {}, timeoutMs = 9000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
-function includesAllWords(base, phrase) {
-  const words = new Set(cleanQuery(base).toLowerCase().split(/\s+/).filter(Boolean));
-  return cleanQuery(phrase).toLowerCase().split(/\s+/).filter(Boolean).every((word) => words.has(word));
+function isSafeHttpUrl(value = '') {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
 }
 
-function buildFlipkartSearchUrl(query) {
-  const clean = cleanQuery(query);
-  return clean ? `https://www.flipkart.com/search?q=${encodeURIComponent(clean)}` : '';
+function isKnownCommerceUrl(value = '') {
+  try {
+    const host = new URL(String(value || '').trim()).hostname.toLowerCase();
+    return host.includes('flipkart.com') ||
+      host.includes('fktr.in') ||
+      host.includes('amazon.') ||
+      host === 'amzn.to';
+  } catch {
+    return false;
+  }
+}
+
+async function isReachableUrl(url, logPrefix = '[Product Curation]') {
+  if (!isSafeHttpUrl(url) || !isKnownCommerceUrl(url)) return false;
+
+  try {
+    const res = await fetchWithTimeout(url, {
+      method: 'HEAD',
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; PinterestAutopostProductCheck/1.0)',
+      },
+    }, 8000);
+    if (res.status >= 200 && res.status < 400) return true;
+    if ([403, 405, 429].includes(res.status)) return true;
+  } catch (err) {
+    console.warn(`${logPrefix} Link HEAD check inconclusive for ${url}: ${err.message}`);
+  }
+
+  try {
+    const res = await fetchWithTimeout(url, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; PinterestAutopostProductCheck/1.0)',
+        Accept: 'text/html,*/*;q=0.8',
+      },
+    }, 9000);
+    return res.status >= 200 && res.status < 400 || [403, 429].includes(res.status);
+  } catch (err) {
+    console.warn(`${logPrefix} Link GET check failed for ${url}: ${err.message}`);
+    return false;
+  }
 }
 
 function normalizeForDedupe(value) {
@@ -69,6 +111,92 @@ function dedupeProducts(products = []) {
   }
 
   return deduped;
+}
+
+function choosePreferredImage(images = [], provider = '') {
+  const preferred = images
+    .map((image) => image?.imageUrl || image?.thumbnailUrl || '')
+    .filter(Boolean);
+
+  if (provider === 'amazon') {
+    return preferred.find((src) => /media-amazon|ssl-images-amazon|amazon/i.test(src)) || preferred[0] || null;
+  }
+
+  if (provider === 'flipkart') {
+    return preferred.find((src) => /rukminim|flipkart|fkimg/i.test(src)) || preferred[0] || null;
+  }
+
+  return preferred[0] || null;
+}
+
+async function findProductImage(name, url, logPrefix = '[Product Curation]') {
+  const key = process.env.SERPER_API_KEY || process.env.SERPER_API_KEY_BACKUP || '';
+  if (!key) return null;
+
+  const isAmazon = amazonAffiliateService.isAmazonUrl(url);
+  const isFlipkart = /flipkart\.com|fktr\.in/i.test(String(url || ''));
+  const provider = isAmazon ? 'amazon' : isFlipkart ? 'flipkart' : '';
+  const providerHint = provider === 'amazon' ? 'amazon product' : provider === 'flipkart' ? 'flipkart product' : 'product';
+  const query = cleanQuery(name || url);
+  if (!query) return null;
+
+  try {
+    const res = await fetchWithTimeout('https://google.serper.dev/images', {
+      method: 'POST',
+      headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: `${query} ${providerHint}`, gl: 'in', hl: 'en', num: 8 }),
+    }, 9000);
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return choosePreferredImage(data?.images || [], provider);
+  } catch (err) {
+    console.warn(`${logPrefix} Image lookup failed for "${query}": ${err.message}`);
+    return null;
+  }
+}
+
+async function enrichAndValidateLinks(links, {
+  expectedType,
+  logPrefix = '[Product Curation]',
+  limit = 4,
+} = {}) {
+  const validated = [];
+
+  for (const link of links || []) {
+    if (validated.length >= limit) break;
+
+    const linkType = flipkartSearchService.detectProductType(`${link.name || ''} ${link.type || ''}`);
+    if (expectedType && linkType && linkType !== expectedType) {
+      console.log(`${logPrefix} Dropping product "${link.name}" - type mismatch (${linkType} != ${expectedType}).`);
+      continue;
+    }
+
+    const reachable = await isReachableUrl(link.url, logPrefix);
+    if (!reachable) {
+      console.log(`${logPrefix} Dropping product "${link.name}" - link did not pass reachability check.`);
+      continue;
+    }
+
+    let image = cleanQuery(link.image);
+    if (!image) {
+      image = await findProductImage(link.name, link.url, logPrefix);
+    }
+
+    if (!image) {
+      console.log(`${logPrefix} Dropping product "${link.name}" - no usable image found.`);
+      continue;
+    }
+
+    validated.push({
+      ...link,
+      image,
+      imageVerified: true,
+      linkVerified: true,
+    });
+  }
+
+  return dedupeProducts(validated).slice(0, limit);
 }
 
 function getBalancedTargets(limit) {
@@ -154,52 +282,6 @@ async function buildAffiliateShelf(products, { typeLabel, fallbackType = 'Main P
   return affiliateLinks;
 }
 
-function buildFlipkartSearchFallbackProducts({
-  query,
-  typeQuery,
-  typeLabel = 'Product',
-  limit,
-} = {}) {
-  const maxItems = Math.max(0, Number.isFinite(Number(limit)) ? Number(limit) : 0);
-  if (maxItems <= 0) return [];
-
-  const clean = cleanQuery(query);
-  const typedQuery = clean && typeQuery && !includesAllWords(clean, typeQuery)
-    ? `${clean} ${typeQuery}`
-    : '';
-  const seeds = [
-    clean,
-    clean ? `best ${clean}` : '',
-    clean ? `latest ${clean}` : '',
-    typedQuery,
-    typedQuery ? `best ${typedQuery}` : '',
-  ].filter(Boolean);
-
-  const seen = new Set();
-  const products = [];
-
-  for (const seed of seeds) {
-    const normalized = seed.toLowerCase();
-    if (seen.has(normalized)) continue;
-    seen.add(normalized);
-
-    const url = buildFlipkartSearchUrl(seed);
-    if (!url) continue;
-
-    products.push({
-      title: `${typeLabel}: ${titleizeQuery(seed)}`,
-      url,
-      image: null,
-      price: null,
-      source: 'flipkart_search',
-    });
-
-    if (products.length >= maxItems) break;
-  }
-
-  return products;
-}
-
 async function buildBalancedMarketplaceShelf(products, {
   query,
   queries = {},
@@ -218,20 +300,6 @@ async function buildBalancedMarketplaceShelf(products, {
     typeLabel: productTypeLabel,
     logPrefix,
   });
-
-  if (flipkartLinks.length < flipkartTarget) {
-    const fallbackProducts = buildFlipkartSearchFallbackProducts({
-      query,
-      typeQuery,
-      typeLabel: productTypeLabel,
-      limit: flipkartTarget - flipkartLinks.length,
-    });
-    const fallbackLinks = await buildAffiliateShelf(fallbackProducts, {
-      typeLabel: productTypeLabel,
-      logPrefix,
-    });
-    flipkartLinks = flipkartLinks.concat(fallbackLinks).slice(0, flipkartTarget);
-  }
 
   const amazonQuerySeeds = dedupeProducts([
     { title: query, url: `query:${query}` },
@@ -273,8 +341,12 @@ async function buildBalancedMarketplaceShelf(products, {
     logPrefix,
   });
 
-  const balanced = flipkartLinks.concat(amazonLinks).slice(0, Number(limit || 4));
-  console.log(`${logPrefix} Balanced product shelf: ${flipkartLinks.length} Flipkart + ${amazonLinks.length} Amazon.`);
+  const balanced = await enrichAndValidateLinks(flipkartLinks.concat(amazonLinks), {
+    expectedType,
+    logPrefix,
+    limit: Number(limit || 4),
+  });
+  console.log(`${logPrefix} Balanced product shelf validated ${balanced.length}/${Number(limit || 4)} visible working product(s).`);
   return balanced;
 }
 
