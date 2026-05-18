@@ -30,7 +30,7 @@ router.post('/', async (req, res) => {
       const missionId = `autopost_${Date.now()}`;
 
       // Queue + fire GitHub Bot immediately
-      await queueService.addToQueue([{
+      const added = await queueService.addToQueue([{
         id: missionId,
         title: (aiContent.title || '').substring(0, 100),
         description: (aiContent.description || '').substring(0, 800),
@@ -48,11 +48,29 @@ router.post('/', async (req, res) => {
         isInstant: true,
       }], true);
 
-      githubService.triggerInstantMission().catch(() => {});
+      if (!added || added.length === 0) {
+        return res.status(409).json({
+          success: false,
+          step: 'queued',
+          error: 'This reel was already posted or is already in the queue.',
+        });
+      }
+
+      const fireDispatch = await githubService.triggerInstantMission();
+      if (!fireDispatch.success) {
+        return res.status(502).json({
+          success: false,
+          step: 'queued',
+          queued: true,
+          missionId,
+          error: `Mission was queued, but GitHub Bot did not start: ${fireDispatch.error || 'dispatch failed'}`,
+        });
+      }
 
       res.json({
         success: true,
         step: 'queued',
+        firePostDispatched: true,
         reelData,
         aiContent,
         missionId,

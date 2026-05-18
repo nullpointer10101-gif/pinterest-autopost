@@ -4,8 +4,8 @@ const REPO = 'pinterest-autopost';
 const OWNER = 'nullpointer10101-gif';
 
 function getHeaders() {
-  // Use GH_PAT_TOKEN if available, otherwise fallback to GITHUB_TOKEN
-  const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN;
+  // Keep token support aligned across every GitHub workflow dispatcher.
+  const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   if (!token) return null;
   return {
     Authorization: `Bearer ${token}`,
@@ -14,33 +14,51 @@ function getHeaders() {
   };
 }
 
+function resolveRepo() {
+  const fromEnv = String(process.env.GITHUB_REPOSITORY || '').trim();
+  if (fromEnv.includes('/')) {
+    const [owner, repo] = fromEnv.split('/');
+    if (owner && repo) return { owner, repo };
+  }
+
+  return {
+    owner: process.env.GH_REPO_OWNER || OWNER,
+    repo: process.env.GH_REPO_NAME || REPO,
+  };
+}
+
+function resolveRef() {
+  return process.env.GH_REPO_REF || process.env.VERCEL_GIT_COMMIT_REF || 'main';
+}
+
 async function dispatchWorkflow(workflowFile, label, inputs = {}) {
   const headers = getHeaders();
   if (!headers) {
-    console.warn(`[GitHub] No GITHUB_TOKEN configured. ${label} skipped.`);
-    return { success: false, error: 'GITHUB_TOKEN missing' };
+    console.warn(`[GitHub] No GitHub token configured. ${label} skipped.`);
+    return { success: false, error: 'GitHub token missing' };
   }
 
   try {
     console.log(`[GitHub] 🚀 Triggering ${label} (${workflowFile})...`);
     console.log(`[GitHub] Inputs:`, JSON.stringify(inputs, null, 2));
     
-    const body = { ref: 'main' };
+    const { owner, repo } = resolveRepo();
+    const body = { ref: resolveRef() };
     if (Object.keys(inputs).length > 0) {
       body.inputs = inputs;
     }
     
     const response = await axios.post(
-      `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${workflowFile}/dispatches`,
+      `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowFile}/dispatches`,
       body,
-      { headers }
+      { headers, timeout: 20000 }
     );
     
     console.log(`[GitHub] ✅ ${label} response: ${response.status} ${response.statusText}`);
     return { success: true };
   } catch (err) {
     console.error(`[GitHub] ❌ Failed to trigger ${label}:`, err.response?.data || err.message);
-    return { success: false, error: err.message };
+    return { success: false, error: err.response?.data?.message || err.message };
   }
 }
 

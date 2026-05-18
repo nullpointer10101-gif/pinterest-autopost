@@ -132,11 +132,20 @@ router.post('/', async (req, res) => {
     const added = await queueService.addToQueue(items);
     if (added.length > 0) {
       // Fire instant mission immediately when new items were added.
-      githubService.triggerInstantMission().catch(() => {});
+      const fireDispatch = await githubService.triggerInstantMission();
+      if (!fireDispatch.success) {
+        return res.status(502).json({
+          success: false,
+          queued: true,
+          added,
+          error: `Added ${added.length} item(s), but GitHub Bot did not start: ${fireDispatch.error || 'dispatch failed'}`,
+        });
+      }
     }
 
     res.json({
       success: true,
+      firePostDispatched: added.length > 0,
       added,
       message: added.length > 0
         ? `Added ${added.length} item(s) to queue. GitHub Bot fired!`
@@ -162,10 +171,24 @@ router.post('/retry-failed', async (req, res) => {
 
     // Fire instant mission to process retried items
     if (changed > 0) {
-      githubService.triggerInstantMission().catch(() => {});
+      const fireDispatch = await githubService.triggerInstantMission();
+      if (!fireDispatch.success) {
+        return res.status(502).json({
+          success: false,
+          changed,
+          error: `Moved ${changed} failed item(s) back to pending, but GitHub Bot did not start: ${fireDispatch.error || 'dispatch failed'}`,
+        });
+      }
     }
 
-    res.json({ success: true, changed, message: `Moved ${changed} failed item(s) back to pending. Bot fired!` });
+    res.json({
+      success: true,
+      firePostDispatched: changed > 0,
+      changed,
+      message: changed > 0
+        ? `Moved ${changed} failed item(s) back to pending. Bot fired!`
+        : 'No failed items needed retry.',
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -175,10 +198,17 @@ router.post('/process', async (req, res) => {
   try {
     // Always fire GitHub instant mission — no local processing
     console.log('[Queue] 🚀 Firing GitHub Bot instant mission...');
-    githubService.triggerInstantMission().catch(() => {});
+    const fireDispatch = await githubService.triggerInstantMission();
+    if (!fireDispatch.success) {
+      return res.status(502).json({
+        success: false,
+        error: `GitHub Bot did not start: ${fireDispatch.error || 'dispatch failed'}`,
+      });
+    }
     return res.json({ 
       success: true, 
-      queued: true, 
+      queued: true,
+      firePostDispatched: true,
       message: '🚀 GitHub Bot fired! Processing will begin in ~30 seconds.' 
     });
   } catch (err) {
@@ -280,8 +310,15 @@ router.post('/promote/:id', async (req, res) => {
   try {
     await queueService.promoteToFront(req.params.id);
     // Fire GitHub bot for the now-first item
-    githubService.triggerInstantMission().catch(() => {});
-    res.json({ success: true, message: 'Item promoted to front and bot fired!' });
+    const fireDispatch = await githubService.triggerInstantMission();
+    if (!fireDispatch.success) {
+      return res.status(502).json({
+        success: false,
+        promoted: true,
+        error: `Item promoted, but GitHub Bot did not start: ${fireDispatch.error || 'dispatch failed'}`,
+      });
+    }
+    res.json({ success: true, firePostDispatched: true, message: 'Item promoted to front and bot fired!' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

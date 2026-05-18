@@ -126,14 +126,22 @@ router.post('/post', async (req, res) => {
       });
     }
 
-    // Fire GitHub Actions instant mission — fire-and-forget, no blocking
-    githubService.triggerInstantMission().catch((err) => {
-      console.error('[Post Mission] GitHub trigger background error:', err.message);
-    });
+    // Fire GitHub Actions immediately and fail loudly if dispatch does not start.
+    const fireDispatch = await githubService.triggerInstantMission();
+    if (!fireDispatch.success) {
+      return res.status(502).json({
+        success: false,
+        queued: true,
+        missionId,
+        shortcode,
+        error: `Mission was queued, but GitHub Bot did not start: ${fireDispatch.error || 'dispatch failed'}`,
+      });
+    }
 
     return res.json({
       success: true,
       queued: true,
+      firePostDispatched: true,
       missionId,
       shortcode,
       message: `🚀 Instant Mission fired! GitHub Bot will post${shortcode ? ` reel /${shortcode}` : ''} in ~60 seconds.`,
