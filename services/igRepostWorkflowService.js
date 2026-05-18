@@ -71,8 +71,17 @@ async function triggerQueueOnly() {
   });
 }
 
+async function triggerAvatarSync(username = '') {
+  return dispatchWorkflow({
+    mode: 'sync-avatars',
+    username: String(username || '').trim(),
+    reason: 'avatar_sync',
+  });
+}
+
 module.exports = {
   triggerValidation,
   triggerScheduledScan,
   triggerQueueOnly,
+  triggerAvatarSync,
 };

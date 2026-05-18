@@ -118,6 +118,28 @@ router.get('/avatar', async (req, res) => {
   }
 });
 
+router.post('/sync-avatars', async (req, res) => {
+  try {
+    const username = req.body?.username || req.query?.username || '';
+    const dispatch = await igRepostWorkflowService.triggerAvatarSync(username);
+    if (!dispatch.success) {
+      return res.status(500).json({
+        success: false,
+        error: `Avatar sync dispatch failed: ${dispatch.error}`,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: username
+        ? `Avatar sync started for @${igTrackerService.normalizeUsername(username)}.`
+        : 'Avatar sync started for all target channels.',
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/channels', async (req, res) => {
   try {
     await igRepostService.migrateLegacyChannels({ onlyIfEmpty: true });
