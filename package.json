@@ -33,8 +33,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
     "autoprefixer": "^10.5.0",
-    "framer-motion": "^11.18.2",
-    "gsap": "^3.15.0",
     "lucide-react": "^1.16.0",
     "next": "^14.2.35",
     "nodemon": "^3.0.2",
