@@ -28,6 +28,8 @@ const state = {
     tickerIndex: 0,
     tickerTimer: null,
     tickerMessages: [],
+    statValues: {},
+    statRafs: {},
   },
   performance: {
     enabled: false,
@@ -89,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initDynamicHud();
   initKineticCards();
   initDesktopCursorEffects();
+  initMobileCardToggles();
   loadDrafts();
   switchTab('dashboard');
   startClock();
@@ -132,14 +135,15 @@ function bindEvents() {
   on('engage-btn', 'click', startEngager);
   on('reset-engagement-guard-btn', 'click', resetEngagementGuard);
   on('clear-engagements-btn', 'click', clearEngagements);
-  on('manual-refresh-btn', 'click', () => refreshAll({ force: true }));
+  on('manual-refresh-btn', 'click', (event) => handleRefreshAction(event.currentTarget));
   on('visual-mode-btn', 'click', handleVisualModeToggle);
   on('hero-open-channels-btn', 'click', () => switchTab('channels'));
   on('hero-open-history-btn', 'click', () => switchTab('history'));
-  on('hero-refresh-btn', 'click', () => refreshAll({ force: true }));
+  on('hero-refresh-btn', 'click', (event) => handleRefreshAction(event.currentTarget));
   on('mobile-open-channels-btn', 'click', () => switchTab('channels'));
   on('mobile-run-scan-btn', 'click', runIgScanNow);
-  on('mobile-refresh-btn', 'click', () => refreshAll({ force: true }));
+  on('mobile-refresh-btn', 'click', (event) => handleRefreshAction(event.currentTarget));
+  on('mobile-settings-btn', 'click', () => switchTab('settings'));
   on('link-session-btn', 'click', linkSessionCookie);
   on('unlink-session-btn', 'click', unlinkSessionCookie);
   on('link-ig-session-btn', 'click', linkIgSession);
@@ -243,6 +247,9 @@ function applyVisualMode(mode, options = {}) {
 
   const heroLabel = byId('hero-mode-label');
   if (heroLabel) heroLabel.textContent = modeMeta.label;
+
+  const commandLabel = byId('command-skin-label');
+  if (commandLabel) commandLabel.textContent = modeMeta.label;
 
   const btn = byId('visual-mode-btn');
   if (btn) {
@@ -362,6 +369,7 @@ function handleVisualModeToggle() {
 
 function switchTab(tab) {
   state.currentTab = tab;
+  document.body.dataset.activePanel = tab;
 
   document.querySelectorAll('.tab-btn').forEach((button) => {
     const isActive = button.dataset.tab === tab;
@@ -373,7 +381,13 @@ function switchTab(tab) {
   document.querySelectorAll('.panel').forEach((panel) => {
     const isVisible = panel.id === `panel-${tab}`;
     panel.classList.toggle('hidden', !isVisible);
+    panel.classList.toggle('panel-active', isVisible);
     panel.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
+    if (isVisible) {
+      panel.classList.remove('panel-enter');
+      void panel.offsetWidth;
+      panel.classList.add('panel-enter');
+    }
   });
 
   document.querySelectorAll('.mobile-tab-btn').forEach((button) => {
@@ -390,6 +404,21 @@ function switchTab(tab) {
       loadEngagements();
   }
   if (tab === 'settings') loadDiagnostics();
+}
+
+async function handleRefreshAction(button) {
+  const target = button || byId('manual-refresh-btn');
+  if (target) target.classList.add('is-syncing');
+  document.body.classList.add('is-refreshing-data');
+
+  try {
+    await refreshAll({ force: true });
+  } finally {
+    window.setTimeout(() => {
+      if (target) target.classList.remove('is-syncing');
+      document.body.classList.remove('is-refreshing-data');
+    }, 520);
+  }
 }
 
 function startClock() {
@@ -493,8 +522,8 @@ async function refreshOverview() {
     const chCount = Array.isArray(trackerStatusResp.status.channels)
       ? trackerStatusResp.status.channels.length
       : (trackerStatusResp.status.channelCount ?? 0);
-    setText('hero-channel-count', String(chCount));
-    setText('mobile-channel-count', String(chCount));
+    setStatText('hero-channel-count', String(chCount));
+    setStatText('mobile-channel-count', String(chCount));
     // Sync state.channels so channel tab is pre-populated
     if (Array.isArray(trackerStatusResp.status.channels)) {
       state.channels = trackerStatusResp.status.channels;
@@ -537,17 +566,17 @@ function updateStats(queue, history) {
   const successRateBase = successCount + failedCount;
   const successRate = successRateBase > 0 ? Math.round((successCount / successRateBase) * 100) : 0;
 
-  setText('stat-total-posts', String(successCount));
-  setText('stat-queue-pending', String(pendingCount));
-  setText('stat-success-rate', `${successRate}%`);
-  setText('stat-queue-failed', String(queueFailedCount));
-  setText('hero-total-posts', String(successCount));
-  setText('hero-queue-pending', String(pendingCount));
-  setText('hero-success-rate', `${successRate}%`);
-  setText('hero-queue-failed', String(queueFailedCount));
-  setText('mobile-total-posts', String(successCount));
-  setText('mobile-queue-pending', String(pendingCount));
-  setText('mobile-success-rate', `${successRate}%`);
+  setStatText('stat-total-posts', String(successCount));
+  setStatText('stat-queue-pending', String(pendingCount));
+  setStatText('stat-success-rate', `${successRate}%`);
+  setStatText('stat-queue-failed', String(queueFailedCount));
+  setStatText('hero-total-posts', String(successCount));
+  setStatText('hero-queue-pending', String(pendingCount));
+  setStatText('hero-success-rate', `${successRate}%`);
+  setStatText('hero-queue-failed', String(queueFailedCount));
+  setStatText('mobile-total-posts', String(successCount));
+  setStatText('mobile-queue-pending', String(pendingCount));
+  setStatText('mobile-success-rate', `${successRate}%`);
 }
 
 function getSuccessRatePercent() {
@@ -588,6 +617,16 @@ function initKineticCards() {
   });
 }
 
+function initMobileCardToggles() {
+  document.querySelectorAll('[data-mobile-expandable]').forEach((card) => {
+    card.addEventListener('click', (event) => {
+      if (isDesktopPointerExperience()) return;
+      if (event.target.closest('button, a, input, select, textarea')) return;
+      card.classList.toggle('is-expanded');
+    });
+  });
+}
+
 function isDesktopPointerExperience() {
   const hasMatchMedia = typeof window.matchMedia === 'function';
   const coarsePointer = hasMatchMedia && window.matchMedia('(pointer: coarse)').matches;
@@ -612,22 +651,42 @@ function initDesktopCursorEffects() {
   lab.className = 'cursor-lab';
   lab.setAttribute('aria-hidden', 'true');
 
-  const orb = document.createElement('div');
-  orb.id = 'cursor-orb';
-  orb.className = 'cursor-orb';
-  lab.appendChild(orb);
+  const dot = document.createElement('div');
+  dot.id = 'cursor-dot';
+  dot.className = 'cursor-dot';
+
+  const ring = document.createElement('div');
+  ring.id = 'cursor-ring';
+  ring.className = 'cursor-ring';
+  const ringLabel = document.createElement('span');
+  ringLabel.className = 'cursor-label';
+  ring.appendChild(ringLabel);
+
+  lab.appendChild(dot);
+  lab.appendChild(ring);
   document.body.appendChild(lab);
 
-  let raf = null;
+  let dotRaf = null;
+  let ringRaf = null;
   let lastBubbleAt = 0;
   let lastSparkAt = 0;
   let lastX = window.innerWidth * 0.5;
   let lastY = window.innerHeight * 0.34;
+  let ringX = lastX;
+  let ringY = lastY;
 
-  const moveOrb = () => {
-    orb.style.transform = `translate3d(${Math.round(lastX)}px, ${Math.round(lastY)}px, 0)`;
-    raf = null;
+  const moveDot = () => {
+    dot.style.transform = `translate3d(${Math.round(lastX)}px, ${Math.round(lastY)}px, 0)`;
+    dotRaf = null;
   };
+
+  const moveRing = () => {
+    ringX += (lastX - ringX) * 0.18;
+    ringY += (lastY - ringY) * 0.18;
+    ring.style.transform = `translate3d(${ringX.toFixed(1)}px, ${ringY.toFixed(1)}px, 0)`;
+    ringRaf = window.requestAnimationFrame(moveRing);
+  };
+  ringRaf = window.requestAnimationFrame(moveRing);
 
   window.addEventListener('pointermove', (event) => {
     if (event.pointerType === 'touch') return;
@@ -638,11 +697,11 @@ function initDesktopCursorEffects() {
 
     lastX = event.clientX;
     lastY = event.clientY;
-    orb.style.setProperty('--cursor-scale', String(0.78 + velocity * 0.42));
+    ring.style.setProperty('--cursor-scale', String(0.9 + velocity * 0.24));
 
-    if (!raf) raf = window.requestAnimationFrame(moveOrb);
+    if (!dotRaf) dotRaf = window.requestAnimationFrame(moveDot);
 
-    if (now - lastBubbleAt > 42 && Math.hypot(dx, dy) > 4) {
+    if (now - lastBubbleAt > 28 && Math.hypot(dx, dy) > 4) {
       spawnCursorParticle(lab, event.clientX, event.clientY, 'bubble', velocity);
       lastBubbleAt = now;
     }
@@ -653,7 +712,11 @@ function initDesktopCursorEffects() {
     }
   }, { passive: true });
 
-  bindMagneticHover();
+  bindMagneticHover(ring, ringLabel);
+
+  window.addEventListener('beforeunload', () => {
+    if (ringRaf) window.cancelAnimationFrame(ringRaf);
+  }, { once: true });
 }
 
 function spawnCursorParticle(lab, x, y, type = 'bubble', velocity = 0.4) {
@@ -672,7 +735,7 @@ function spawnCursorParticle(lab, x, y, type = 'bubble', velocity = 0.4) {
   lab.appendChild(particle);
 
   while (lab.childElementCount > 74) {
-    const removable = Array.from(lab.children).find((child) => !child.classList.contains('cursor-orb'));
+    const removable = Array.from(lab.children).find((child) => child.classList.contains('cursor-particle'));
     if (!removable) break;
     removable.remove();
   }
@@ -682,7 +745,7 @@ function spawnCursorParticle(lab, x, y, type = 'bubble', velocity = 0.4) {
   window.setTimeout(removeParticle, isSpark ? 980 : 840);
 }
 
-function bindMagneticHover() {
+function bindMagneticHover(cursorRing, cursorLabel) {
   const selector = [
     '.btn',
     '.tab-btn',
@@ -711,10 +774,18 @@ function bindMagneticHover() {
       node.classList.add('is-magnetic');
     }, { passive: true });
 
+    node.addEventListener('pointerenter', () => {
+      const label = node.dataset.cursorLabel || node.textContent.trim() || 'Click';
+      if (cursorLabel) cursorLabel.textContent = label.trim().slice(0, 16).toUpperCase();
+      if (cursorRing) cursorRing.classList.add('cursor-ring-action');
+    }, { passive: true });
+
     node.addEventListener('pointerleave', () => {
       node.style.setProperty('--magnet-x', '0px');
       node.style.setProperty('--magnet-y', '0px');
       node.classList.remove('is-magnetic');
+      if (cursorRing) cursorRing.classList.remove('cursor-ring-action');
+      if (cursorLabel) cursorLabel.textContent = '';
     }, { passive: true });
   });
 }
@@ -745,6 +816,7 @@ function updateOpsRibbon(pinterestStatus = {}, systemStatus = {}) {
   if (fill) fill.style.width = `${Math.max(0, Math.min(100, successRate))}%`;
   setText('ops-progress-label', `Success ${successRate}%`);
   renderOpsTicker();
+  renderLiveActivityTicker();
 }
 
 function renderOpsTicker() {
@@ -760,6 +832,63 @@ function rotateOpsTicker() {
   if (!messages.length) return;
   state.ui.tickerIndex = (state.ui.tickerIndex + 1) % messages.length;
   renderOpsTicker();
+}
+
+function buildActivityTickerItems() {
+  const items = [];
+  const latestHistory = state.history.slice(0, 4);
+  const latestQueue = state.queue.slice(0, 3);
+  const logs = Array.isArray(state.igStatus?.recentLogs) ? state.igStatus.recentLogs.slice(0, 3) : [];
+  const channelCount = Array.isArray(state.igStatus?.channels)
+    ? state.igStatus.channels.length
+    : Number(state.igStatus?.channelCount || state.channels.length || 0);
+  const readyIgJobs = Number(state.igStatus?.queue?.ready || 0);
+
+  latestHistory.forEach((item) => {
+    const status = String(item.status || '').toLowerCase();
+    const title = String(item.title || item.pinTitle || item.username || 'Pin').slice(0, 42);
+    const when = item.postedAt || item.createdAt || item.timestamp || '';
+    const verb = status === 'success' || status === 'completed' ? 'Pin published' : 'History event';
+    items.push(`${verb}: ${title}${when ? ` - ${formatTimeAgo(when)}` : ''}`);
+  });
+
+  logs.forEach((log) => {
+    const message = String(log.message || 'IG repost pipeline event').slice(0, 64);
+    const when = log.createdAt || log.at || log.timestamp || '';
+    items.push(`${message}${when ? ` - ${formatTimeAgo(when)}` : ''}`);
+  });
+
+  latestQueue.forEach((item) => {
+    const title = String(item.title || item.username || item.source || 'Queued item').slice(0, 42);
+    items.push(`Queue synced: ${title}`);
+  });
+
+  items.push(`${channelCount} target channel${channelCount === 1 ? '' : 's'} active`);
+  items.push(`${readyIgJobs} IG repost job${readyIgJobs === 1 ? '' : 's'} ready`);
+  items.push('Engagement profile armed: 5 likes, 3 comments, 0 saves');
+
+  return items.filter(Boolean).slice(0, 10);
+}
+
+function renderLiveActivityTicker() {
+  const items = buildActivityTickerItems();
+  const track = byId('activity-ticker-track');
+  const mobileList = byId('mobile-activity-feed-list');
+  const safeItems = items.length ? items : ['Automation stream standing by', 'Queue synced', 'Scanner ready'];
+  const loopItems = [...safeItems, ...safeItems];
+
+  if (track) {
+    track.innerHTML = loopItems.map((item, index) => `
+      <span class="ticker-item">${escHtml(item)}</span>
+      ${index < loopItems.length - 1 ? '<span class="ticker-separator">◆</span>' : ''}
+    `).join('');
+  }
+
+  if (mobileList) {
+    mobileList.innerHTML = loopItems.slice(0, 8).map((item) => `
+      <div class="mobile-feed-item">${escHtml(item)}</div>
+    `).join('');
+  }
 }
 
 function updateConnectionBar(pinterestStatus, systemStatus) {
@@ -868,14 +997,14 @@ function updateIgPipelineUI(status = state.igStatus) {
   const failed = Math.max(0, Number(queue.failed || 0));
   const totalPosts = Math.max(0, Number(status?.totalPosts || 0));
 
-  setText('ig-dashboard-accounts', String(channelCount));
-  setText('ig-dashboard-ready', String(ready));
-  setText('ig-dashboard-posts', String(totalPosts));
-  setText('ig-dashboard-failed', String(failed));
-  setText('channels-status-accounts', String(channelCount));
-  setText('channels-status-ready', String(ready));
-  setText('channels-status-failed', String(failed));
-  setText('mobile-channel-count', String(channelCount));
+  setStatText('ig-dashboard-accounts', String(channelCount));
+  setStatText('ig-dashboard-ready', String(ready));
+  setStatText('ig-dashboard-posts', String(totalPosts));
+  setStatText('ig-dashboard-failed', String(failed));
+  setStatText('channels-status-accounts', String(channelCount));
+  setStatText('channels-status-ready', String(ready));
+  setStatText('channels-status-failed', String(failed));
+  setStatText('mobile-channel-count', String(channelCount));
 
   const lastRun = scheduler.lastRunCompletedAt || scheduler.lastRunStartedAt || scheduler.lastDispatchAt;
   setText('ig-dashboard-last-run', lastRun ? `Last activity ${formatTimeAgo(lastRun)}` : 'No runs yet');
@@ -2563,6 +2692,7 @@ function formatTime12h(value) {
   return date.toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hour12: true,
   });
 }
@@ -2723,6 +2853,62 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
+function parseStatValue(value) {
+  const text = String(value ?? '');
+  const match = text.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  return {
+    number: Number(match[0]),
+    prefix: text.slice(0, match.index),
+    suffix: text.slice(match.index + match[0].length),
+    decimals: match[0].includes('.') ? match[0].split('.')[1].length : 0,
+  };
+}
+
+function setStatText(id, value) {
+  const el = byId(id);
+  if (!el) return;
+
+  const parsed = parseStatValue(value);
+  if (!parsed || !Number.isFinite(parsed.number)) {
+    el.textContent = value;
+    return;
+  }
+
+  const current = state.ui.statValues[id];
+  const previous = Number.isFinite(current) ? current : 0;
+  if (current === parsed.number && el.textContent === String(value)) return;
+
+  if (state.ui.statRafs[id]) {
+    cancelAnimationFrame(state.ui.statRafs[id]);
+    state.ui.statRafs[id] = null;
+  }
+
+  state.ui.statValues[id] = parsed.number;
+  const start = performance.now();
+  const duration = current === undefined ? 820 : 520;
+  el.classList.add('stat-refreshing');
+
+  const step = (now) => {
+    const progress = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const next = previous + (parsed.number - previous) * eased;
+    const display = parsed.decimals > 0 ? next.toFixed(parsed.decimals) : String(Math.round(next));
+    el.textContent = `${parsed.prefix}${display}${parsed.suffix}`;
+
+    if (progress < 1) {
+      state.ui.statRafs[id] = requestAnimationFrame(step);
+      return;
+    }
+
+    el.textContent = String(value);
+    el.classList.remove('stat-refreshing');
+    state.ui.statRafs[id] = null;
+  };
+
+  state.ui.statRafs[id] = requestAnimationFrame(step);
+}
+
 function proxyMediaUrl(url) {
   const clean = String(url || '').trim();
   if (!clean) return '';
@@ -2773,8 +2959,8 @@ function renderChannelsList() {
 
   if (state.channels.length === 0) {
     list.innerHTML = '<div class="pulse-item">No target channels added yet.</div>';
-    setText('hero-channel-count', '0');
-    setText('mobile-channel-count', '0');
+    setStatText('hero-channel-count', '0');
+    setStatText('mobile-channel-count', '0');
     return;
   }
 
@@ -2820,8 +3006,8 @@ function renderChannelsList() {
     `;
   }).join('');
 
-  setText('hero-channel-count', String(state.channels.length));
-  setText('mobile-channel-count', String(state.channels.length));
+  setStatText('hero-channel-count', String(state.channels.length));
+  setStatText('mobile-channel-count', String(state.channels.length));
   void hydrateChannelAvatars();
   
   if (typeof lucide !== 'undefined') lucide.createIcons();

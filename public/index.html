@@ -6,58 +6,74 @@
     <meta name="theme-color" content="#0b0614">
     <title>Reel Orbit</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/reel-orbit-desktop.css" media="(min-width: 761px)">
+    <link rel="stylesheet" href="/css/reel-orbit-mobile.css" media="(max-width: 760px)">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
 <body>
     <div class="scene-layer" aria-hidden="true">
+        <div class="scene-contours"></div>
         <div class="scene-gradient scene-gradient-a"></div>
         <div class="scene-gradient scene-gradient-b"></div>
+        <div class="scene-gradient scene-gradient-c"></div>
+        <div class="scene-gradient scene-gradient-d"></div>
         <div class="scene-grid"></div>
         <div class="scene-orbit scene-orbit-one"></div>
         <div class="scene-orbit scene-orbit-two"></div>
+        <div class="scene-scanlines"></div>
         <div class="scene-noise"></div>
     </div>
 
     <div class="app-shell">
-        <header class="topbar">
+        <header class="topbar command-bar">
             <div class="brand-wrap">
-                <p class="brand-tag">Flux Deck</p>
+                <div class="brand-mark" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
                 <div class="brand-title">
-                    <i data-lucide="radar" class="brand-icon"></i>
                     <span>Reel Orbit</span>
                 </div>
-                <p class="brand-subtitle">A mobile-first orbit deck for scraping reels, publishing pins, and running safe menswear engagement.</p>
-                <div class="status-wrap">
-                    <span id="connection-status" class="badge badge-success">ONLINE</span>
-                    <span id="active-mode" class="badge">MODE: AUTO</span>
-                </div>
+                <p class="brand-subtitle">Scrape to publish OS</p>
+            </div>
+
+            <div class="status-wrap command-status">
+                <span class="led-status led-status-api"><span class="led-dot"></span><span id="connection-status" class="badge badge-success">API LINKED</span></span>
+                <span class="led-status led-status-bot"><span class="led-dot"></span><span id="active-mode" class="badge">BOT MODE</span></span>
+                <span class="skin-chip"><span>Skin</span><strong id="command-skin-label">Flux</strong></span>
             </div>
 
             <div class="header-tools">
                 <label class="switch-wrap" for="auto-refresh-toggle">
                     <input id="auto-refresh-toggle" type="checkbox" checked>
+                    <span class="switch-visual"></span>
                     <span>Auto Refresh</span>
                 </label>
-                <button id="manual-refresh-btn" class="btn btn-secondary compact-btn" type="button">
+                <button id="manual-refresh-btn" class="btn btn-secondary compact-btn" type="button" data-cursor-label="Refresh">
                     <i data-lucide="refresh-cw" class="btn-icon"></i>
                     <span>Refresh</span>
                 </button>
-                <button id="visual-mode-btn" class="btn btn-secondary compact-btn visual-mode-btn" type="button" title="Cycle visual modes">
+                <button id="visual-mode-btn" class="btn btn-secondary compact-btn visual-mode-btn" type="button" title="Cycle visual modes" data-cursor-label="Skin">
                     <i data-lucide="moon-star" class="btn-icon"></i>
                     <span id="visual-mode-label">Flux</span>
+                </button>
+                <button id="mobile-settings-btn" class="btn btn-secondary compact-btn mobile-settings-btn" type="button" title="Open settings">
+                    <i data-lucide="settings" class="btn-icon"></i>
+                    <span>Settings</span>
                 </button>
                 <div id="live-time" class="clock">00:00</div>
             </div>
         </header>
 
-        <nav class="tab-nav" aria-label="Main tabs">
-            <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
-            <button class="tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
-            <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
-            <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
-            <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Engagement</span></button>
-            <button class="tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
-            <button class="tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
+        <nav class="tab-nav rail-nav" aria-label="Main tabs">
+            <button class="tab-btn active" data-tab="dashboard" type="button" data-cursor-label="Dashboard"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
+            <button class="tab-btn" data-tab="channels" type="button" data-cursor-label="Channels"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
+            <button class="tab-btn" data-tab="queue" type="button" data-cursor-label="Queue"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
+            <button class="tab-btn" data-tab="pinterest" type="button" data-cursor-label="Pinterest"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
+            <button class="tab-btn" data-tab="engagements" type="button" data-cursor-label="Engage"><i data-lucide="activity" class="tab-icon"></i><span>Engagement</span></button>
+            <button class="tab-btn" data-tab="history" type="button" data-cursor-label="History"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
+            <button class="tab-btn" data-tab="settings" type="button" data-cursor-label="Settings"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
         </nav>
 
         <main>
@@ -78,73 +94,86 @@
                 <section class="orbit-deck">
                     <div class="orbit-brief">
                         <div class="hero-pill-row">
-                            <span class="hero-pill hero-pill-primary">Reel Radar</span>
-                            <span class="hero-pill hero-pill-secondary">Pinterest Autopilot</span>
+                            <span class="hero-pill hero-pill-primary">IG Scraper</span>
+                            <span class="hero-pill hero-pill-secondary">Pinterest Publisher</span>
                         </div>
-                        <h1 class="orbit-title">Scrape. Curate. Publish. Engage.</h1>
-                        <p class="orbit-copy">A living command surface for target Instagram channels, Pinterest queue pressure, and men's outfit engagement. No FirePost wiring, no useless X panels, no duplicate dashboard noise.</p>
+                        <h1 class="orbit-title" aria-label="Scrape Curate Publish Engage">
+                            <span class="orbit-word orbit-word-scrape">Scrape</span>
+                            <span class="orbit-word orbit-word-curate">Curate</span>
+                            <span class="orbit-word orbit-word-publish">Publish</span>
+                            <span class="orbit-word orbit-word-engage">Engage</span>
+                        </h1>
+                        <p class="orbit-copy">A living operating system for target reels, pin publishing, and men's fashion engagement. Autonomous where it should be. Manual where control matters.</p>
 
                         <div class="orbit-actions">
-                            <button id="hero-open-channels-btn" class="btn btn-primary hero-action" type="button">
-                                <i data-lucide="rss" class="btn-icon"></i>
+                            <button id="hero-open-channels-btn" class="btn btn-primary hero-action hero-action-add" type="button" data-cursor-label="Add Target">
+                                <i data-lucide="plus" class="btn-icon"></i>
                                 <span>Add Target</span>
                             </button>
-                            <button id="hero-refresh-btn" class="btn btn-secondary hero-action" type="button">
+                            <button id="hero-refresh-btn" class="btn btn-secondary hero-action hero-action-sync" type="button" data-cursor-label="Sync Now">
                                 <i data-lucide="refresh-cw" class="btn-icon"></i>
                                 <span>Sync Now</span>
                             </button>
-                            <button id="hero-open-history-btn" class="btn btn-secondary hero-action" type="button">
+                            <button id="hero-open-history-btn" class="btn btn-secondary hero-action hero-action-receipts" type="button" data-cursor-label="Receipts">
                                 <i data-lucide="history" class="btn-icon"></i>
                                 <span>Receipts</span>
                             </button>
                         </div>
+                    </div>
 
-                        <div class="orbit-signal-row">
+                    <div class="orbit-core-card" data-kinetic-card>
+                        <div class="orbital-system" aria-label="Live automation statistics">
+                            <div class="orbit-core">
+                                <span>Bot Core</span>
+                                <strong>Autonomous</strong>
+                                <small>Independent IG repost system</small>
+                            </div>
+                            <div class="stat-ring stat-ring-published">
+                                <div class="ring-line"></div>
+                                <div class="ring-stat">
+                                    <strong id="hero-total-posts" class="seven-num">0</strong>
+                                    <span>Published</span>
+                                </div>
+                            </div>
+                            <div class="stat-ring stat-ring-pending">
+                                <div class="ring-line"></div>
+                                <div class="ring-stat">
+                                    <strong id="hero-queue-pending" class="seven-num">0</strong>
+                                    <span>Pending</span>
+                                </div>
+                            </div>
+                            <div class="stat-ring stat-ring-success">
+                                <div class="ring-line"></div>
+                                <div class="ring-stat">
+                                    <strong id="hero-success-rate" class="seven-num">0%</strong>
+                                    <span>Success</span>
+                                </div>
+                            </div>
+                            <div class="stat-ring stat-ring-failed">
+                                <div class="ring-line"></div>
+                                <div class="ring-stat">
+                                    <strong id="hero-queue-failed" class="seven-num">0</strong>
+                                    <span>Failed</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="orbit-data-strip">
                             <div class="orbit-signal">
-                                <span>Connection</span>
+                                <span>API</span>
                                 <strong id="hero-connection-status" class="badge">ONLINE</strong>
                             </div>
                             <div class="orbit-signal">
                                 <span>Targets</span>
-                                <strong id="hero-channel-count">0</strong>
+                                <strong id="hero-channel-count" class="seven-num">0</strong>
                             </div>
                             <div class="orbit-signal">
                                 <span>Next Wake</span>
-                                <strong id="hero-next-cycle">--:--</strong>
+                                <strong id="hero-next-cycle" class="seven-num">--:--</strong>
                             </div>
                             <div class="orbit-signal">
                                 <span>Skin</span>
                                 <strong id="hero-mode-label" class="hero-mode-value">Flux</strong>
                             </div>
-                        </div>
-                    </div>
-
-                    <div class="orbit-core-card" data-kinetic-card>
-                        <div class="orbit-rings" aria-hidden="true">
-                            <span class="orbit-ring orbit-ring-one"></span>
-                            <span class="orbit-ring orbit-ring-two"></span>
-                            <span class="orbit-ring orbit-ring-three"></span>
-                        </div>
-                        <div class="orbit-core">
-                            <span>Live Core</span>
-                            <strong>Autonomous</strong>
-                            <small>IG repost pipeline stays isolated</small>
-                        </div>
-                        <div class="orbit-stat orbit-stat-a">
-                            <span>Published</span>
-                            <strong id="hero-total-posts">0</strong>
-                        </div>
-                        <div class="orbit-stat orbit-stat-b">
-                            <span>Pending</span>
-                            <strong id="hero-queue-pending">0</strong>
-                        </div>
-                        <div class="orbit-stat orbit-stat-c">
-                            <span>Success</span>
-                            <strong id="hero-success-rate">0%</strong>
-                        </div>
-                        <div class="orbit-stat orbit-stat-d">
-                            <span>Failed</span>
-                            <strong id="hero-queue-failed">0</strong>
                         </div>
                     </div>
                 </section>
@@ -159,69 +188,87 @@
                     <div class="mobile-mission-stack">
                         <div class="mobile-mission-card mobile-mission-card-primary">
                             <span>Published</span>
-                            <strong id="mobile-total-posts">0</strong>
+                            <strong id="mobile-total-posts" class="seven-num">0</strong>
                             <small>Pins completed</small>
                         </div>
                         <div class="mobile-mission-card">
                             <span>Targets</span>
-                            <strong id="mobile-channel-count">0</strong>
+                            <strong id="mobile-channel-count" class="seven-num">0</strong>
                             <small>IG channels</small>
                         </div>
                         <div class="mobile-mission-card">
                             <span>Pending</span>
-                            <strong id="mobile-queue-pending">0</strong>
+                            <strong id="mobile-queue-pending" class="seven-num">0</strong>
                             <small>Queue items</small>
                         </div>
                         <div class="mobile-mission-card">
                             <span>Health</span>
-                            <strong id="mobile-success-rate">0%</strong>
+                            <strong id="mobile-success-rate" class="seven-num">0%</strong>
                             <small>Success rate</small>
                         </div>
                     </div>
                     <div class="mobile-cycle-pill">
                         <span>Next automation wake</span>
-                        <strong id="mobile-next-cycle">--:--</strong>
+                        <strong id="mobile-next-cycle" class="seven-num">--:--</strong>
                     </div>
                     <div class="mobile-action-grid">
-                        <button id="mobile-open-channels-btn" class="btn btn-primary" type="button">
+                        <button id="mobile-open-channels-btn" class="btn btn-primary" type="button" data-cursor-label="Add Target">
                             <i data-lucide="plus-circle" class="btn-icon"></i>
                             <span>Add Target</span>
                         </button>
-                        <button id="mobile-run-scan-btn" class="btn btn-secondary" type="button">
+                        <button id="mobile-run-scan-btn" class="btn btn-secondary" type="button" data-cursor-label="Scan">
                             <i data-lucide="radar" class="btn-icon"></i>
                             <span>Scan</span>
                         </button>
-                        <button id="mobile-refresh-btn" class="btn btn-secondary" type="button">
+                        <button id="mobile-refresh-btn" class="btn btn-secondary" type="button" data-cursor-label="Refresh">
                             <i data-lucide="refresh-cw" class="btn-icon"></i>
                             <span>Refresh</span>
                         </button>
                     </div>
                 </section>
 
+                <section class="mobile-activity-feed" aria-label="Mobile live activity">
+                    <div class="mobile-feed-head">
+                        <span>Live Feed</span>
+                        <strong>Automation stream</strong>
+                    </div>
+                    <div id="mobile-activity-feed-list" class="mobile-feed-list">
+                        <div class="mobile-feed-item">Booting activity stream...</div>
+                    </div>
+                </section>
+
                 <section class="flow-board">
-                    <article class="flow-card flow-card-hot" data-kinetic-card>
+                    <article class="flow-card flow-card-hot" data-kinetic-card data-mobile-expandable>
+                        <span class="flow-watermark">01</span>
                         <span class="flow-index">01</span>
-                        <i data-lucide="radar" class="flow-icon"></i>
+                        <div class="flow-symbol symbol-radar" aria-hidden="true"><span></span><span></span><span></span></div>
                         <h2>Watch Targets</h2>
                         <p>New Instagram channels validate immediately, then run on the independent scheduled scanner.</p>
+                        <div class="flow-detail">Instant validation, profile health, target state, and scanner readiness stay visible.</div>
                     </article>
-                    <article class="flow-card" data-kinetic-card>
+                    <article class="flow-card" data-kinetic-card data-mobile-expandable>
+                        <span class="flow-watermark">02</span>
                         <span class="flow-index">02</span>
-                        <i data-lucide="scissors" class="flow-icon"></i>
+                        <div class="flow-symbol symbol-wave" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
                         <h2>Skip Noise</h2>
                         <p>Duplicate guards, repost history, and pinned-reel rules keep the pipeline clean.</p>
+                        <div class="flow-detail">Pinned checks, duplicate signatures, retries, and skipped states are recorded separately.</div>
                     </article>
-                    <article class="flow-card" data-kinetic-card>
+                    <article class="flow-card" data-kinetic-card data-mobile-expandable>
+                        <span class="flow-watermark">03</span>
                         <span class="flow-index">03</span>
-                        <i data-lucide="send" class="flow-icon"></i>
+                        <div class="flow-symbol symbol-launch" aria-hidden="true"><span></span><span></span><span></span></div>
                         <h2>Publish Pins</h2>
                         <p>Thumbnail, product link, caption, and media handling stay inside the independent repost workflow.</p>
+                        <div class="flow-detail">Media prep, caption shaping, product destination, and publication logs remain isolated.</div>
                     </article>
-                    <article class="flow-card" data-kinetic-card>
+                    <article class="flow-card" data-kinetic-card data-mobile-expandable>
+                        <span class="flow-watermark">04</span>
                         <span class="flow-index">04</span>
-                        <i data-lucide="heart-handshake" class="flow-icon"></i>
+                        <div class="flow-symbol symbol-pulse" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
                         <h2>Engage Menswear</h2>
                         <p>Hourly Pinterest engagement stays focused on men's outfit pins with no save action.</p>
+                        <div class="flow-detail">Five likes, three useful comments, no saves, and safer randomization for menswear niches.</div>
                     </article>
                 </section>
 
@@ -698,10 +745,17 @@
             <button class="mobile-tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
             <button class="mobile-tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Create</span></button>
             <button class="mobile-tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
-            <button class="mobile-tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
         </nav>
 
     </div>
+
+    <aside id="activity-ticker" class="activity-ticker" aria-label="Live automation ticker">
+        <div id="activity-ticker-track" class="activity-ticker-track">
+            <span class="ticker-item">Booting automation stream</span>
+            <span class="ticker-separator">◆</span>
+            <span class="ticker-item">Waiting for live events</span>
+        </div>
+    </aside>
 
     <div id="toast-container"></div>
 
