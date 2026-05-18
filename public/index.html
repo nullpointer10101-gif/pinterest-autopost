@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#050b16">
-    <title>Pinterest Mission Control</title>
+    <meta name="theme-color" content="#0b0614">
+    <title>Reel Orbit</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
@@ -21,12 +21,12 @@
     <div class="app-shell">
         <header class="topbar">
             <div class="brand-wrap">
-                <p class="brand-tag">Atlas Ops v4</p>
+                <p class="brand-tag">Flux Deck</p>
                 <div class="brand-title">
                     <i data-lucide="radar" class="brand-icon"></i>
-                    <span>Pinterest Mission Control</span>
+                    <span>Reel Orbit</span>
                 </div>
-                <p class="brand-subtitle">A focused control room for Pinterest publishing, target-channel reposting, and safe engagement automation.</p>
+                <p class="brand-subtitle">A mobile-first orbit deck for scraping reels, publishing pins, and running safe menswear engagement.</p>
                 <div class="status-wrap">
                     <span id="connection-status" class="badge badge-success">ONLINE</span>
                     <span id="active-mode" class="badge">MODE: AUTO</span>
@@ -44,7 +44,7 @@
                 </button>
                 <button id="visual-mode-btn" class="btn btn-secondary compact-btn visual-mode-btn" type="button" title="Cycle visual modes">
                     <i data-lucide="moon-star" class="btn-icon"></i>
-                    <span id="visual-mode-label">Atlas</span>
+                    <span id="visual-mode-label">Flux</span>
                 </button>
                 <div id="live-time" class="clock">00:00</div>
             </div>
@@ -74,116 +74,117 @@
                 </div>
             </section>
 
-            <section id="panel-dashboard" class="panel">
-                <article class="card hero-panel">
-                    <div class="hero-grid">
-                        <div class="hero-content">
-                            <div class="hero-pill-row">
-                                <span class="hero-pill hero-pill-primary">Independent Pipelines</span>
-                                <span class="hero-pill hero-pill-secondary">Live Signal UI</span>
-                            </div>
-                            <h1 class="hero-title">A sharper automation cockpit for everyday control.</h1>
-                            <p class="hero-description">Watch target channels, queue pressure, publishing health, and engagement behavior from a fast, mobile-friendly command deck.</p>
+            <section id="panel-dashboard" class="panel panel-dashboard">
+                <section class="orbit-deck">
+                    <div class="orbit-brief">
+                        <div class="hero-pill-row">
+                            <span class="hero-pill hero-pill-primary">Reel Radar</span>
+                            <span class="hero-pill hero-pill-secondary">Pinterest Autopilot</span>
+                        </div>
+                        <h1 class="orbit-title">Scrape. Curate. Publish. Engage.</h1>
+                        <p class="orbit-copy">A living command surface for target Instagram channels, Pinterest queue pressure, and men's outfit engagement. No FirePost wiring, no useless X panels, no duplicate dashboard noise.</p>
 
-                            <div class="hero-actions">
-                                <button id="hero-open-channels-btn" class="btn btn-primary hero-action" type="button">
-                                    <i data-lucide="rss" class="btn-icon"></i>
-                                    <span>Open Channels</span>
-                                </button>
-                                <button id="hero-open-history-btn" class="btn btn-secondary hero-action" type="button">
-                                    <i data-lucide="history" class="btn-icon"></i>
-                                    <span>View History</span>
-                                </button>
-                                <button id="hero-refresh-btn" class="btn btn-secondary hero-action" type="button">
-                                    <i data-lucide="refresh-cw" class="btn-icon"></i>
-                                    <span>Refresh Now</span>
-                                </button>
-                            </div>
+                        <div class="orbit-actions">
+                            <button id="hero-open-channels-btn" class="btn btn-primary hero-action" type="button">
+                                <i data-lucide="rss" class="btn-icon"></i>
+                                <span>Add Target</span>
+                            </button>
+                            <button id="hero-refresh-btn" class="btn btn-secondary hero-action" type="button">
+                                <i data-lucide="refresh-cw" class="btn-icon"></i>
+                                <span>Sync Now</span>
+                            </button>
+                            <button id="hero-open-history-btn" class="btn btn-secondary hero-action" type="button">
+                                <i data-lucide="history" class="btn-icon"></i>
+                                <span>Receipts</span>
+                            </button>
                         </div>
 
-                        <aside class="hero-side">
-                            <div class="hero-mode-box">
-                                <span class="hero-mode-label">Current Theme</span>
-                                <strong id="hero-mode-label" class="hero-mode-value">Atlas</strong>
+                        <div class="orbit-signal-row">
+                            <div class="orbit-signal">
+                                <span>Connection</span>
+                                <strong id="hero-connection-status" class="badge">ONLINE</strong>
                             </div>
-
-                            <div class="hero-side-grid">
-                                <div class="hero-side-item">
-                                    <span>Connection</span>
-                                    <strong id="hero-connection-status" class="badge">ONLINE</strong>
-                                </div>
-                                <div class="hero-side-item">
-                                    <span>Channels</span>
-                                    <strong id="hero-channel-count">0</strong>
-                                </div>
-                                <div class="hero-side-item">
-                                    <span>Next Cycle</span>
-                                    <strong id="hero-next-cycle">--:--</strong>
-                                </div>
+                            <div class="orbit-signal">
+                                <span>Targets</span>
+                                <strong id="hero-channel-count">0</strong>
                             </div>
-                        </aside>
+                            <div class="orbit-signal">
+                                <span>Next Wake</span>
+                                <strong id="hero-next-cycle">--:--</strong>
+                            </div>
+                            <div class="orbit-signal">
+                                <span>Skin</span>
+                                <strong id="hero-mode-label" class="hero-mode-value">Flux</strong>
+                            </div>
+                        </div>
                     </div>
-                </article>
 
-                <section class="hero-metrics-grid">
-                    <article class="hero-metric-card">
-                        <span class="hero-metric-label">Published</span>
-                        <strong id="hero-total-posts" class="hero-metric-value">0</strong>
+                    <div class="orbit-core-card" data-kinetic-card>
+                        <div class="orbit-rings" aria-hidden="true">
+                            <span class="orbit-ring orbit-ring-one"></span>
+                            <span class="orbit-ring orbit-ring-two"></span>
+                            <span class="orbit-ring orbit-ring-three"></span>
+                        </div>
+                        <div class="orbit-core">
+                            <span>Live Core</span>
+                            <strong>Autonomous</strong>
+                            <small>IG repost pipeline stays isolated</small>
+                        </div>
+                        <div class="orbit-stat orbit-stat-a">
+                            <span>Published</span>
+                            <strong id="hero-total-posts">0</strong>
+                        </div>
+                        <div class="orbit-stat orbit-stat-b">
+                            <span>Pending</span>
+                            <strong id="hero-queue-pending">0</strong>
+                        </div>
+                        <div class="orbit-stat orbit-stat-c">
+                            <span>Success</span>
+                            <strong id="hero-success-rate">0%</strong>
+                        </div>
+                        <div class="orbit-stat orbit-stat-d">
+                            <span>Failed</span>
+                            <strong id="hero-queue-failed">0</strong>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="flow-board">
+                    <article class="flow-card flow-card-hot" data-kinetic-card>
+                        <span class="flow-index">01</span>
+                        <i data-lucide="radar" class="flow-icon"></i>
+                        <h2>Watch Targets</h2>
+                        <p>New Instagram channels validate immediately, then run on the independent scheduled scanner.</p>
                     </article>
-                    <article class="hero-metric-card">
-                        <span class="hero-metric-label">Pending</span>
-                        <strong id="hero-queue-pending" class="hero-metric-value">0</strong>
+                    <article class="flow-card" data-kinetic-card>
+                        <span class="flow-index">02</span>
+                        <i data-lucide="scissors" class="flow-icon"></i>
+                        <h2>Skip Noise</h2>
+                        <p>Duplicate guards, repost history, and pinned-reel rules keep the pipeline clean.</p>
                     </article>
-                    <article class="hero-metric-card">
-                        <span class="hero-metric-label">Success</span>
-                        <strong id="hero-success-rate" class="hero-metric-value">0%</strong>
+                    <article class="flow-card" data-kinetic-card>
+                        <span class="flow-index">03</span>
+                        <i data-lucide="send" class="flow-icon"></i>
+                        <h2>Publish Pins</h2>
+                        <p>Thumbnail, product link, caption, and media handling stay inside the independent repost workflow.</p>
                     </article>
-                    <article class="hero-metric-card">
-                        <span class="hero-metric-label">Queue Failed</span>
-                        <strong id="hero-queue-failed" class="hero-metric-value">0</strong>
+                    <article class="flow-card" data-kinetic-card>
+                        <span class="flow-index">04</span>
+                        <i data-lucide="heart-handshake" class="flow-icon"></i>
+                        <h2>Engage Menswear</h2>
+                        <p>Hourly Pinterest engagement stays focused on men's outfit pins with no save action.</p>
                     </article>
                 </section>
 
-                <article class="card alert-center">
+                <article class="alert-center signal-alerts">
                     <div class="alert-center-head">
-                        <h2><i data-lucide="siren" class="heading-icon"></i>Mission Alerts</h2>
+                        <h2><i data-lucide="siren" class="heading-icon"></i>Signal Board</h2>
                         <span id="alert-center-count" class="badge">0 ALERTS</span>
                     </div>
                     <div id="alert-center-list" class="alert-list">
-                        <div class="pulse-item">Checking live automation health...</div>
+                        <div class="pulse-item">Scanning live automation health...</div>
                     </div>
                 </article>
-
-                <section class="stats-grid">
-                    <article class="stat-card">
-                        <div class="stat-head">
-                            <span class="stat-label">Total Published</span>
-                            <i data-lucide="send" class="stat-icon"></i>
-                        </div>
-                        <div id="stat-total-posts" class="stat-value">0</div>
-                    </article>
-                    <article class="stat-card">
-                        <div class="stat-head">
-                            <span class="stat-label">Queue Pending</span>
-                            <i data-lucide="clock-3" class="stat-icon"></i>
-                        </div>
-                        <div id="stat-queue-pending" class="stat-value">0</div>
-                    </article>
-                    <article class="stat-card">
-                        <div class="stat-head">
-                            <span class="stat-label">Success Rate</span>
-                            <i data-lucide="trending-up" class="stat-icon"></i>
-                        </div>
-                        <div id="stat-success-rate" class="stat-value">0%</div>
-                    </article>
-                    <article class="stat-card">
-                        <div class="stat-head">
-                            <span class="stat-label">Queue Failed</span>
-                            <i data-lucide="alert-triangle" class="stat-icon"></i>
-                        </div>
-                        <div id="stat-queue-failed" class="stat-value">0</div>
-                    </article>
-                </section>
 
                 <section class="dashboard-grid">
                     <article class="card dashboard-card dashboard-card-workflow">
@@ -421,17 +422,6 @@
                             <p class="muted-text">Extract reels, generate high-conversion copy, and launch posting operations.</p>
                         </div>
 
-                        <div class="autosave-bar">
-                            <div>
-                                <strong>Composer Safety Net</strong>
-                                <div id="autosave-status" class="input-meta">Autosave standing by</div>
-                            </div>
-                            <div class="autosave-actions">
-                                <button id="autosave-undo-btn" class="pill-btn" type="button">Undo Draft</button>
-                                <button id="autosave-redo-btn" class="pill-btn" type="button">Redo Draft</button>
-                            </div>
-                        </div>
-
                         <div class="field-wrap">
                             <label for="reel-url">Instagram Reel URL</label>
                             <div class="inline-field inline-field-reel">
@@ -662,40 +652,6 @@
             <button class="mobile-tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
         </nav>
 
-        <div class="action-dock" aria-label="Quick action dock">
-            <button id="open-command-palette-btn" class="btn btn-primary compact-btn" type="button">
-                <i data-lucide="command" class="btn-icon"></i>
-                <span>Command</span>
-            </button>
-            <button id="dock-refresh-btn" class="btn btn-secondary compact-btn" type="button">
-                <i data-lucide="refresh-cw" class="btn-icon"></i>
-                <span>Refresh</span>
-            </button>
-            <button id="dock-run-ig-scan-btn" class="btn btn-secondary compact-btn" type="button">
-                <i data-lucide="radar" class="btn-icon"></i>
-                <span>IG Scan</span>
-            </button>
-            <button id="dock-open-channels-btn" class="btn btn-secondary compact-btn" type="button">
-                <i data-lucide="rss" class="btn-icon"></i>
-                <span>Channels</span>
-            </button>
-            <label class="switch-wrap dock-switch" for="performance-mode-toggle">
-                <input id="performance-mode-toggle" type="checkbox">
-                <span>Lite Motion</span>
-            </label>
-        </div>
-    </div>
-
-    <div id="command-palette" class="command-palette hidden" role="dialog" aria-modal="true" aria-label="Command palette">
-        <div id="command-palette-backdrop" class="command-palette-backdrop"></div>
-        <div class="command-palette-panel">
-            <div class="command-palette-input-wrap">
-                <i data-lucide="search" class="heading-icon"></i>
-                <input id="command-input" type="text" placeholder="Type a command, e.g. scan, queue, theme">
-                <button id="command-close-btn" class="pill-btn" type="button">Esc</button>
-            </div>
-            <div id="command-results" class="command-results"></div>
-        </div>
     </div>
 
     <div id="toast-container"></div>

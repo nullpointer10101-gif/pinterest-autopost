@@ -36,17 +36,6 @@ const state = {
     selectedIds: new Set(),
     draggingId: '',
   },
-  commandPalette: {
-    open: false,
-    activeIndex: 0,
-    results: [],
-  },
-  autosave: {
-    timer: null,
-    undoStack: [],
-    redoStack: [],
-    applying: false,
-  },
   alerts: [],
 };
 
@@ -57,24 +46,22 @@ const DEFAULT_REFRESH_THROTTLE_MS = 2500;
 const DRAFTS_STORAGE_KEY = 'pmc_drafts_v1';
 const VISUAL_MODE_STORAGE_KEY = 'pmc_visual_mode_v1';
 const PERFORMANCE_MODE_STORAGE_KEY = 'pmc_performance_mode_v1';
-const AUTOSAVE_STORAGE_KEY = 'pmc_autosave_v1';
-const AUTOSAVE_MAX_STACK = 40;
 const QUEUE_PRIORITY_ORDER = ['low', 'normal', 'high', 'urgent'];
 const VISUAL_MODES = {
   dark: {
-    label: 'Atlas',
-    themeColor: '#080907',
-    icon: 'radar',
+    label: 'Flux',
+    themeColor: '#0b0614',
+    icon: 'orbit',
   },
   light: {
-    label: 'Paper',
-    themeColor: '#f4eddb',
+    label: 'Soft',
+    themeColor: '#fff4e8',
     icon: 'sun-medium',
   },
   neon: {
-    label: 'Signal',
-    themeColor: '#071109',
-    icon: 'radio-tower',
+    label: 'Laser',
+    themeColor: '#050014',
+    icon: 'sparkles',
   },
   graphite: {
     label: 'Graphite',
@@ -98,10 +85,9 @@ const PINTEREST_LIMITS = {
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   initVisualSystem();
-  initCommandPalette();
   initDynamicHud();
+  initKineticCards();
   loadDrafts();
-  initAutosaveSystem();
   switchTab('dashboard');
   startClock();
   refreshAll({ force: true });
@@ -145,14 +131,7 @@ function bindEvents() {
   on('reset-engagement-guard-btn', 'click', resetEngagementGuard);
   on('clear-engagements-btn', 'click', clearEngagements);
   on('manual-refresh-btn', 'click', () => refreshAll({ force: true }));
-  on('dock-refresh-btn', 'click', () => refreshAll({ force: true }));
   on('visual-mode-btn', 'click', handleVisualModeToggle);
-  on('performance-mode-toggle', 'change', handlePerformanceToggle);
-  on('open-command-palette-btn', 'click', openCommandPalette);
-  on('command-close-btn', 'click', closeCommandPalette);
-  on('command-palette-backdrop', 'click', closeCommandPalette);
-  on('dock-run-ig-scan-btn', 'click', runIgScanNow);
-  on('dock-open-channels-btn', 'click', () => switchTab('channels'));
   on('hero-open-channels-btn', 'click', () => switchTab('channels'));
   on('hero-open-history-btn', 'click', () => switchTab('history'));
   on('hero-refresh-btn', 'click', () => refreshAll({ force: true }));
@@ -201,8 +180,6 @@ function bindEvents() {
   on('history-search', 'input', renderHistoryList);
   on('history-status-filter', 'change', renderHistoryList);
   on('engagement-search', 'input', renderEngagementAuditList);
-  on('autosave-undo-btn', 'click', undoAutosaveSnapshot);
-  on('autosave-redo-btn', 'click', redoAutosaveSnapshot);
 
   on('field-title', 'input', updateComposerMeta);
   on('field-desc', 'input', updateComposerMeta);
@@ -218,11 +195,6 @@ function bindEvents() {
 
   ['wf-pinterest-posting', 'wf-pinterest-engagement'].forEach(id => {
     on(id, 'change', (e) => handleWorkflowToggle(id, e.target.checked));
-  });
-
-  getAutosaveFieldIds().forEach((id) => {
-    on(id, 'input', handleAutosaveTrackedInput);
-    on(id, 'change', handleAutosaveTrackedInput);
   });
 
   document.querySelectorAll('.mobile-tab-btn').forEach((button) => {
@@ -358,9 +330,6 @@ function applyPerformanceMode(enabled, options = {}) {
     document.body.classList.toggle('performance-mode', state.performance.enabled);
   }
 
-  const toggle = byId('performance-mode-toggle');
-  if (toggle) toggle.checked = state.performance.enabled;
-
   if (persist) {
     try {
       localStorage.setItem(PERFORMANCE_MODE_STORAGE_KEY, state.performance.enabled ? '1' : '0');
@@ -377,10 +346,6 @@ function applyPerformanceMode(enabled, options = {}) {
   if (notify) {
     showToast(`Performance mode ${state.performance.enabled ? 'enabled' : 'disabled'}.`, 'info');
   }
-}
-
-function handlePerformanceToggle(event) {
-  applyPerformanceMode(!!event?.target?.checked, { persist: true, notify: true });
 }
 
 function handleVisualModeToggle() {
@@ -587,6 +552,30 @@ function initDynamicHud() {
   state.ui.tickerTimer = setInterval(() => {
     rotateOpsTicker();
   }, 4600);
+}
+
+function initKineticCards() {
+  const cards = Array.from(document.querySelectorAll('[data-kinetic-card]'));
+  cards.forEach((card) => {
+    card.addEventListener('pointermove', (event) => {
+      const rect = card.getBoundingClientRect();
+      const x = rect.width ? (event.clientX - rect.left) / rect.width : 0.5;
+      const y = rect.height ? (event.clientY - rect.top) / rect.height : 0.5;
+      const tiltX = (0.5 - y) * 8;
+      const tiltY = (x - 0.5) * 10;
+      card.style.setProperty('--tilt-x', `${tiltX.toFixed(2)}deg`);
+      card.style.setProperty('--tilt-y', `${tiltY.toFixed(2)}deg`);
+      card.style.setProperty('--glow-x', `${Math.round(x * 100)}%`);
+      card.style.setProperty('--glow-y', `${Math.round(y * 100)}%`);
+    });
+
+    card.addEventListener('pointerleave', () => {
+      card.style.setProperty('--tilt-x', '0deg');
+      card.style.setProperty('--tilt-y', '0deg');
+      card.style.setProperty('--glow-x', '50%');
+      card.style.setProperty('--glow-y', '50%');
+    });
+  });
 }
 
 function updateOpsRibbon(pinterestStatus = {}, systemStatus = {}) {
@@ -1792,7 +1781,7 @@ async function linkIgSession() {
 }
 
 async function runIgScanNow() {
-  const buttons = [byId('run-ig-scan-btn'), byId('channels-scan-now-btn'), byId('dock-run-ig-scan-btn')].filter(Boolean);
+  const buttons = [byId('run-ig-scan-btn'), byId('channels-scan-now-btn')].filter(Boolean);
   const originalHtml = new Map(buttons.map((button) => [button, button.innerHTML]));
 
   buttons.forEach((button) => {
@@ -2397,142 +2386,8 @@ function renderAlertCenter(pinterestStatus = {}, systemStatus = {}) {
   });
 }
 
-function getCommandItems() {
-  return [
-    { title: 'Open Dashboard', meta: 'Tab', run: () => switchTab('dashboard') },
-    { title: 'Open Target Channels', meta: 'Tab', run: () => switchTab('channels') },
-    { title: 'Open Queue', meta: 'Tab', run: () => switchTab('queue') },
-    { title: 'Open Pinterest Builder', meta: 'Tab', run: () => switchTab('pinterest') },
-    { title: 'Open History', meta: 'Tab', run: () => switchTab('history') },
-    { title: 'Open Settings', meta: 'Tab', run: () => switchTab('settings') },
-    { title: 'Refresh Everything', meta: 'Action', run: () => refreshAll({ force: true }) },
-    { title: 'Run IG Repost Scan', meta: 'Action', run: () => runIgScanNow() },
-    { title: 'Run Queue Bot', meta: 'Action', run: () => processQueueNow() },
-    { title: 'Retry Failed Queue Items', meta: 'Action', run: () => retryFailed() },
-    { title: 'Toggle Performance Mode', meta: 'System', run: () => applyPerformanceMode(!state.performance.enabled, { persist: true, notify: true }) },
-    { title: 'Cycle Visual Theme', meta: 'System', run: () => handleVisualModeToggle() },
-    { title: 'Create Queue Snapshot', meta: 'Safety', run: () => createQueueSnapshot('manual') },
-    { title: 'Restore Latest Queue Snapshot', meta: 'Safety', run: () => restoreLatestQueueSnapshot() },
-    { title: 'Create History Snapshot', meta: 'Safety', run: () => createHistorySnapshot('manual') },
-    { title: 'Restore Latest History Snapshot', meta: 'Safety', run: () => restoreLatestHistorySnapshot() },
-  ];
-}
-
-function initCommandPalette() {
-  const input = byId('command-input');
-  if (input) {
-    input.addEventListener('input', renderCommandResults);
-    input.addEventListener('keydown', handleCommandInputKeydown);
-  }
-}
-
-function openCommandPalette() {
-  const root = byId('command-palette');
-  const input = byId('command-input');
-  if (!root || !input) return;
-  root.classList.remove('hidden');
-  state.commandPalette.open = true;
-  state.commandPalette.activeIndex = 0;
-  input.value = '';
-  renderCommandResults();
-  setTimeout(() => input.focus(), 0);
-}
-
-function closeCommandPalette() {
-  const root = byId('command-palette');
-  if (!root) return;
-  root.classList.add('hidden');
-  state.commandPalette.open = false;
-}
-
-function renderCommandResults() {
-  const resultsEl = byId('command-results');
-  const input = byId('command-input');
-  if (!resultsEl || !input) return;
-
-  const query = String(input.value || '').trim().toLowerCase();
-  const all = getCommandItems();
-  const results = all.filter((item) => {
-    if (!query) return true;
-    return `${item.title} ${item.meta}`.toLowerCase().includes(query);
-  });
-
-  state.commandPalette.results = results;
-  if (state.commandPalette.activeIndex >= results.length) state.commandPalette.activeIndex = 0;
-
-  if (!results.length) {
-    resultsEl.innerHTML = '<div class="pulse-item">No command found.</div>';
-    return;
-  }
-
-  resultsEl.innerHTML = results.map((item, index) => `
-    <button class="command-item ${index === state.commandPalette.activeIndex ? 'active' : ''}" type="button" data-command-index="${index}">
-      <span>
-        <span class="command-item-title">${escHtml(item.title)}</span>
-        <span class="command-item-meta">${escHtml(item.meta)}</span>
-      </span>
-      <span class="badge">${index === state.commandPalette.activeIndex ? 'ENTER' : ''}</span>
-    </button>
-  `).join('');
-
-  resultsEl.querySelectorAll('[data-command-index]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const index = Number(button.getAttribute('data-command-index'));
-      runPaletteCommand(index);
-    });
-  });
-}
-
-function handleCommandInputKeydown(event) {
-  if (!state.commandPalette.open) return;
-  const max = state.commandPalette.results.length - 1;
-  if (event.key === 'ArrowDown') {
-    event.preventDefault();
-    state.commandPalette.activeIndex = Math.min(max, state.commandPalette.activeIndex + 1);
-    renderCommandResults();
-    return;
-  }
-  if (event.key === 'ArrowUp') {
-    event.preventDefault();
-    state.commandPalette.activeIndex = Math.max(0, state.commandPalette.activeIndex - 1);
-    renderCommandResults();
-    return;
-  }
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    runPaletteCommand(state.commandPalette.activeIndex);
-    return;
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    closeCommandPalette();
-  }
-}
-
-function runPaletteCommand(index) {
-  const item = state.commandPalette.results[index];
-  if (!item) return;
-  closeCommandPalette();
-  try {
-    item.run();
-  } catch (error) {
-    showToast(error.message || 'Command failed.', 'error');
-  }
-}
-
 function handleGlobalKeyDown(event) {
-  const key = String(event.key || '').toLowerCase();
-  if ((event.ctrlKey || event.metaKey) && key === 'k') {
-    event.preventDefault();
-    openCommandPalette();
-    return;
-  }
-
   if (event.key === 'Escape') {
-    if (state.commandPalette.open) {
-      closeCommandPalette();
-      return;
-    }
     setPreviewScrollLock(false);
   }
 }
@@ -2647,155 +2502,6 @@ function updateComposerMeta() {
   } else {
     setInputMetaState('field-link-meta', 'Valid destination URL.', 'success');
   }
-}
-
-function getAutosaveFieldIds() {
-  return [
-    'reel-url',
-    'field-title',
-    'field-desc',
-    'field-link',
-    'field-alt',
-    'session-cookie',
-    'ig-session-cookie',
-    'engage-niche',
-    'engage-count-manual',
-    'engage-comment-target',
-    'new-channel-input',
-  ];
-}
-
-function readAutosaveValues() {
-  const values = {};
-  getAutosaveFieldIds().forEach((id) => {
-    const el = byId(id);
-    if (!el) return;
-    values[id] = String(el.value ?? '');
-  });
-  return values;
-}
-
-function writeAutosaveValues(values = {}) {
-  state.autosave.applying = true;
-  getAutosaveFieldIds().forEach((id) => {
-    const el = byId(id);
-    if (!el) return;
-    if (Object.prototype.hasOwnProperty.call(values, id)) {
-      el.value = String(values[id] ?? '');
-    }
-  });
-  state.autosave.applying = false;
-
-  updateComposerMeta();
-
-  const manualCount = byId('engage-count-manual');
-  const dashboardCount = byId('engage-count');
-  if (manualCount && dashboardCount) dashboardCount.value = manualCount.value;
-  setText('engage-count-value', manualCount?.value || '');
-  setText('engage-count-value-dashboard', dashboardCount?.value || manualCount?.value || '');
-}
-
-function snapshotHash(values) {
-  return JSON.stringify(values);
-}
-
-function updateAutosaveStatus(text, tone = '') {
-  const status = byId('autosave-status');
-  if (!status) return;
-  status.textContent = text;
-  status.className = 'input-meta';
-  if (tone) status.classList.add(tone);
-}
-
-function persistAutosave() {
-  const payload = {
-    values: readAutosaveValues(),
-    undoStack: state.autosave.undoStack.slice(-AUTOSAVE_MAX_STACK),
-    redoStack: state.autosave.redoStack.slice(-AUTOSAVE_MAX_STACK),
-    savedAt: new Date().toISOString(),
-  };
-  try {
-    localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function pushAutosaveSnapshot(values, label = 'Saved') {
-  const hash = snapshotHash(values);
-  const previous = state.autosave.undoStack[state.autosave.undoStack.length - 1];
-  if (previous && snapshotHash(previous.values) === hash) return;
-
-  state.autosave.undoStack.push({
-    values,
-    at: Date.now(),
-  });
-  if (state.autosave.undoStack.length > AUTOSAVE_MAX_STACK) {
-    state.autosave.undoStack = state.autosave.undoStack.slice(-AUTOSAVE_MAX_STACK);
-  }
-  state.autosave.redoStack = [];
-  persistAutosave();
-  updateAutosaveStatus(`${label} ${formatTime12h(new Date())}`, 'success');
-}
-
-function handleAutosaveTrackedInput() {
-  if (state.autosave.applying) return;
-  if (state.autosave.timer) clearTimeout(state.autosave.timer);
-  state.autosave.timer = setTimeout(() => {
-    const values = readAutosaveValues();
-    pushAutosaveSnapshot(values, 'Autosaved');
-  }, 300);
-}
-
-function initAutosaveSystem() {
-  let payload = null;
-  try {
-    payload = JSON.parse(localStorage.getItem(AUTOSAVE_STORAGE_KEY) || 'null');
-  } catch {
-    payload = null;
-  }
-
-  if (payload && payload.values && typeof payload.values === 'object') {
-    writeAutosaveValues(payload.values);
-  }
-
-  state.autosave.undoStack = Array.isArray(payload?.undoStack) ? payload.undoStack.slice(-AUTOSAVE_MAX_STACK) : [];
-  state.autosave.redoStack = Array.isArray(payload?.redoStack) ? payload.redoStack.slice(-AUTOSAVE_MAX_STACK) : [];
-
-  if (!state.autosave.undoStack.length) {
-    pushAutosaveSnapshot(readAutosaveValues(), 'Autosave baseline');
-  } else {
-    updateAutosaveStatus(`Restored ${formatTime12h(payload?.savedAt || new Date())}`, 'success');
-  }
-}
-
-function undoAutosaveSnapshot() {
-  if (state.autosave.undoStack.length <= 1) {
-    showToast('No more undo history.', 'info');
-    return;
-  }
-
-  const current = state.autosave.undoStack.pop();
-  if (current) state.autosave.redoStack.push(current);
-  const previous = state.autosave.undoStack[state.autosave.undoStack.length - 1];
-  if (!previous) return;
-  writeAutosaveValues(previous.values || {});
-  persistAutosave();
-  updateAutosaveStatus(`Undo ${formatTime12h(new Date())}`, 'warn');
-}
-
-function redoAutosaveSnapshot() {
-  if (!state.autosave.redoStack.length) {
-    showToast('No redo history.', 'info');
-    return;
-  }
-
-  const next = state.autosave.redoStack.pop();
-  if (!next) return;
-  state.autosave.undoStack.push(next);
-  writeAutosaveValues(next.values || {});
-  persistAutosave();
-  updateAutosaveStatus(`Redo ${formatTime12h(new Date())}`, 'warn');
 }
 
 function countWords(text) {
