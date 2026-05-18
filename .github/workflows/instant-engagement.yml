@@ -2,8 +2,11 @@ name: Instant Pinterest Engagement (Algorithm Booster)
 
 on:
   schedule:
-    # Dedicated hourly engagement wake-up. Runs separately from posting/FirePost.
+    # Dedicated hourly engagement wake-up with close backup wakes. The
+    # engagement guard skips backups if the first run already completed.
     - cron: '23 * * * *'
+    - cron: '33 * * * *'
+    - cron: '53 * * * *'
   workflow_dispatch:
     inputs:
       like_target:

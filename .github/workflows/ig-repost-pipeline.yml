@@ -2,8 +2,9 @@ name: Instagram Repost Pipeline
 
 on:
   schedule:
-    # Every 2 hours on off-peak minutes. The second entry is a backup wake-up;
-    # the pipeline skips if a successful/partial scan already ran recently.
+    # Every 2 hours with in-hour backup wake-ups. The pipeline skips if a
+    # successful/partial scan already ran recently, so backup wakes are safe.
+    - cron: '7 */2 * * *'
     - cron: '17 */2 * * *'
     - cron: '47 */2 * * *'
   workflow_dispatch:
