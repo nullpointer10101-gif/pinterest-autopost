@@ -60,10 +60,15 @@ const DEFAULT_STATE = {
   workflowConfig: {
     pinterestPosting: true,
     pinterestEngagement: true,
-    xPosting: true,
-    xEngagement: true,
   },
 };
+
+function normalizeWorkflowConfig(config = {}) {
+  return {
+    pinterestPosting: config.pinterestPosting !== false,
+    pinterestEngagement: config.pinterestEngagement !== false,
+  };
+}
 
 function cloneDefault() {
   return JSON.parse(JSON.stringify(DEFAULT_STATE));
@@ -92,8 +97,7 @@ async function readState() {
       ...(state?.automation || {}),
     },
     workflowConfig: {
-      ...DEFAULT_STATE.workflowConfig,
-      ...(state?.workflowConfig || {}),
+      ...normalizeWorkflowConfig(state?.workflowConfig || DEFAULT_STATE.workflowConfig),
     },
   };
 }
@@ -431,16 +435,15 @@ async function resetEngagementAutomationState(options = {}) {
 
 async function getWorkflowConfig() {
   const state = await readState();
-  return state.workflowConfig || { ...DEFAULT_STATE.workflowConfig };
+  return normalizeWorkflowConfig(state.workflowConfig || DEFAULT_STATE.workflowConfig);
 }
 
 async function setWorkflowConfig(config) {
   const state = await readState();
-  state.workflowConfig = {
-    ...DEFAULT_STATE.workflowConfig,
+  state.workflowConfig = normalizeWorkflowConfig({
     ...(state.workflowConfig || {}),
     ...config,
-  };
+  });
   await writeState(state);
   return state.workflowConfig;
 }

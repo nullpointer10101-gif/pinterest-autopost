@@ -11,7 +11,6 @@ const systemRoutes = require('./system');
 const historyRoutes = require('./history');
 const automationRoutes = require('./automation');
 const autopostRoutes = require('./autopost');
-const xApiRoutes = require('./xApi');
 const igTrackerRoutes = require('./igTrackerApi');
 
 // Mount sub-routers - System first for priority
@@ -34,7 +33,6 @@ router.use('/', historyRoutes);
 router.use('/autopost', autopostRoutes);
 router.use('/queue', queueRoutes);
 router.use('/automation', automationRoutes);
-router.use('/x', xApiRoutes);
 router.use('/ig-tracker', igTrackerRoutes);
 
 module.exports = router;
