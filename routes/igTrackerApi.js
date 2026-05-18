@@ -79,7 +79,7 @@ router.post('/channels', async (req, res) => {
       return res.status(400).json({ success: false, error: 'username or URL is required' });
     }
 
-    const account = await igRepostService.addChannel(rawInput);
+    const account = await igRepostService.addChannel(rawInput, { rejectExisting: true });
     const username = account.username;
 
     try {
@@ -116,6 +116,14 @@ router.post('/channels', async (req, res) => {
       message: `Channel @${username} added. Independent validation repost has started.`,
     });
   } catch (err) {
+    if (err.code === 'DUPLICATE_ACCOUNT') {
+      return res.status(409).json({
+        success: false,
+        error: err.message,
+        code: err.code,
+        username: err.username,
+      });
+    }
     res.status(500).json({ success: false, error: err.message });
   }
 });

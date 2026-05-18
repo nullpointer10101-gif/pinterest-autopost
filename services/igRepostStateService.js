@@ -227,6 +227,14 @@ async function addAccount(input, options = {}) {
   if (!username) throw new Error('Invalid username or Instagram URL');
 
   const state = await readState();
+  const alreadyExists = !!state.accounts[username];
+  if (alreadyExists && options.rejectExisting) {
+    const err = new Error(`@${username} is already in target channels.`);
+    err.code = 'DUPLICATE_ACCOUNT';
+    err.username = username;
+    throw err;
+  }
+
   const account = ensureAccountRecord(state, username);
   const now = nowIso();
 
@@ -243,9 +251,15 @@ async function addAccount(input, options = {}) {
     account.profilePicUrl = options.profilePicUrl;
   }
 
-  appendLogToState(state, 'info', 'account.added', `Added @${username} to the IG repost pipeline.`, {
-    username,
-  });
+  appendLogToState(
+    state,
+    'info',
+    alreadyExists ? 'account.updated' : 'account.added',
+    alreadyExists
+      ? `Updated @${username} in the IG repost pipeline.`
+      : `Added @${username} to the IG repost pipeline.`,
+    { username }
+  );
 
   await writeState(state);
   return clone(account);

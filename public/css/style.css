@@ -8824,3 +8824,144 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Channel UX hardening: clean rows, real avatars, no stacked-letter cards. */
+.channel-list-grid {
+  grid-template-columns: 1fr !important;
+  align-items: start;
+  min-height: 0;
+}
+
+.channel-card {
+  border: 1px solid var(--line-weak);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(255, 122, 26, 0.12), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.07), transparent 48%),
+    rgba(255, 255, 255, 0.028);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  min-width: 0;
+}
+
+.channel-card:hover {
+  border-color: var(--line-strong);
+}
+
+.channel-card-profile {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+
+.channel-card-copy {
+  min-width: 0;
+}
+
+.channel-card .channel-avatar,
+.channel-card .avatar-circle {
+  width: 58px;
+  height: 58px;
+}
+
+.channel-card .avatar-circle {
+  border-color: rgba(255, 176, 0, 0.34);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.22), transparent 30%),
+    linear-gradient(135deg, var(--accent), var(--accent-3));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.channel-card .avatar-fallback {
+  font-family: var(--display-font);
+  font-size: 1.15rem;
+  color: #1d1300;
+}
+
+.channel-card .avatar-img {
+  position: relative;
+  z-index: 1;
+}
+
+.channel-avatar[data-avatar-state="loading"]::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-top-color: var(--accent);
+  animation: orbitSpin 900ms linear infinite;
+}
+
+.channel-username {
+  max-width: 100%;
+  font-family: var(--display-font);
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+  letter-spacing: -0.03em;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.channel-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.channel-card-actions .badge,
+.channel-card-actions .pill-btn,
+.channel-card-actions .btn {
+  white-space: nowrap;
+}
+
+.channel-card-actions .pill-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 760px) {
+  .flow-board,
+  .signal-alerts {
+    display: none !important;
+  }
+
+  .channel-list-grid {
+    border: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  .channel-card {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 13px;
+    border-radius: 22px;
+  }
+
+  .channel-card-profile {
+    align-items: flex-start;
+  }
+
+  .channel-card .channel-avatar,
+  .channel-card .avatar-circle {
+    width: 52px;
+    height: 52px;
+  }
+
+  .channel-card-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .channel-card-actions .pill-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    text-align: center;
+  }
+}

@@ -752,7 +752,10 @@ async function getStatus() {
 }
 
 async function addChannel(input, options = {}) {
-  const account = await stateService.addAccount(input, options);
+  const account = await stateService.addAccount(input, {
+    ...options,
+    rejectExisting: options.rejectExisting === true,
+  });
   return account;
 }
 
