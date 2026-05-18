@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Pipeline mode: scan, validate, process-queue, cover-test'
+        description: 'Pipeline mode: scan, validate, process-queue, sync-avatars, cover-test'
         required: false
         default: 'scan'
       username:
@@ -75,6 +75,7 @@ jobs:
           IG_REPOST_INSTAGRAM_SESSION_COOKIE: ${{ secrets.IG_REPOST_INSTAGRAM_SESSION_COOKIE }}
           INSTAGRAM_SESSION_COOKIE: ${{ secrets.INSTAGRAM_SESSION_COOKIE }}
           APP_IG_REPOST_STATE_KEY: ${{ secrets.APP_IG_REPOST_STATE_KEY || 'ig_repost_pipeline_state_v1' }}
+          APP_IG_TRACKER_STATE_KEY: ${{ secrets.APP_IG_TRACKER_STATE_KEY || 'ig_tracker_state_v1' }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
