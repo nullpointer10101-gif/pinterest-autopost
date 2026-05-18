@@ -5,6 +5,7 @@ node_modules/
 .env
 .env.local
 .env.production
+.env.vercel*
 
 # Local database (ephemeral — persisted via Vercel KV or /tmp in production)
 data/db.json
@@ -14,6 +15,15 @@ data/*.json
 *.log
 npm-debug.log*
 logs/
+public/logs/
+debug_screenshots/
+debug_screenshots.zip
+ig-repost-run-*/
+ig-repost-run-*.zip
+job_log_*.txt
+status.txt
+temp_out.html
+test.html
 
 # Local secrets / scratch
 UPSTASH_CREDENTIALS.txt

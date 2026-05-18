@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const axios = require('axios');
+const persistencePolicy = require('./persistencePolicy');
 
 let puppeteer = null;
 try {
@@ -816,11 +817,13 @@ async function verifyPublished(page) {
 }
 
 async function saveDebugSnapshot(page, prefix) {
+  if (!persistencePolicy.canWriteLocalDebugArtifacts()) {
+    return;
+  }
+
   try {
     const logsDir = path.join(process.cwd(), 'public', 'logs');
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
-    }
+    persistencePolicy.ensureDir(logsDir);
 
     const stamp = `${prefix}_${Date.now()}`;
     await page.screenshot({

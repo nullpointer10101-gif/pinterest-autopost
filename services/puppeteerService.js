@@ -14,6 +14,7 @@ const axios = require('axios');
 const os = require('os');
 const historyService = require('./historyService');
 const aiService = require('./aiService');
+const persistencePolicy = require('./persistencePolicy');
 
 function getDefaultChromeUserDataDir() {
   if (process.env.CHROME_USER_DATA_DIR) return process.env.CHROME_USER_DATA_DIR;
@@ -156,6 +157,41 @@ function randomInt(min, max) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getLocalDebugLogsDir() {
+  return path.join(process.cwd(), 'public', 'logs');
+}
+
+async function saveLocalDebugScreenshot(page, filename, fullPage = false) {
+  if (!persistencePolicy.canWriteLocalDebugArtifacts() || !page) return '';
+
+  try {
+    const debugDir = getLocalDebugLogsDir();
+    persistencePolicy.ensureDir(debugDir);
+    const screenshotPath = path.join(debugDir, filename);
+    await page.screenshot({ path: screenshotPath, fullPage });
+    return screenshotPath;
+  } catch {
+    return '';
+  }
+}
+
+async function saveLocalDebugScreenshotAndHtml(page, filenameBase) {
+  if (!persistencePolicy.canWriteLocalDebugArtifacts() || !page) return '';
+
+  try {
+    const debugDir = getLocalDebugLogsDir();
+    persistencePolicy.ensureDir(debugDir);
+    const screenshotPath = path.join(debugDir, `${filenameBase}.png`);
+    const htmlPath = path.join(debugDir, `${filenameBase}.html`);
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    const dom = await page.evaluate(() => document.documentElement.outerHTML);
+    fs.writeFileSync(htmlPath, dom);
+    return debugDir;
+  } catch {
+    return '';
+  }
 }
 
 function buildCommentPool() {
@@ -400,11 +436,7 @@ async function createPinWithBot(pinData) {
     }
 
     // Take a screenshot immediately after page load to see what was loaded
-    try {
-      const _scDir = path.join(process.cwd(), 'public', 'logs');
-      if (!fs.existsSync(_scDir)) fs.mkdirSync(_scDir, { recursive: true });
-      await page.screenshot({ path: path.join(_scDir, `page_loaded_${Date.now()}.png`), fullPage: false });
-    } catch (_e) {}
+    await saveLocalDebugScreenshot(page, `page_loaded_${Date.now()}.png`);
 
     // 3. Upload Media (with retry)
     console.log('[Bot] Uploading media file...');
@@ -472,11 +504,7 @@ async function createPinWithBot(pinData) {
       }
 
       // Take a debug screenshot before retry
-      try {
-        const _scDir = path.join(process.cwd(), 'public', 'logs');
-        if (!fs.existsSync(_scDir)) fs.mkdirSync(_scDir, { recursive: true });
-        await page.screenshot({ path: path.join(_scDir, `upload_fail_${Date.now()}.png`), fullPage: true });
-      } catch (_e) {}
+      await saveLocalDebugScreenshot(page, `upload_fail_${Date.now()}.png`, true);
 
       if (uploadAttempt < 3) {
         console.log(`[Bot] ⚠️ Upload not detected (${mediaUploaded}) — reloading page and retrying...`);
@@ -1036,11 +1064,7 @@ async function createPinWithBot(pinData) {
     await new Promise(r => setTimeout(r, 1000));
 
     // Take a screenshot before clicking Publish to verify page state
-    try {
-      const _scDir = path.join(process.cwd(), 'public', 'logs');
-      if (!fs.existsSync(_scDir)) fs.mkdirSync(_scDir, { recursive: true });
-      await page.screenshot({ path: path.join(_scDir, `pre_publish_${Date.now()}.png`), fullPage: true });
-    } catch (_e) {}
+    await saveLocalDebugScreenshot(page, `pre_publish_${Date.now()}.png`, true);
     
     const publishResult = await page.evaluate(() => {
       // 1. Try precise data-test-id selectors first (most reliable)
@@ -1243,6 +1267,7 @@ async function createPinWithBot(pinData) {
     // Take a screenshot
     try {
         const scDir = path.join(process.cwd(), 'public', 'logs');
+        if (!persistencePolicy.canWriteLocalDebugArtifacts()) throw new Error('Local debug artifacts disabled');
         if (!fs.existsSync(scDir)) fs.mkdirSync(scDir, { recursive: true });
         const scPath = path.join(scDir, `after_publish_click_${Date.now()}.png`);
         await page.screenshot({ path: scPath, fullPage: true });
@@ -1298,6 +1323,7 @@ async function createPinWithBot(pinData) {
       // Take a debug screenshot and dump DOM
       try {
           const scDir = path.join(process.cwd(), 'public', 'logs');
+          if (!persistencePolicy.canWriteLocalDebugArtifacts()) throw new Error('Local debug artifacts disabled');
           if (!fs.existsSync(scDir)) fs.mkdirSync(scDir, { recursive: true });
           const scPath = path.join(scDir, `fail_verification_${Date.now()}.png`);
           const htmlPath = path.join(scDir, `fail_verification_${Date.now()}.html`);
@@ -1322,13 +1348,15 @@ async function createPinWithBot(pinData) {
   } catch (error) {
     console.error('[Bot] ❌ Error during automation:', error);
     // Take a screenshot on failure to debug if needed
-    try {
-      if (page) {
-        const screenshotPath = path.join(os.tmpdir(), 'error_screenshot.png');
-        await page.screenshot({ path: screenshotPath });
-        console.log(`[Bot] Saved error screenshot to ${screenshotPath}`);
-      }
-    } catch (e) {}
+    if (persistencePolicy.canWriteLocalDebugArtifacts()) {
+      try {
+        if (page) {
+          const screenshotPath = path.join(os.tmpdir(), 'error_screenshot.png');
+          await page.screenshot({ path: screenshotPath });
+          console.log(`[Bot] Saved error screenshot to ${screenshotPath}`);
+        }
+      } catch (e) {}
+    }
     throw new Error(`Browser Bot failed: ${error.message}`);
   } finally {
     // Cleanup temp files

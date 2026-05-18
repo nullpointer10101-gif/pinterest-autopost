@@ -3,45 +3,30 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Strategy:
  *   PRIMARY  : Upstash Redis (when UPSTASH_REDIS_REST_URL + TOKEN configured)
- *   BACKUP   : Local JSON file (always kept in sync as a fallback copy)
+ *   LOCAL    : Optional JSON fallback only when external-only mode is disabled
  *
  * Rules:
- *   SAVE  → write to Upstash first; if OK, also write local backup
- *           if Upstash fails, write local only (so data is never lost)
+ *   SAVE  → write to Upstash first
+ *           if local fallback is enabled, also write local backup
+ *           if external-only mode is active, never write to disk
  *   LOAD  → read Upstash; validate it is a real JSON object (not a string/null)
- *           if invalid or Upstash unreachable, read local backup
- *           if local backup has good data, heal Upstash by writing it back
+ *           if local fallback is enabled, local backup can heal Upstash
+ *           if external-only mode is active, never read state from disk
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 'use strict';
 
-const fs   = require('fs');
-const path = require('path');
-const os   = require('os');
+const fs = require('fs');
+const persistencePolicy = require('./persistencePolicy');
 
-const IS_SERVERLESS = !!(
-  process.env.VERCEL ||
-  process.env.AWS_LAMBDA_FUNCTION_NAME ||
-  process.env.NETLIFY
-);
+const { IS_SERVERLESS, UPSTASH_URL, UPSTASH_TOKEN, USE_UPSTASH } = persistencePolicy;
 
-const dataDir = IS_SERVERLESS
-  ? path.join(os.tmpdir(), 'pinterest-autoposter')
-  : path.join(__dirname, '..', 'data');
-
-const LOCAL_STATE_FILE = path.join(dataDir, 'state.json');
+const LOCAL_STATE_FILE = persistencePolicy.getStateFilePath('state.json');
 const APP_STATE_KEY    = process.env.APP_STATE_KEY || 'pinterest_autopost_state_v1';
 
-const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL   || '';
-const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
-const USE_UPSTASH   = !!(UPSTASH_URL && UPSTASH_TOKEN);
-
-// Ensure data dir exists (no-op on serverless /tmp)
-if (!IS_SERVERLESS) {
-  try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
-} else {
-  try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
+if (persistencePolicy.isLocalStateEnabled()) {
+  try { persistencePolicy.ensureParentDir(LOCAL_STATE_FILE); } catch {}
 }
 
 // ── Upstash REST helper ───────────────────────────────────────────────────────
@@ -76,6 +61,7 @@ async function runUpstashCommand(command) {
 
 function readLocalStateSync() {
   try {
+    if (!persistencePolicy.isLocalStateEnabled()) return null;
     if (!fs.existsSync(LOCAL_STATE_FILE)) return null;
     const raw = fs.readFileSync(LOCAL_STATE_FILE, 'utf8').trim();
     const parsed = JSON.parse(raw);
@@ -88,6 +74,7 @@ function readLocalStateSync() {
 
 function writeLocalStateSync(state) {
   try {
+    if (!persistencePolicy.isLocalStateEnabled()) return;
     if (!state || typeof state !== 'object') return;
     fs.writeFileSync(LOCAL_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
   } catch (e) {
@@ -128,15 +115,12 @@ async function loadState(defaultState = {}) {
 
       // raw is null → key doesn't exist yet
       if (raw === null) {
-        // Try local backup first, then default
+        let result = JSON.parse(JSON.stringify(defaultState));
         const local = readLocalStateSync();
-        let result;
-        if (isValidState(local)) {
+        if (persistencePolicy.isLocalStateEnabled() && isValidState(local)) {
           console.log('[Storage] Upstash key missing — restoring from local backup.');
           await runUpstashCommand(['SET', APP_STATE_KEY, JSON.stringify(local)]).catch(() => {});
           result = local;
-        } else {
-          result = JSON.parse(JSON.stringify(defaultState));
         }
         _memoryCache = result;
         _memoryCacheTime = Date.now();
@@ -157,20 +141,18 @@ async function loadState(defaultState = {}) {
 
       let finalResult;
       if (isValidState(parsed)) {
-        // Good Upstash data — also refresh local backup
+        // Good Upstash data — refresh local backup only when explicitly allowed
         writeLocalStateSync(parsed);
         finalResult = parsed;
       } else {
-        // Upstash has corrupt/invalid data — try local backup to heal it
-        console.warn('[Storage] Upstash returned invalid state (got:', typeof parsed, ') — checking local backup...');
+        console.warn('[Storage] Upstash returned invalid state (got:', typeof parsed, ').');
         const local = readLocalStateSync();
-        if (isValidState(local)) {
+        if (persistencePolicy.isLocalStateEnabled() && isValidState(local)) {
           console.log('[Storage] Healing Upstash with local backup data...');
           await runUpstashCommand(['SET', APP_STATE_KEY, JSON.stringify(local)]).catch(() => {});
           finalResult = local;
         } else {
-          // Both corrupt — return default
-          console.warn('[Storage] Both Upstash and local backup are invalid. Starting fresh.');
+          console.warn('[Storage] No valid local backup available. Starting fresh.');
           finalResult = JSON.parse(JSON.stringify(defaultState));
         }
       }
@@ -180,6 +162,9 @@ async function loadState(defaultState = {}) {
       return finalResult;
 
     } catch (err) {
+      if (!persistencePolicy.isLocalStateEnabled()) {
+        throw new Error(`[Storage] Upstash read failed in external-only mode: ${err.message}`);
+      }
       console.warn('[Storage] Upstash read failed:', err.message, '— falling back to local file.');
     }
   }
@@ -213,10 +198,12 @@ async function saveState(state) {
   if (USE_UPSTASH) {
     try {
       await runUpstashCommand(['SET', APP_STATE_KEY, JSON.stringify(state)]);
-      // Write-through: keep local backup in sync
       writeLocalStateSync(state);
       return;
     } catch (err) {
+      if (!persistencePolicy.isLocalStateEnabled()) {
+        throw new Error(`[Storage] Upstash write failed in external-only mode: ${err.message}`);
+      }
       console.warn('[Storage] Upstash write failed:', err.message, '— saving to local file only.');
     }
   }
@@ -226,10 +213,12 @@ async function saveState(state) {
 
 function getStorageInfo() {
   return {
-    mode: USE_UPSTASH ? 'upstash' : (IS_SERVERLESS ? 'local-ephemeral' : 'local-file'),
+    mode: persistencePolicy.getStorageMode(),
     localStateFile: LOCAL_STATE_FILE,
     appStateKey: APP_STATE_KEY,
     isServerless: IS_SERVERLESS,
+    localStateEnabled: persistencePolicy.isLocalStateEnabled(),
+    externalStateOnly: persistencePolicy.isExternalStateOnly(),
   };
 }
 

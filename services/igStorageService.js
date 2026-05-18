@@ -1,21 +1,13 @@
 const fs = require('fs');
-const path = require('path');
-const os = require('os');
 const axios = require('axios');
+const persistencePolicy = require('./persistencePolicy');
 
-const IS_SERVERLESS = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
-const dataDir = IS_SERVERLESS
-  ? path.join(os.tmpdir(), 'pinterest-autoposter')
-  : path.join(__dirname, '..', 'data');
-const LOCAL_STATE_FILE = path.join(dataDir, 'ig-tracker-state.json');
+const { IS_SERVERLESS, UPSTASH_URL, UPSTASH_TOKEN, USE_UPSTASH } = persistencePolicy;
+const LOCAL_STATE_FILE = persistencePolicy.getStateFilePath('ig-tracker-state.json');
 const APP_STATE_KEY = process.env.APP_IG_TRACKER_STATE_KEY || 'ig_tracker_state_v1';
 
-const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL || '';
-const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
-const USE_UPSTASH = !!(UPSTASH_URL && UPSTASH_TOKEN);
-
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+if (persistencePolicy.isLocalStateEnabled()) {
+  persistencePolicy.ensureParentDir(LOCAL_STATE_FILE);
 }
 
 async function runUpstashCommand(command) {
@@ -41,6 +33,7 @@ async function runUpstashCommand(command) {
 
 async function readLocalState() {
   try {
+    if (!persistencePolicy.isLocalStateEnabled()) return null;
     if (!fs.existsSync(LOCAL_STATE_FILE)) return null;
     const raw = await fs.promises.readFile(LOCAL_STATE_FILE, 'utf8');
     return JSON.parse(raw);
@@ -50,6 +43,7 @@ async function readLocalState() {
 }
 
 async function writeLocalState(state) {
+  if (!persistencePolicy.isLocalStateEnabled()) return;
   await fs.promises.writeFile(LOCAL_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
 }
 
@@ -60,6 +54,9 @@ async function loadState(defaultState) {
       if (!raw) return JSON.parse(JSON.stringify(defaultState));
       return JSON.parse(raw);
     } catch (err) {
+      if (!persistencePolicy.isLocalStateEnabled()) {
+        throw new Error(`[IG-Storage] Upstash read failed in external-only mode: ${err.message}`);
+      }
       console.warn('[IG-Storage] Upstash read failed, falling back to local file:', err.message);
     }
   }
@@ -78,6 +75,9 @@ async function saveState(state) {
       await runUpstashCommand(['SET', APP_STATE_KEY, JSON.stringify(state)]);
       return;
     } catch (err) {
+      if (!persistencePolicy.isLocalStateEnabled()) {
+        throw new Error(`[IG-Storage] Upstash write failed in external-only mode: ${err.message}`);
+      }
       console.warn('[IG-Storage] Upstash write failed, falling back to local file:', err.message);
     }
   }
@@ -86,10 +86,12 @@ async function saveState(state) {
 
 function getStorageInfo() {
   return {
-    mode: USE_UPSTASH ? 'upstash' : (IS_SERVERLESS ? 'local-ephemeral' : 'local-file'),
+    mode: persistencePolicy.getStorageMode(),
     localStateFile: LOCAL_STATE_FILE,
     appStateKey: APP_STATE_KEY,
     isServerless: IS_SERVERLESS,
+    localStateEnabled: persistencePolicy.isLocalStateEnabled(),
+    externalStateOnly: persistencePolicy.isExternalStateOnly(),
   };
 }
 

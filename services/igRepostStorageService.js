@@ -1,26 +1,12 @@
 const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const persistencePolicy = require('./persistencePolicy');
 
-const IS_SERVERLESS = !!(
-  process.env.VERCEL ||
-  process.env.AWS_LAMBDA_FUNCTION_NAME ||
-  process.env.NETLIFY
-);
-
-const dataDir = IS_SERVERLESS
-  ? path.join(os.tmpdir(), 'pinterest-autoposter')
-  : path.join(__dirname, '..', 'data');
-
-const LOCAL_STATE_FILE = path.join(dataDir, 'ig-repost-state.json');
+const { IS_SERVERLESS, UPSTASH_URL, UPSTASH_TOKEN, USE_UPSTASH } = persistencePolicy;
+const LOCAL_STATE_FILE = persistencePolicy.getStateFilePath('ig-repost-state.json');
 const APP_STATE_KEY = process.env.APP_IG_REPOST_STATE_KEY || 'ig_repost_pipeline_state_v1';
 
-const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL || '';
-const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
-const USE_UPSTASH = !!(UPSTASH_URL && UPSTASH_TOKEN);
-
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+if (persistencePolicy.isLocalStateEnabled()) {
+  persistencePolicy.ensureParentDir(LOCAL_STATE_FILE);
 }
 
 async function runUpstashCommand(command) {
@@ -53,6 +39,7 @@ async function runUpstashCommand(command) {
 
 function readLocalStateSync() {
   try {
+    if (!persistencePolicy.isLocalStateEnabled()) return null;
     if (!fs.existsSync(LOCAL_STATE_FILE)) return null;
     const raw = fs.readFileSync(LOCAL_STATE_FILE, 'utf8').trim();
     if (!raw) return null;
@@ -65,6 +52,7 @@ function readLocalStateSync() {
 
 function writeLocalStateSync(state) {
   try {
+    if (!persistencePolicy.isLocalStateEnabled()) return;
     if (!state || typeof state !== 'object' || Array.isArray(state)) return;
     fs.writeFileSync(LOCAL_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
   } catch (err) {
@@ -95,7 +83,7 @@ async function loadState(defaultState = {}) {
       if (raw === null) {
         const local = readLocalStateSync();
         const result = isValidState(local) ? local : clone(defaultState);
-        if (isValidState(local)) {
+        if (persistencePolicy.isLocalStateEnabled() && isValidState(local)) {
           await runUpstashCommand(['SET', APP_STATE_KEY, JSON.stringify(local)]).catch(() => {});
         }
         memoryCache = result;
@@ -121,13 +109,16 @@ async function loadState(defaultState = {}) {
 
       const local = readLocalStateSync();
       const healed = isValidState(local) ? local : clone(defaultState);
-      if (isValidState(local)) {
+      if (persistencePolicy.isLocalStateEnabled() && isValidState(local)) {
         await runUpstashCommand(['SET', APP_STATE_KEY, JSON.stringify(local)]).catch(() => {});
       }
       memoryCache = healed;
       memoryCacheTime = Date.now();
       return clone(healed);
     } catch (err) {
+      if (!persistencePolicy.isLocalStateEnabled()) {
+        throw new Error(`[IG-Repost Storage] Upstash read failed in external-only mode: ${err.message}`);
+      }
       console.warn('[IG-Repost Storage] Upstash read failed:', err.message);
     }
   }
@@ -152,6 +143,9 @@ async function saveState(state) {
       writeLocalStateSync(state);
       return;
     } catch (err) {
+      if (!persistencePolicy.isLocalStateEnabled()) {
+        throw new Error(`[IG-Repost Storage] Upstash write failed in external-only mode: ${err.message}`);
+      }
       console.warn('[IG-Repost Storage] Upstash write failed:', err.message);
     }
   }
@@ -200,10 +194,12 @@ async function setJsonKey(key, value, ttlSeconds = 86400) {
 
 function getStorageInfo() {
   return {
-    mode: USE_UPSTASH ? 'upstash' : (IS_SERVERLESS ? 'local-ephemeral' : 'local-file'),
+    mode: persistencePolicy.getStorageMode(),
     localStateFile: LOCAL_STATE_FILE,
     appStateKey: APP_STATE_KEY,
     isServerless: IS_SERVERLESS,
+    localStateEnabled: persistencePolicy.isLocalStateEnabled(),
+    externalStateOnly: persistencePolicy.isExternalStateOnly(),
   };
 }
 
