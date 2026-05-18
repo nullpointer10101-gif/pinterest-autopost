@@ -593,6 +593,10 @@ async function processNextInQueue() {
     item.link = finalLink; // Ensure fire-post.js logs the correct link
     item.completedAt = new Date().toISOString();
 
+    const historyAffiliateLink = finalLink && finalLink !== item.sourceUrl && finalLink !== storefrontUrl
+      ? finalLink
+      : null;
+
     await historyService.add({
       url: item.sourceUrl || '',
       reelData: {
@@ -607,7 +611,7 @@ async function processNextInQueue() {
         description,
         hashtags: aiContent?.hashtags || [],
       },
-      affiliateLink: finalLink !== item.sourceUrl ? finalLink : null,
+      affiliateLink: historyAffiliateLink,
       productInfo: affiliateLinks.length > 0 ? {
         name: outfitName || mainProductName || 'Curated Look',
         outfit: affiliateLinks

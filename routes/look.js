@@ -81,12 +81,23 @@ function normalizePrice(value) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
 }
 
+function isLookPageUrl(value = '') {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    return /^\/look\/[^/]+\/?$/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
 function normalizeOutfitItem(item = {}, index = 0) {
   const rawUrl = String(item.url || item.affiliateUrl || '').trim();
   let safeUrl = rawUrl;
   try {
     const parsed = new URL(rawUrl);
-    safeUrl = ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : '';
+    safeUrl = ['http:', 'https:'].includes(parsed.protocol) && !isLookPageUrl(parsed.toString())
+      ? parsed.toString()
+      : '';
   } catch {
     safeUrl = '';
   }
@@ -184,7 +195,7 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
   const safeThumb = escapeHtml(thumbnailUrl);
   const displayThumbnailUrl = toProxyImageUrl(shortcode, thumbnailUrl) || thumbnailUrl;
   const subtitle = lookData?.aiContent?.description || lookData?.description || lookData?.caption || '';
-  const pieces = outfit.map(normalizeOutfitItem).filter(item => item.name || item.url);
+  const pieces = outfit.map(normalizeOutfitItem).filter(item => item.name && item.url);
   const pricedItems = pieces.filter(item => item.originalPrice);
   const estimate = pricedItems.reduce((sum, item) => sum + item.originalPrice, 0);
   const createdAt = lookData?.createdAt || lookData?.updatedAt || lookData?.reelData?.createdAt || null;
@@ -1615,10 +1626,14 @@ router.get('/:shortcode/products', async (req, res) => {
     let outfit = [];
     if (lookData?.productInfo?.outfit?.length > 0) {
       outfit = lookData.productInfo.outfit;
-    } else if (lookData?.productInfo?.affiliateUrl) {
-      outfit = [{ type: 'Main Piece', name: lookData.productInfo.name || 'Featured Item', url: lookData.productInfo.affiliateUrl, image: null }];
+    } else {
+      const fallbackAffiliateUrl = lookData?.productInfo?.affiliateUrl || lookData?.affiliateLink || '';
+      if (fallbackAffiliateUrl && !isLookPageUrl(fallbackAffiliateUrl)) {
+        outfit = [{ type: 'Main Piece', name: lookData.productInfo?.name || 'Featured Item', url: fallbackAffiliateUrl, image: null }];
+      }
     }
-    return res.json({ found: !!lookData, outfit });
+    const safeOutfit = outfit.map(normalizeOutfitItem).filter(item => item.name && item.url);
+    return res.json({ found: !!lookData, outfit: safeOutfit });
   } catch (err) {
     return res.status(500).json({ found: false, outfit: [], error: err.message });
   }
@@ -1664,14 +1679,17 @@ router.get('/:shortcode', async (req, res) => {
     let outfit = [];
     if (lookData.productInfo?.outfit?.length > 0) {
       outfit = lookData.productInfo.outfit;
-    } else if (lookData.productInfo?.affiliateUrl || lookData.affiliateLink) {
-      outfit = [{
-        type: 'Main Piece',
-        name: lookData.productInfo?.name || lookData.aiContent?.title || 'Featured Item',
-        url: lookData.productInfo?.affiliateUrl || lookData.affiliateLink,
-        image: null,
-        originalPrice: null
-      }];
+    } else {
+      const fallbackAffiliateUrl = lookData.productInfo?.affiliateUrl || lookData.affiliateLink || '';
+      if (fallbackAffiliateUrl && !isLookPageUrl(fallbackAffiliateUrl)) {
+        outfit = [{
+          type: 'Main Piece',
+          name: lookData.productInfo?.name || lookData.aiContent?.title || 'Featured Item',
+          url: fallbackAffiliateUrl,
+          image: null,
+          originalPrice: null
+        }];
+      }
     }
 
     return res.send(buildLookPage({
