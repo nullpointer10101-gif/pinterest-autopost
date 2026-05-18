@@ -31,8 +31,8 @@ jobs:
           path: ~/.cache/puppeteer
           key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install automation dependencies
+        run: npm ci --omit=dev
 
       - name: Install Puppeteer Browser
         if: steps.cache-puppeteer.outputs.cache-hit != 'true'
