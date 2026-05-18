@@ -16,7 +16,27 @@ const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 const IG_SESSION_COOKIE = process.env.INSTAGRAM_SESSION_COOKIE || '';
 const IG_CSRF = (IG_SESSION_COOKIE.match(/csrftoken=([^;]+)/) || [])[1] || '';
 const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN || '';
+const APIFY_API_TOKEN_BACKUP = process.env.APIFY_API_TOKEN_BACKUP || '';
 const MAX_SEEN_PER_CHANNEL = 50;
+
+function getApifyTokenChain() {
+  return [
+    { label: 'primary', token: APIFY_API_TOKEN },
+    { label: 'backup', token: APIFY_API_TOKEN_BACKUP },
+  ].filter((item, index, list) =>
+    item.token && list.findIndex((candidate) => candidate.token === item.token) === index
+  );
+}
+
+function hasApifyToken() {
+  return getApifyTokenChain().length > 0;
+}
+
+function formatApifyError(err) {
+  const status = err.response?.status ? `HTTP ${err.response.status}` : '';
+  const message = err.response?.data?.error?.message || err.response?.data?.message || err.message;
+  return [status, message].filter(Boolean).join(' - ');
+}
 
 
 const DEFAULT_STATE = {
@@ -89,36 +109,44 @@ function pickProfilePicUrl(...values) {
 }
 
 async function fetchProfilePicViaApify(username) {
-  if (!APIFY_API_TOKEN) return null;
+  const tokenChain = getApifyTokenChain();
+  if (tokenChain.length === 0) return null;
 
-  try {
-    console.log(`[IG-Tracker] Fetching profile picture via Apify for @${username}...`);
-    const runRes = await axios.post(
-      `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${APIFY_API_TOKEN}`,
-      { usernames: [username] },
-      { timeout: 45000 }
-    );
+  for (const { label, token } of tokenChain) {
+    try {
+      console.log(`[IG-Tracker] Fetching profile picture via Apify (${label}) for @${username}...`);
+      const runRes = await axios.post(
+        'https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items',
+        { usernames: [username] },
+        {
+          timeout: 45000,
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-    const profile = Array.isArray(runRes.data) ? runRes.data[0] : null;
-    const latestPosts = Array.isArray(profile?.latestPosts) ? profile.latestPosts : [];
-    const profilePicUrl = pickProfilePicUrl(
-      profile?.profilePicUrlHD,
-      profile?.profilePicUrl,
-      profile?.profilePictureUrl,
-      profile?.avatarUrl,
-      profile?.profilePic,
-      latestPosts[0]?.ownerProfilePicUrl,
-      latestPosts[0]?.owner?.profilePicUrl,
-      latestPosts[0]?.owner?.profile_pic_url,
-      latestPosts[0]?.profilePicUrl
-    );
+      const profile = Array.isArray(runRes.data) ? runRes.data[0] : null;
+      const latestPosts = Array.isArray(profile?.latestPosts) ? profile.latestPosts : [];
+      const profilePicUrl = pickProfilePicUrl(
+        profile?.profilePicUrlHD,
+        profile?.profilePicUrl,
+        profile?.profilePictureUrl,
+        profile?.avatarUrl,
+        profile?.profilePic,
+        latestPosts[0]?.ownerProfilePicUrl,
+        latestPosts[0]?.owner?.profilePicUrl,
+        latestPosts[0]?.owner?.profile_pic_url,
+        latestPosts[0]?.profilePicUrl
+      );
 
-    if (profilePicUrl) {
-      await updateChannelMeta(username, { profilePicUrl });
-      return profilePicUrl;
+      if (profilePicUrl) {
+        await updateChannelMeta(username, { profilePicUrl });
+        return profilePicUrl;
+      }
+
+      console.log(`[IG-Tracker] Apify (${label}) returned no profile picture for @${username}.`);
+    } catch (err) {
+      console.log(`[IG-Tracker] Apify (${label}) profile picture failed for @${username}: ${formatApifyError(err)}`);
     }
-  } catch (err) {
-    console.log(`[IG-Tracker] Apify profile picture failed for @${username}: ${err.message}`);
   }
 
   return null;
@@ -612,59 +640,71 @@ async function fetchViaRapidAPI(username) {
  * Uses the official Apify API to fetch profile reels.
  */
 async function fetchViaApify(username) {
-  if (!APIFY_API_TOKEN) return [];
-  try {
-    console.log(`[IG-Tracker] Fetching via Apify for @${username}...`);
-    // Using apify/instagram-profile-scraper
-    const runRes = await axios.post(
-      `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${APIFY_API_TOKEN}`,
-      {
-        usernames: [username],
-      },
-      { timeout: 90000 } // Apify can take a bit to spin up and scrape
-    );
+  const tokenChain = getApifyTokenChain();
+  if (tokenChain.length === 0) return [];
 
-    const items = runRes.data || [];
-    if (items.length === 0 || !items[0].latestPosts) return [];
-    const profile = items[0] || {};
-    const profilePicUrl = pickProfilePicUrl(
-      profile.profilePicUrlHD,
-      profile.profilePicUrl,
-      profile.profilePictureUrl,
-      profile.avatarUrl,
-      profile.profilePic
-    );
-
-    if (profilePicUrl) {
-      await updateChannelMeta(username, { profilePicUrl });
-    }
-
-    return items[0].latestPosts.slice(0, 5).map(item => {
-      const isVideo = item.type === 'Video' || item.isVideo;
-      const postProfilePicUrl = pickProfilePicUrl(
-        profilePicUrl,
-        item.ownerProfilePicUrl,
-        item.owner?.profilePicUrl,
-        item.owner?.profile_pic_url,
-        item.profilePicUrl
+  for (const { label, token } of tokenChain) {
+    try {
+      console.log(`[IG-Tracker] Fetching via Apify (${label}) for @${username}...`);
+      // Using apify/instagram-profile-scraper
+      const runRes = await axios.post(
+        'https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items',
+        {
+          usernames: [username],
+        },
+        {
+          timeout: 90000, // Apify can take a bit to spin up and scrape
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
-      return {
-        shortcode: item.shortCode,
-        url: item.url || `https://www.instagram.com/reel/${item.shortCode}/`,
-        mediaUrl: item.videoUrl || item.displayUrl,
-        thumbnailUrl: item.displayUrl,
-        caption: item.caption || '',
-        username,
-        profilePicUrl: postProfilePicUrl,
-        mediaType: isVideo ? 'video' : 'image',
-        isPinned: item.isPinned === true,
-        pinnedStateKnown: typeof item.isPinned === 'boolean',
-      };
-    }).filter(r => r.shortcode && r.mediaUrl);
-  } catch (err) {
-    console.log(`[IG-Tracker] Apify failed for @${username}: ${err.message}`);
-    return [];
+
+      const items = runRes.data || [];
+      if (items.length === 0 || !items[0].latestPosts) {
+        console.log(`[IG-Tracker] Apify (${label}) returned no latestPosts for @${username}.`);
+        continue;
+      }
+
+      const profile = items[0] || {};
+      const profilePicUrl = pickProfilePicUrl(
+        profile.profilePicUrlHD,
+        profile.profilePicUrl,
+        profile.profilePictureUrl,
+        profile.avatarUrl,
+        profile.profilePic
+      );
+
+      if (profilePicUrl) {
+        await updateChannelMeta(username, { profilePicUrl });
+      }
+
+      return items[0].latestPosts.slice(0, 5).map(item => {
+        const isVideo = item.type === 'Video' || item.isVideo;
+        const postProfilePicUrl = pickProfilePicUrl(
+          profilePicUrl,
+          item.ownerProfilePicUrl,
+          item.owner?.profilePicUrl,
+          item.owner?.profile_pic_url,
+          item.profilePicUrl
+        );
+        return {
+          shortcode: item.shortCode,
+          url: item.url || `https://www.instagram.com/reel/${item.shortCode}/`,
+          mediaUrl: item.videoUrl || item.displayUrl,
+          thumbnailUrl: item.displayUrl,
+          caption: item.caption || '',
+          username,
+          profilePicUrl: postProfilePicUrl,
+          mediaType: isVideo ? 'video' : 'image',
+          isPinned: item.isPinned === true,
+          pinnedStateKnown: typeof item.isPinned === 'boolean',
+        };
+      }).filter(r => r.shortcode && r.mediaUrl);
+    } catch (err) {
+      console.log(`[IG-Tracker] Apify (${label}) failed for @${username}: ${formatApifyError(err)}`);
+    }
   }
+
+  return [];
 }
 
 /**
@@ -677,7 +717,7 @@ async function fetchLatestReels(username) {
   let finalReels = [];
 
   // Method 0: Apify (Most reliable, won't flag account)
-  if (APIFY_API_TOKEN) {
+  if (hasApifyToken()) {
     const reels = await fetchViaApify(username);
     if (reels.length > 0) {
       console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Apify for @${username}`);
@@ -695,7 +735,7 @@ async function fetchLatestReels(username) {
   }
 
   // Method 2: Instagram internal API with session cookie (Risky - triggers 'automation found')
-  if (finalReels.length === 0 && IG_SESSION_COOKIE && !APIFY_API_TOKEN && !RAPIDAPI_KEY) {
+  if (finalReels.length === 0 && IG_SESSION_COOKIE && !hasApifyToken() && !RAPIDAPI_KEY) {
     console.log(`[IG-Tracker] ⚠️ WARNING: Using personal session cookie. This may trigger Instagram anti-bot systems.`);
     const reels = await fetchViaSessionApi(username);
     if (reels.length > 0) {

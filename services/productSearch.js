@@ -125,42 +125,6 @@ async function searchSerperWithFailover(query, domain, options = {}) {
   throw new Error('Serper: no API keys available');
 }
 
-async function searchBrave(query, domain, options = {}) {
-  const { apiKey, num = 5 } = options;
-  if (!apiKey) throw new Error('Brave: missing BRAVE_API_KEY');
-
-  const siteQuery = `site:${domain} ${query}`;
-  const params = new URLSearchParams({
-    q: siteQuery,
-    country: 'in',
-    search_lang: 'en',
-    count: String(num),
-    safesearch: 'off',
-  });
-
-  const res = await fetchWithTimeout(
-    `https://api.search.brave.com/res/v1/web/search?${params}`,
-    {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': apiKey,
-      },
-    },
-    10000
-  );
-
-  if (res.status === 401) throw new Error('Brave: invalid subscription token');
-  if (res.status === 429) throw new Error('Brave: rate limit hit');
-  if (!res.ok) throw new Error(`Brave: HTTP ${res.status}`);
-
-  const data = await res.json();
-  if (!data.web?.results?.length) throw new Error('Brave: no web results');
-
-  return data.web.results.map((r) => ({ title: r.title, url: r.url }));
-}
-
 async function findProductUrls(query, opts = {}) {
   const { platform = 'flipkart', strictMatch = true } = opts;
 
@@ -171,9 +135,6 @@ async function findProductUrls(query, opts = {}) {
     },
     serper: {
       apiKey: process.env.SERPER_API_KEY || process.env.SERPER_API_KEY_BACKUP,
-    },
-    brave: {
-      apiKey: process.env.BRAVE_API_KEY,
     },
   };
 
@@ -196,15 +157,10 @@ async function findProductUrls(query, opts = {}) {
         enabled: !!(process.env.SERPER_API_KEY || process.env.SERPER_API_KEY_BACKUP),
         fn: () => searchSerperWithFailover(query, platformCfg.domain, { num: 5 }),
       },
-      {
-        name: 'Brave Search',
-        enabled: !!config.brave.apiKey,
-        fn: () => searchBrave(query, platformCfg.domain, config.brave),
-      },
     ].filter((p) => p.enabled);
 
     if (providers.length === 0) {
-      console.warn('[search] No search providers configured! GOOGLE_CSE_KEY, SERPER_API_KEY, or BRAVE_API_KEY is required.');
+      console.warn('[search] No search providers configured! GOOGLE_CSE_KEY/GOOGLE_CSE_CX or SERPER_API_KEY is required.');
       return [];
     }
 

@@ -94,4 +94,5 @@ jobs:
           SERPER_API_KEY_BACKUP: ${{ secrets.SERPER_API_KEY_BACKUP }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          APIFY_API_TOKEN_BACKUP: ${{ secrets.APIFY_API_TOKEN_BACKUP }}
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
