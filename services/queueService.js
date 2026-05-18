@@ -1,6 +1,7 @@
 const aiService = require('./aiService');
 const historyService = require('./historyService');
 const productCurationService = require('./productCurationService');
+const qualityGateService = require('./qualityGateService');
 
 let selectBoard = () => null; // safe default: no board forced
 try {
@@ -78,6 +79,7 @@ async function getQueueStats() {
   const processing = queue.filter(item => item.status === 'processing').length;
   const completed = queue.filter(item => item.status === 'completed').length;
   const failed = queue.filter(item => item.status === 'failed').length;
+  const held = queue.filter(item => item.status === 'quality_hold').length;
   return {
     total: queue.length,
     pending,
@@ -86,6 +88,7 @@ async function getQueueStats() {
     processing,
     completed,
     failed,
+    held,
     storageMode: storageInfo.mode === 'upstash' ? 'cloud' : (IS_SERVERLESS ? 'ephemeral' : 'persistent'),
   };
 }
@@ -569,6 +572,46 @@ async function processNextInQueue() {
     } else {
       console.log('[Queue] 📌 No specific board — Pinterest will use default.');
     }
+
+    const productInfoForGate = affiliateLinks.length > 0 ? {
+      name: outfitName || mainProductName || 'Curated Look',
+      outfit: affiliateLinks,
+      shoppingMission,
+    } : (item.destinationLink ? {
+      name: 'Featured Item',
+      affiliateUrl: item.destinationLink,
+      outfit: [],
+    } : null);
+    const qualityGate = qualityGateService.evaluatePrePublish({
+      pipeline: 'firepost',
+      shortcode: itemShortcode || item.shortcode || '',
+      duplicateAlreadyPosted: false,
+      title,
+      description,
+      mediaUrl,
+      thumbnailUrl: item.thumbnailUrl || '',
+      externalLink: finalLink,
+      boardName: boardForPost,
+      productInfo: productInfoForGate,
+      affiliateLinks,
+      hasFrame: !!videoFrame,
+      smartCover: item.smartCover === true,
+      smartCoverSource: item.smartCoverSource || '',
+    });
+
+    if (!qualityGate.passed) {
+      const summary = qualityGateService.summarizeGate(qualityGate);
+      console.warn(`[Queue] Quality hold: ${summary}`);
+      item.status = 'quality_hold';
+      item.error = summary;
+      item.qualityGate = qualityGate;
+      item.heldAt = new Date().toISOString();
+      item.link = finalLink;
+      return item;
+    }
+
+    item.qualityGate = qualityGate;
+    console.log(`[Queue] ${qualityGateService.summarizeGate(qualityGate)}`);
 
     result = await createPinWithBot({
       title,

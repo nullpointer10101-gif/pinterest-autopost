@@ -4,6 +4,7 @@ const productCurationService = require('./productCurationService');
 const igTrackerService = require('./igTrackerService');
 const publisherService = require('./igRepostPublisherService');
 const stateService = require('./igRepostStateService');
+const qualityGateService = require('./qualityGateService');
 
 let selectBoard = () => null;
 try {
@@ -295,6 +296,7 @@ async function preparePublishingPayload(item) {
     externalLink: finalLink,
     boardName,
     productInfo,
+    hasFrame: !!imageData,
   };
 }
 
@@ -464,6 +466,7 @@ async function processQueue(options = {}) {
     posted: 0,
     failed: 0,
     deferred: 0,
+    held: 0,
     items: [],
   };
 
@@ -478,6 +481,46 @@ async function processQueue(options = {}) {
 
     try {
       const prepared = await preparePublishingPayload(item);
+      const duplicateAlreadyPosted = await stateService.hasSuccessfulPost(item.username, item.shortcode);
+      const qualityGate = qualityGateService.evaluatePrePublish({
+        pipeline: 'ig_repost',
+        shortcode: item.shortcode,
+        duplicateAlreadyPosted,
+        title: prepared.title,
+        description: prepared.description,
+        mediaUrl: prepared.mediaUrl,
+        thumbnailUrl: prepared.thumbnailUrl,
+        externalLink: prepared.externalLink,
+        boardName: prepared.boardName,
+        productInfo: prepared.productInfo,
+        hasFrame: prepared.hasFrame,
+      });
+
+      if (!qualityGate.passed) {
+        const summary = qualityGateService.summarizeGate(qualityGate);
+        console.warn(`[IG-Repost] Quality hold for ${item.shortcode}: ${summary}`);
+        await stateService.holdQueueItem(item.id, qualityGate, { error: summary });
+
+        if (item.validationJob) {
+          await stateService.markAccountFailed(item.username, summary, {
+            keepPending: false,
+            stage: 'quality_gate',
+          });
+        }
+
+        results.held += 1;
+        results.items.push({
+          username: item.username,
+          shortcode: item.shortcode,
+          status: 'quality_hold',
+          error: summary,
+          qualityGate,
+        });
+        await sleep(1000);
+        continue;
+      }
+
+      console.log(`[IG-Repost] ${qualityGateService.summarizeGate(qualityGate)}`);
       const publishResult = await publisherService.publish({
         title: prepared.title,
         description: prepared.description,

@@ -742,6 +742,43 @@ async function failQueueItem(itemId, error, options = {}) {
   return clone({ ...state.queue[index], reel, shouldRetry, nextRetryAt });
 }
 
+async function holdQueueItem(itemId, qualityGate = {}, options = {}) {
+  const state = await readState();
+  const index = state.queue.findIndex((item) => item.id === itemId);
+  if (index === -1) return null;
+  const item = state.queue[index];
+  const now = nowIso();
+  const message = String(options.error || qualityGate?.reasons?.join('; ') || 'Held by quality gate');
+
+  state.queue[index] = {
+    ...item,
+    status: 'quality_hold',
+    updatedAt: now,
+    processingAt: null,
+    heldAt: now,
+    lastError: message,
+    qualityGate,
+  };
+
+  const reel = ensureReelRecord(state, item.username, item.shortcode, {
+    status: 'quality_hold',
+    queueItemId: item.id,
+    lastAttemptAt: now,
+    lastError: message,
+  });
+
+  appendLogToState(state, 'warn', 'queue.quality_hold', `Held reel ${item.shortcode} from @${item.username} before publishing.`, {
+    username: item.username,
+    shortcode: item.shortcode,
+    score: qualityGate?.score,
+    threshold: qualityGate?.threshold,
+    reasons: qualityGate?.reasons || [],
+  });
+
+  await writeState(state);
+  return clone({ ...state.queue[index], reel });
+}
+
 async function getQueueStats() {
   const state = await readState();
   const now = Date.now();
@@ -749,6 +786,7 @@ async function getQueueStats() {
   const processing = state.queue.filter((item) => item.status === 'processing').length;
   const failed = state.queue.filter((item) => item.status === 'failed').length;
   const completed = state.queue.filter((item) => item.status === 'completed').length;
+  const held = state.queue.filter((item) => item.status === 'quality_hold').length;
   const scheduled = state.queue.filter((item) => (
     item.status === 'pending' &&
     new Date(item.scheduledAfter || item.addedAt || 0).getTime() > now
@@ -761,6 +799,7 @@ async function getQueueStats() {
     processing,
     failed,
     completed,
+    held,
   };
 }
 
@@ -947,6 +986,7 @@ module.exports = {
   claimNextReadyQueueItem,
   completeQueueItem,
   failQueueItem,
+  holdQueueItem,
   getQueueStats,
   appendLog,
   acquireRunLock,

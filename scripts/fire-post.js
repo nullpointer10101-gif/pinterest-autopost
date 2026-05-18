@@ -22,6 +22,7 @@ async function main() {
   let posted = 0;
   let failed = 0;
   let skipped = 0;
+  let held = 0;
   const maxPosts = parseInt(process.env.FIRE_POST_MAX || '5', 10);
 
   for (let i = 0; i < maxPosts; i++) {
@@ -42,6 +43,10 @@ async function main() {
     } else if (result.error?.includes('Duplicate')) {
       skipped++;
       console.log(`[🚀 FirePost v2] ⛔ Skipped duplicate: "${result.title || result.id}"`);
+    } else if (result.status === 'quality_hold') {
+      held++;
+      console.log(`[FirePost v2] Quality hold: "${result.title || result.id}"`);
+      console.log(`[FirePost v2]    Reason: ${result.error || 'quality score below threshold'}`);
     } else {
       failed++;
       console.log(`[🚀 FirePost v2] ❌ Failed: "${result.title || result.id}" — ${result.error}`);
@@ -49,7 +54,7 @@ async function main() {
   }
 
   const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-  console.log(`\n[🚀 FirePost v2] Done in ${elapsed}s — ${posted} posted, ${skipped} skipped (dedup), ${failed} failed.`);
+  console.log(`\n[🚀 FirePost v2] Done in ${elapsed}s — ${posted} posted, ${skipped} skipped (dedup), ${held} held (quality), ${failed} failed.`);
 
   if (posted === 0 && failed > 0) {
     process.exitCode = 1;
