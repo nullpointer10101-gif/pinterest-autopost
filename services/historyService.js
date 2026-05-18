@@ -16,9 +16,11 @@ async function writeLookIndex(record) {
     title:        record.aiContent?.title        || record.productInfo?.name || '',
     thumbnailUrl: record.thumbnailUrl            || record.reelData?.thumbnailUrl || '',
     mediaUrl:     record.mediaUrl               || record.reelData?.thumbnailUrl || '',
+    username:     record.username               || record.reelData?.username || '',
     affiliateLink: record.affiliateLink          || null,
     productInfo:  record.productInfo            || null,
     aiContent:    record.aiContent              || null,
+    reelData:     record.reelData               || null,
     createdAt:    record.createdAt              || new Date().toISOString(),
   };
   try {

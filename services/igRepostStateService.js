@@ -90,6 +90,7 @@ function buildLookPayload(record = {}) {
   return {
     source: 'ig_repost',
     id: record.id || createId('iglook'),
+    username: record.username || record?.reelData?.username || '',
     shortcode,
     title,
     description,
@@ -100,6 +101,14 @@ function buildLookPayload(record = {}) {
     aiContent: {
       title,
       description,
+    },
+    reelData: record.reelData || {
+      shortcode,
+      username: record.username || '',
+      caption: record.caption || '',
+      thumbnailUrl: record.thumbnailUrl || '',
+      mediaUrl: record.mediaUrl || '',
+      mediaType: record.mediaType || 'video',
     },
     boardName: record.boardName || '',
     createdAt: record.postedAt || record.createdAt || nowIso(),
@@ -893,6 +902,15 @@ async function getLookDataByShortcode(shortcodeInput) {
   });
 }
 
+async function listLookPosts(limit = 500) {
+  const state = await readState();
+  const max = Math.max(1, Number.parseInt(limit, 10) || 500);
+  return state.posts
+    .slice(0, max)
+    .map(buildLookPayload)
+    .filter(Boolean);
+}
+
 async function getStatus() {
   const state = await readState();
   return {
@@ -937,5 +955,6 @@ module.exports = {
   markRunCompleted,
   markDispatch,
   getLookDataByShortcode,
+  listLookPosts,
   getStatus,
 };

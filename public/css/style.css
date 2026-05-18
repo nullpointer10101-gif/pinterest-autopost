@@ -1320,6 +1320,7 @@ button {
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  text-decoration: none;
   transition: transform 160ms ease, filter 160ms ease, border-color 160ms ease, background-color 160ms ease;
 }
 
