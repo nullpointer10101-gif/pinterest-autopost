@@ -113,6 +113,157 @@ function dedupeProducts(products = []) {
   return deduped;
 }
 
+function hasWord(text, term) {
+  const normalized = normalizeForDedupe(text);
+  const normalizedTerm = normalizeForDedupe(term);
+  if (!normalizedTerm) return false;
+  return new RegExp(`(^|\\s)${normalizedTerm.replace(/\s+/g, '\\s+')}($|\\s)`, 'i').test(normalized);
+}
+
+function uniqueClean(values = []) {
+  const seen = new Set();
+  const list = [];
+  for (const value of values) {
+    const clean = cleanQuery(value);
+    const key = clean.toLowerCase();
+    if (!clean || clean === 'other' || seen.has(key)) continue;
+    seen.add(key);
+    list.push(clean);
+  }
+  return list;
+}
+
+const FABRIC_TERMS = ['linen', 'cotton', 'denim', 'corduroy', 'leather', 'suede', 'satin'];
+const FIT_TERMS = ['oversized', 'slim fit', 'regular fit', 'relaxed fit', 'loose fit', 'baggy'];
+
+function firstMatchedTerm(text, terms) {
+  return terms.find((term) => hasWord(text, term)) || '';
+}
+
+function inferVibe(text, expectedType) {
+  const normalized = normalizeForDedupe(text);
+  if (hasWord(normalized, 'formal') || expectedType === 'blazer') return 'sharp formal';
+  if (hasWord(normalized, 'streetwear') || hasWord(normalized, 'oversized') || hasWord(normalized, 'baggy')) return 'streetwear';
+  if (hasWord(normalized, 'linen') || hasWord(normalized, 'loose fit')) return 'resort casual';
+  if (hasWord(normalized, 'leather') || hasWord(normalized, 'suede')) return 'premium classic';
+  if (expectedType === 'shoes') return 'sneaker rotation';
+  if (expectedType === 'kurta') return 'festive menswear';
+  return 'everyday menswear';
+}
+
+function inferOccasion(vibe, expectedType) {
+  if (vibe.includes('formal')) return 'office, dinners, polished evenings';
+  if (vibe.includes('streetwear')) return 'casual outings and street-style fits';
+  if (vibe.includes('resort')) return 'summer days and vacation looks';
+  if (expectedType === 'kurta') return 'festive wear and family events';
+  if (expectedType === 'shoes') return 'daily wear and weekend outfits';
+  return 'daily outfit rotation';
+}
+
+function buildShoppingMission({ query, queries = {}, expectedType, productTypeLabel }) {
+  const sourceText = uniqueClean([
+    query,
+    queries.exactMatchQuery,
+    queries.similarMatchQuery,
+    queries.broadMatchQuery,
+  ]).join(' ');
+  const visualSignals = flipkartSearchService.extractVisualSignals(sourceText);
+  const typeQuery = flipkartSearchService.getProductTypeQueryTerm(expectedType);
+  const visualQuery = cleanQuery(flipkartSearchService.buildVisualQuery(sourceText, expectedType)) || cleanQuery(query) || typeQuery;
+  const primaryQuery = cleanQuery(query || queries.exactMatchQuery || visualQuery);
+  const fabric = firstMatchedTerm(sourceText, FABRIC_TERMS);
+  const fit = firstMatchedTerm(sourceText, FIT_TERMS);
+  const vibe = inferVibe(sourceText, expectedType);
+  const occasion = inferOccasion(vibe, expectedType);
+
+  const exactQueries = uniqueClean([
+    primaryQuery,
+    queries.exactMatchQuery,
+    visualQuery,
+    queries.similarMatchQuery,
+    `${visualQuery} for men`,
+  ]);
+
+  const premiumQueries = uniqueClean([
+    `premium ${visualQuery}`,
+    `branded ${visualQuery}`,
+    `luxury ${visualQuery}`,
+    fabric ? `premium ${fabric} ${typeQuery}` : '',
+    primaryQuery,
+  ]);
+
+  const budgetQueries = uniqueClean([
+    `affordable ${visualQuery}`,
+    `budget ${visualQuery}`,
+    `${visualQuery} under 999`,
+    `best value ${visualQuery}`,
+    primaryQuery,
+  ]);
+
+  return {
+    mode: 'AI Product Hunter',
+    primaryQuery,
+    visualQuery,
+    productType: expectedType,
+    productTypeLabel,
+    typeQuery,
+    colors: visualSignals.colors || [],
+    styles: visualSignals.styles || [],
+    fabric,
+    fit,
+    vibe,
+    occasion,
+    priceRange: 'budget, exact, and premium alternatives',
+    exactQueries,
+    premiumQueries,
+    budgetQueries,
+  };
+}
+
+function roleQueriesForMission(mission, roleKey) {
+  if (roleKey === 'premium') return mission.premiumQueries;
+  if (roleKey === 'budget') return mission.budgetQueries;
+  return mission.exactQueries;
+}
+
+function candidateMatchesMission(productTitle, mission, roleKey) {
+  const candidateTypes = flipkartSearchService.detectAllProductTypes(productTitle);
+  const hasWrongType = candidateTypes.some((type) => type !== mission.productType);
+  const hasExpectedType = candidateTypes.includes(mission.productType);
+  if (hasWrongType || (candidateTypes.length > 0 && !hasExpectedType)) {
+    return { accepted: false, score: 0, reason: `type mismatch (${candidateTypes.join(', ') || 'unknown'} != ${mission.productType})` };
+  }
+
+  const title = normalizeForDedupe(productTitle);
+  const colorRequired = mission.colors.length > 0;
+  const colorMatch = !colorRequired || mission.colors.some((color) => hasWord(title, color));
+  if (!colorMatch) {
+    return { accepted: false, score: 0, reason: `missing color (${mission.colors.join(', ')})` };
+  }
+
+  let score = 0.35;
+  if (mission.colors.some((color) => hasWord(title, color))) score += 0.2;
+  if (mission.fabric && hasWord(title, mission.fabric)) score += 0.14;
+  if (mission.fit && hasWord(title, mission.fit)) score += 0.1;
+  if (mission.styles.some((style) => hasWord(title, style))) score += 0.1;
+  if (mission.visualQuery && flipkartSearchService.calculateSimilarity(mission.visualQuery, productTitle) >= 0.3) score += 0.18;
+  if (mission.primaryQuery && flipkartSearchService.calculateSimilarity(mission.primaryQuery, productTitle) >= 0.3) score += 0.12;
+  if (roleKey === 'premium' && /premium|luxury|linen|leather|designer|branded|tailored/i.test(productTitle)) score += 0.08;
+  if (roleKey === 'budget' && /budget|affordable|value|under|sale|combo/i.test(productTitle)) score += 0.06;
+
+  return { accepted: true, score, reason: 'accepted' };
+}
+
+function sortCandidatesForMission(candidates, mission, roleKey) {
+  return dedupeProducts(candidates)
+    .map((product) => {
+      const scored = candidateMatchesMission(product.title || product.name || '', mission, roleKey);
+      return { ...product, hunterScore: scored.score, hunterRejectReason: scored.reason, accepted: scored.accepted };
+    })
+    .filter((product) => product.accepted)
+    .sort((a, b) => b.hunterScore - a.hunterScore);
+}
+
 function choosePreferredImage(images = [], provider = '') {
   const preferred = images
     .map((image) => image?.imageUrl || image?.thumbnailUrl || '')
@@ -282,7 +433,165 @@ async function buildAffiliateShelf(products, { typeLabel, fallbackType = 'Main P
   return affiliateLinks;
 }
 
-async function buildBalancedMarketplaceShelf(products, {
+const HUNTER_ROLES = [
+  {
+    key: 'exact_flipkart',
+    label: 'Exact Match',
+    badge: 'Exact',
+    preferredMarketplace: 'flipkart',
+    queryGroup: 'exact',
+  },
+  {
+    key: 'exact_amazon',
+    label: 'Exact Alternative',
+    badge: 'Exact',
+    preferredMarketplace: 'amazon',
+    queryGroup: 'exact',
+  },
+  {
+    key: 'premium_pick',
+    label: 'Premium Pick',
+    badge: 'Premium',
+    preferredMarketplace: 'amazon',
+    queryGroup: 'premium',
+  },
+  {
+    key: 'budget_pick',
+    label: 'Budget Pick',
+    badge: 'Budget',
+    preferredMarketplace: 'flipkart',
+    queryGroup: 'budget',
+  },
+];
+
+async function searchFlipkartHunterCandidates(mission, role, seedProducts = [], logPrefix = '[Product Curation]') {
+  const roleKey = role.queryGroup || 'exact';
+  const products = role.key === 'exact_flipkart' && Array.isArray(seedProducts) && seedProducts.length
+    ? seedProducts
+    : [];
+  const seen = new Set(products.map((product) => productSignature(product).urlKey).filter(Boolean));
+
+  for (const query of roleQueriesForMission(mission, roleKey)) {
+    if (products.length >= 10) break;
+
+    const roleQueries = {
+      exactMatchQuery: query,
+      similarMatchQuery: mission.visualQuery,
+      broadMatchQuery: mission.typeQuery,
+    };
+
+    const found = await flipkartSearchService.findProductsForSameType(roleQueries, mission.primaryQuery, {
+      limit: 6,
+      expectedType: mission.productType,
+    });
+
+    for (const product of found || []) {
+      const signature = productSignature(product);
+      const key = signature.urlKey || signature.titleKey;
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      products.push({
+        ...product,
+        source: product.source || 'flipkart_product',
+        marketplace: 'flipkart',
+      });
+    }
+  }
+
+  const sorted = sortCandidatesForMission(products, mission, roleKey);
+  console.log(`${logPrefix} Hunter ${role.label} Flipkart candidates: ${sorted.length}.`);
+  return sorted;
+}
+
+async function searchAmazonHunterCandidates(mission, role, logPrefix = '[Product Curation]') {
+  const roleKey = role.queryGroup || 'exact';
+  const products = [];
+  const seen = new Set();
+
+  for (const query of roleQueriesForMission(mission, roleKey)) {
+    if (products.length >= 10) break;
+    const found = await amazonAffiliateService.searchAmazonProducts(query, {
+      limit: 8,
+      logPrefix,
+    });
+
+    for (const product of found || []) {
+      const signature = productSignature(product);
+      const key = product.asin || signature.urlKey || signature.titleKey;
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      products.push({
+        ...product,
+        source: 'amazon_product',
+        marketplace: 'amazon',
+      });
+    }
+  }
+
+  const sorted = sortCandidatesForMission(products, mission, roleKey);
+  console.log(`${logPrefix} Hunter ${role.label} Amazon candidates: ${sorted.length}.`);
+  return sorted;
+}
+
+function hasGlobalDuplicate(link, seenGlobal) {
+  const signature = productSignature(link);
+  const keys = [
+    signature.urlKey && `url:${signature.urlKey}`,
+    signature.titleKey && `title:${signature.titleKey}`,
+    signature.imageKey && `image:${signature.imageKey}`,
+  ].filter(Boolean);
+  return keys.some((key) => seenGlobal.has(key));
+}
+
+function rememberGlobalProduct(link, seenGlobal) {
+  const signature = productSignature(link);
+  [
+    signature.urlKey && `url:${signature.urlKey}`,
+    signature.titleKey && `title:${signature.titleKey}`,
+    signature.imageKey && `image:${signature.imageKey}`,
+  ].filter(Boolean).forEach((key) => seenGlobal.add(key));
+}
+
+async function validateHunterCandidate(candidate, role, mission, seenGlobal, logPrefix) {
+  const rawLinks = await buildAffiliateShelf([candidate], {
+    typeLabel: mission.productTypeLabel,
+    logPrefix,
+  });
+
+  const validated = await enrichAndValidateLinks(rawLinks, {
+    expectedType: mission.productType,
+    logPrefix,
+    limit: 1,
+  });
+
+  const link = validated[0];
+  if (!link || hasGlobalDuplicate(link, seenGlobal)) return null;
+  rememberGlobalProduct(link, seenGlobal);
+
+  return {
+    ...link,
+    type: mission.productTypeLabel,
+    role: role.label,
+    roleBadge: role.badge,
+    hunterRole: role.key,
+    marketplace: candidate.marketplace || (amazonAffiliateService.isAmazonUrl(link.url) ? 'amazon' : 'flipkart'),
+    hunterScore: candidate.hunterScore || null,
+    hunterMission: {
+      mode: mission.mode,
+      primaryQuery: mission.primaryQuery,
+      visualQuery: mission.visualQuery,
+      productTypeLabel: mission.productTypeLabel,
+      colors: mission.colors,
+      styles: mission.styles,
+      fabric: mission.fabric,
+      fit: mission.fit,
+      vibe: mission.vibe,
+      occasion: mission.occasion,
+    },
+  };
+}
+
+async function buildProductHunterShelf(products, {
   query,
   queries = {},
   expectedType,
@@ -292,62 +601,52 @@ async function buildBalancedMarketplaceShelf(products, {
 } = {}) {
   if (!expectedType) return [];
 
-  const { flipkartTarget, amazonTarget } = getBalancedTargets(limit);
-  const typeQuery = flipkartSearchService.getProductTypeQueryTerm(expectedType);
-  const visualQuery = flipkartSearchService.buildVisualQuery(query, expectedType);
+  const mission = buildShoppingMission({ query, queries, expectedType, productTypeLabel });
+  console.log(`${logPrefix} AI Product Hunter mission: ${JSON.stringify({
+    product: mission.primaryQuery,
+    color: mission.colors.join(', ') || 'any',
+    fabric: mission.fabric || 'any',
+    fit: mission.fit || 'any',
+    vibe: mission.vibe,
+    occasion: mission.occasion,
+  })}`);
 
-  let flipkartLinks = await buildAffiliateShelf(dedupeProducts(products || []).slice(0, flipkartTarget), {
-    typeLabel: productTypeLabel,
-    logPrefix,
-  });
+  const finalLinks = [];
+  const seenGlobal = new Set();
+  const maxItems = Number.isFinite(Number(limit)) ? Number(limit) : 4;
 
-  const amazonQuerySeeds = dedupeProducts([
-    { title: query, url: `query:${query}` },
-    queries.exactMatchQuery ? { title: queries.exactMatchQuery, url: `query:${queries.exactMatchQuery}` } : null,
-    queries.similarMatchQuery ? { title: queries.similarMatchQuery, url: `query:${queries.similarMatchQuery}` } : null,
-    visualQuery ? { title: visualQuery, url: `query:${visualQuery}` } : null,
-    { title: typeQuery, url: `query:${typeQuery}` },
-  ].filter(Boolean)).map((item) => item.title);
+  for (const role of HUNTER_ROLES.slice(0, maxItems)) {
+    const marketplaces = role.preferredMarketplace === 'amazon'
+      ? ['amazon', 'flipkart']
+      : ['flipkart', 'amazon'];
+    let selected = null;
 
-  const amazonProducts = [];
-  const amazonSeen = new Set();
-  for (const seed of amazonQuerySeeds) {
-    if (amazonProducts.length >= amazonTarget) break;
-    const found = await amazonAffiliateService.searchAmazonProducts(seed, {
-      limit: Math.max(amazonTarget * 3, 6),
-      logPrefix,
-    });
+    for (const marketplace of marketplaces) {
+      const candidates = marketplace === 'amazon'
+        ? await searchAmazonHunterCandidates(mission, role, logPrefix)
+        : await searchFlipkartHunterCandidates(mission, role, products, logPrefix);
 
-    for (const product of found) {
-      const candidateTypes = flipkartSearchService.detectAllProductTypes(product.title);
-      const hasWrongType = candidateTypes.some((type) => type !== expectedType);
-      const hasExpectedType = candidateTypes.includes(expectedType);
-      if (hasWrongType || (candidateTypes.length > 0 && !hasExpectedType)) {
-        console.log(`${logPrefix} Amazon skip "${product.title}" - type mismatch (${candidateTypes.join(', ') || 'unknown'} != ${expectedType})`);
-        continue;
+      for (const candidate of candidates) {
+        selected = await validateHunterCandidate(candidate, role, mission, seenGlobal, logPrefix);
+        if (selected) break;
       }
 
-      const signature = productSignature(product);
-      const key = product.asin || signature.urlKey || signature.titleKey;
-      if (!key || amazonSeen.has(key)) continue;
-      amazonSeen.add(key);
-      amazonProducts.push(product);
-      if (amazonProducts.length >= amazonTarget) break;
+      if (selected) break;
+    }
+
+    if (selected) {
+      finalLinks.push(selected);
+      console.log(`${logPrefix} Hunter selected ${role.label}: "${selected.name}" (${selected.marketplace}).`);
+    } else {
+      console.warn(`${logPrefix} Hunter could not validate a product for ${role.label}.`);
     }
   }
 
-  const amazonLinks = await buildAffiliateShelf(amazonProducts.slice(0, amazonTarget), {
-    typeLabel: productTypeLabel,
-    logPrefix,
-  });
-
-  const balanced = await enrichAndValidateLinks(flipkartLinks.concat(amazonLinks), {
-    expectedType,
-    logPrefix,
-    limit: Number(limit || 4),
-  });
-  console.log(`${logPrefix} Balanced product shelf validated ${balanced.length}/${Number(limit || 4)} visible working product(s).`);
-  return balanced;
+  console.log(`${logPrefix} AI Product Hunter selected ${finalLinks.length}/${maxItems} visible working product(s).`);
+  return {
+    affiliateLinks: finalLinks,
+    shoppingMission: mission,
+  };
 }
 
 async function buildSameTypeShelfFromQuery(query, {
@@ -392,7 +691,7 @@ async function buildSameTypeShelfFromQuery(query, {
     expectedType,
   });
 
-  const completedLinks = await buildBalancedMarketplaceShelf(products, {
+  const hunterResult = await buildProductHunterShelf(products, {
     query: clean,
     queries,
     expectedType,
@@ -400,12 +699,14 @@ async function buildSameTypeShelfFromQuery(query, {
     limit,
     logPrefix,
   });
+  const completedLinks = hunterResult.affiliateLinks || [];
 
   return {
     affiliateLinks: completedLinks,
     mainProductName: completedLinks[0]?.name || clean,
     productType: expectedType,
     productTypeLabel,
+    shoppingMission: hunterResult.shoppingMission || null,
   };
 }
 
@@ -478,7 +779,7 @@ async function buildSameTypeShelfFromProductData(productData, {
     expectedType,
   });
 
-  const completedLinks = await buildBalancedMarketplaceShelf(products, {
+  const hunterResult = await buildProductHunterShelf(products, {
     query: productName,
     queries,
     expectedType,
@@ -486,12 +787,14 @@ async function buildSameTypeShelfFromProductData(productData, {
     limit,
     logPrefix,
   });
+  const completedLinks = hunterResult.affiliateLinks || [];
 
   return {
     affiliateLinks: completedLinks,
     mainProductName: completedLinks[0]?.name || productName,
     productType: expectedType,
     productTypeLabel,
+    shoppingMission: hunterResult.shoppingMission || null,
   };
 }
 

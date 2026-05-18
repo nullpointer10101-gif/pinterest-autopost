@@ -52,6 +52,7 @@ async function pushSingleReel(reelUrl) {
         console.log(`[3/6] 🔍 Curation & Affiliate Generation...`);
         const affiliateLinks = [];
         let mainProductName = "Style Inspo";
+        let shoppingMission = null;
 
         if (outfitData.found && outfitData.items) {
             console.log(`  🎯 Found product focus: "${outfitData.outfitName}"`);
@@ -62,6 +63,7 @@ async function pushSingleReel(reelUrl) {
             });
             affiliateLinks.push(...resolved.affiliateLinks);
             mainProductName = resolved.mainProductName || mainProductName;
+            shoppingMission = resolved.shoppingMission || null;
         }
 
         // 4. Content Generation
@@ -103,7 +105,8 @@ async function pushSingleReel(reelUrl) {
             aiContent: pinContent,
             productInfo: {
                 name: outfitData.outfitName || mainProductName,
-                outfit: affiliateLinks
+                outfit: affiliateLinks,
+                shoppingMission
             },
             pinterestPin: {
                 id: `test_${Date.now()}`,

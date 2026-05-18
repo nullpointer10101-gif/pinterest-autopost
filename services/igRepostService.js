@@ -213,6 +213,7 @@ async function preparePublishingPayload(item) {
   let affiliateLinks = [];
   let mainProductName = '';
   let outfitName = '';
+  let shoppingMission = null;
 
   const storefrontUrl = buildStorefrontUrl(item.shortcode);
 
@@ -231,6 +232,7 @@ async function preparePublishingPayload(item) {
         affiliateLinks = resolved.affiliateLinks;
         mainProductName = resolved.mainProductName;
         outfitName = String(resolved.outfitName || outfitData.outfitName || '').trim();
+        shoppingMission = resolved.shoppingMission || null;
       } else {
         const productData = await aiService.identifyProduct({
           caption: item.caption || '',
@@ -243,6 +245,7 @@ async function preparePublishingPayload(item) {
         affiliateLinks = resolved.affiliateLinks;
         mainProductName = resolved.mainProductName;
         outfitName = resolved.productTypeLabel ? `${resolved.productTypeLabel} Finds` : '';
+        shoppingMission = resolved.shoppingMission || null;
       }
     } catch (err) {
       console.warn(`[IG-Repost] Product matching failed for ${item.shortcode}:`, err.message);
@@ -256,6 +259,7 @@ async function preparePublishingPayload(item) {
       name: outfitName || mainProductName || title || 'Curated Look',
       affiliateUrl: affiliateLinks[0].url,
       outfit: affiliateLinks,
+      shoppingMission,
     };
   } else if (finalLink) {
     productInfo = {

@@ -468,6 +468,7 @@ async function processNextInQueue() {
     let affiliateLinks = [];
     let mainProductName = null;
     let outfitName = null;
+    let shoppingMission = null;
     const appDomain = process.env.APP_BASE_URL || 'https://pinterest-autopost.vercel.app';
     
     // Always pre-build the storefront URL as our safe fallback (if we have a shortcode)
@@ -494,6 +495,7 @@ async function processNextInQueue() {
         affiliateLinks = resolved.affiliateLinks;
         mainProductName = resolved.mainProductName;
         outfitName = resolved.outfitName;
+        shoppingMission = resolved.shoppingMission || null;
       } else {
         console.log(`[Queue] 🤖 Outfit not found. Trying single product identification...`);
         const productData = await aiService.identifyProduct({
@@ -513,6 +515,7 @@ async function processNextInQueue() {
            affiliateLinks = resolved.affiliateLinks;
            mainProductName = resolved.mainProductName;
            outfitName = resolved.productTypeLabel ? `${resolved.productTypeLabel} Finds` : null;
+           shoppingMission = resolved.shoppingMission || null;
         }
       }
       
@@ -614,7 +617,8 @@ async function processNextInQueue() {
       affiliateLink: historyAffiliateLink,
       productInfo: affiliateLinks.length > 0 ? {
         name: outfitName || mainProductName || 'Curated Look',
-        outfit: affiliateLinks
+        outfit: affiliateLinks,
+        shoppingMission
       } : (item.destinationLink ? {
         name: 'Featured Item',
         affiliateUrl: item.destinationLink,

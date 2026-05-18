@@ -152,6 +152,10 @@ function normalizeOutfitItem(item = {}, index = 0) {
     url: safeUrl,
     image: String(item.image || item.thumbnail || '').trim(),
     originalPrice: normalizePrice(item.originalPrice || item.price || item.salePrice),
+    role: String(item.role || item.curationRole || item.roleBadge || '').trim(),
+    roleBadge: String(item.roleBadge || item.role || '').trim(),
+    marketplace: String(item.marketplace || item.source || item.affiliateProvider || '').trim(),
+    affiliateProvider: String(item.affiliateProvider || '').trim(),
   };
 }
 
@@ -239,6 +243,15 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
   const displayThumbnailUrl = toProxyImageUrl(shortcode, thumbnailUrl) || thumbnailUrl;
   const subtitle = lookData?.aiContent?.description || lookData?.description || lookData?.caption || '';
   const pieces = dedupeOutfitItems(outfit.map(normalizeOutfitItem).filter(item => item.name && item.url));
+  const shoppingMission = lookData?.productInfo?.shoppingMission || outfit.find(item => item?.hunterMission)?.hunterMission || null;
+  const missionChips = shoppingMission ? [
+    shoppingMission.productTypeLabel || shoppingMission.productType,
+    ...(Array.isArray(shoppingMission.colors) ? shoppingMission.colors.slice(0, 2) : []),
+    shoppingMission.fabric,
+    shoppingMission.fit,
+    shoppingMission.vibe,
+    shoppingMission.occasion,
+  ].filter(Boolean).slice(0, 7) : [];
   const pricedItems = pieces.filter(item => item.originalPrice);
   const estimate = pricedItems.reduce((sum, item) => sum + item.originalPrice, 0);
   const createdAt = lookData?.createdAt || lookData?.updatedAt || lookData?.reelData?.createdAt || null;
@@ -693,6 +706,34 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       line-height: 1.45;
       margin: -2px 0 16px;
     }
+    .hunter-panel {
+      border: 1px solid rgba(31,93,75,.28);
+      background: linear-gradient(135deg, rgba(31,93,75,.12), rgba(207,164,75,.13));
+      border-radius: 8px;
+      padding: 14px;
+      margin: 16px 0 18px;
+    }
+    .hunter-panel strong {
+      display: block;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+    .hunter-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .hunter-chips span, .role-chip {
+      border: 1px solid rgba(20,20,20,.12);
+      background: rgba(255,250,241,.78);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 6px 9px;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
     .product-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -781,6 +822,22 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       font-weight: 850;
       line-height: 1.35;
       min-height: 45px;
+    }
+    .product-meta-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: -4px 0 0;
+    }
+    .market-chip {
+      border: 1px solid rgba(20,20,20,.1);
+      color: var(--muted);
+      background: rgba(220,235,242,.45);
+      border-radius: 999px;
+      padding: 6px 8px;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
     }
     .price-row {
       display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -1046,6 +1103,7 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
       .products-head { align-items: start; flex-direction: column; }
       .products-head .ghost-btn { display: none; }
       .affiliate-disclosure { font-size: 11px; }
+      .hunter-panel { margin-top: 12px; }
       .products-section {
         padding: 10px 0 112px;
       }
@@ -1173,6 +1231,11 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
             <strong class="meta-value">${createdAt ? escapeHtml(new Date(createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })) : 'Now'}</strong>
           </div>
         </div>
+
+        ${shoppingMission ? `<div class="hunter-panel">
+          <strong>AI Product Hunter Mode</strong>
+          <div class="hunter-chips">${missionChips.map(chip => `<span>${escapeHtml(chip)}</span>`).join('')}</div>
+        </div>` : ''}
 
         <div class="dynamic-panel">
           <div class="fit-card">
@@ -1364,10 +1427,17 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
 
       grid.innerHTML = outfit.map((item, index) => {
         const url = item.url || '#';
+        const role = item.role || item.roleBadge || '';
+        const marketplace = (item.marketplace || '').replace(/_/g, ' ');
+        const badges = [
+          role ? '<span class="role-chip">' + escapeText(role) + '</span>' : '',
+          marketplace ? '<span class="market-chip">' + escapeText(marketplace) + '</span>' : ''
+        ].filter(Boolean).join('');
         return [
           '<article class="product-card ' + (selected.has(item.id) ? 'selected' : '') + '" data-id="' + escapeText(item.id) + '" data-type="' + escapeText((item.type || '').toLowerCase()) + '" data-name="' + escapeText((item.name || '').toLowerCase()) + '">',
           productImageMarkup(item, index),
           '<div class="product-body">',
+          badges ? '<div class="product-meta-badges">' + badges + '</div>' : '',
           '<p class="product-name">' + escapeText(item.name) + '</p>',
           '<div class="price-row"><span>' + escapeText(item.type || 'Piece') + '</span><strong>' + money(item.originalPrice) + '</strong></div>',
           '<div class="card-actions">',
