@@ -1560,28 +1560,27 @@ function buildLookPage({ shortcode, title, thumbnailUrl, storedVideo, outfit, lo
 router.get('/:shortcode/product-image', async (req, res) => {
   const { url, name } = req.query;
   if (!url && !name) return res.json({ image: null });
-  if (amazonAffiliateService.isAmazonUrl(url)) {
-    // Amazon search fallback links are generated legally without scraping
-    // Amazon product media. Keep the UI placeholder until PA-API is available.
-    return res.json({ image: null });
-  }
 
   const cacheKey = `img2:${Buffer.from(url || name).toString('base64').slice(0, 40)}`;
   const cached = await upstashGet(cacheKey);
   if (cached) return res.json({ image: toProxyImageUrl(req.params.shortcode, cached) || cached });
 
-  const SERPER_KEY = process.env.SERPER_API_KEY || '';
+  const SERPER_KEY = process.env.SERPER_API_KEY || process.env.SERPER_API_KEY_BACKUP || '';
   if (!SERPER_KEY) return res.json({ image: null });
 
   try {
     // Use Serper.dev images API to get real product photo
-    const query = name || url;
+    const rawUrl = String(url || '');
+    const isAmazon = amazonAffiliateService.isAmazonUrl(rawUrl);
+    const isFlipkart = /flipkart\.com|fktr\.in/i.test(rawUrl);
+    const query = String(name || '').trim() || rawUrl;
+    const providerHint = isAmazon ? 'amazon product' : isFlipkart ? 'flipkart product' : 'product';
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 6000);
     const r = await fetch('https://google.serper.dev/images', {
       method: 'POST',
       headers: { 'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: query + ' flipkart product', gl: 'in', hl: 'en', num: 5 }),
+      body: JSON.stringify({ q: `${query} ${providerHint}`, gl: 'in', hl: 'en', num: 8 }),
       signal: ctrl.signal
     });
     clearTimeout(timer);
@@ -1592,7 +1591,13 @@ router.get('/:shortcode/product-image', async (req, res) => {
       let imageUrl = null;
       for (const img of images) {
         const src = img.imageUrl || img.thumbnailUrl;
-        if (src && (src.includes('rukminim') || src.includes('flipkart') || src.includes('fkimg'))) {
+        if (!src) continue;
+        const srcLower = src.toLowerCase();
+        if (isAmazon && (srcLower.includes('media-amazon') || srcLower.includes('ssl-images-amazon') || srcLower.includes('amazon'))) {
+          imageUrl = src;
+          break;
+        }
+        if (isFlipkart && (srcLower.includes('rukminim') || srcLower.includes('flipkart') || srcLower.includes('fkimg'))) {
           imageUrl = src;
           break;
         }

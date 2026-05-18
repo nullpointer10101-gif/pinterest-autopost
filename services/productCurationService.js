@@ -26,6 +26,51 @@ function buildFlipkartSearchUrl(query) {
   return clean ? `https://www.flipkart.com/search?q=${encodeURIComponent(clean)}` : '';
 }
 
+function normalizeForDedupe(value) {
+  return cleanQuery(value)
+    .toLowerCase()
+    .replace(/\b(flipkart|amazon|assured|prime|buy online|online)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function productSignature(product = {}) {
+  let urlKey = '';
+  try {
+    const parsed = new URL(String(product.url || '').trim());
+    urlKey = `${parsed.hostname}${parsed.pathname}`.toLowerCase().replace(/\/$/, '');
+  } catch {}
+
+  const titleKey = normalizeForDedupe(product.title || product.name || '');
+  const imageKey = cleanQuery(product.image || '').split('?')[0].toLowerCase();
+  return {
+    urlKey,
+    titleKey,
+    imageKey,
+  };
+}
+
+function dedupeProducts(products = []) {
+  const seen = new Set();
+  const deduped = [];
+
+  for (const product of products || []) {
+    const signature = productSignature(product);
+    const keys = [
+      signature.urlKey && `url:${signature.urlKey}`,
+      signature.titleKey && `title:${signature.titleKey}`,
+      signature.imageKey && `image:${signature.imageKey}`,
+    ].filter(Boolean);
+
+    if (keys.some((key) => seen.has(key))) continue;
+    keys.forEach((key) => seen.add(key));
+    deduped.push(product);
+  }
+
+  return deduped;
+}
+
 function getBalancedTargets(limit) {
   const total = Math.max(1, Number.isFinite(Number(limit)) ? Number(limit) : 4);
   if (total >= 4) {
@@ -70,14 +115,23 @@ function pickPrimaryItem(outfitData = {}) {
 
 async function buildAffiliateShelf(products, { typeLabel, fallbackType = 'Main Piece', logPrefix = '[Product Curation]' } = {}) {
   const affiliateLinks = [];
+  const seen = new Set();
 
-  for (const product of products || []) {
+  for (const product of dedupeProducts(products || [])) {
     if (!product?.url) continue;
 
     try {
-      const affiliate = await earnKaroService.makeAffiliateLink(product.url);
+      const isAmazonProduct = product.source === 'amazon_product' || amazonAffiliateService.isAmazonUrl(product.url);
+      const affiliate = isAmazonProduct
+        ? { affiliateUrl: amazonAffiliateService.buildTaggedProductUrl(product.url) || product.url, source: 'amazon_associates' }
+        : await earnKaroService.makeAffiliateLink(product.url);
       const affiliateUrl = cleanQuery(affiliate?.affiliateUrl || product.url);
       if (!affiliateUrl) continue;
+
+      const signature = productSignature({ ...product, url: affiliateUrl });
+      const key = signature.urlKey || signature.titleKey;
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
 
       affiliateLinks.push({
         type: typeLabel || fallbackType,
@@ -86,7 +140,11 @@ async function buildAffiliateShelf(products, { typeLabel, fallbackType = 'Main P
         image: product.image || null,
         originalPrice: product.price || null,
         source: product.source || 'flipkart_product',
-        affiliateProvider: affiliate?.source === 'earnkaro' ? 'earnkaro' : 'raw_or_existing',
+        affiliateProvider: affiliate?.source === 'earnkaro'
+          ? 'earnkaro'
+          : affiliate?.source === 'amazon_associates'
+            ? 'amazon_associates'
+            : 'raw_or_existing',
       });
     } catch (err) {
       console.warn(`${logPrefix} Affiliate link failed for "${product.title || product.url}": ${err.message}`);
@@ -144,6 +202,7 @@ function buildFlipkartSearchFallbackProducts({
 
 async function buildBalancedMarketplaceShelf(products, {
   query,
+  queries = {},
   expectedType,
   productTypeLabel,
   limit,
@@ -153,8 +212,9 @@ async function buildBalancedMarketplaceShelf(products, {
 
   const { flipkartTarget, amazonTarget } = getBalancedTargets(limit);
   const typeQuery = flipkartSearchService.getProductTypeQueryTerm(expectedType);
+  const visualQuery = flipkartSearchService.buildVisualQuery(query, expectedType);
 
-  let flipkartLinks = await buildAffiliateShelf((products || []).slice(0, flipkartTarget), {
+  let flipkartLinks = await buildAffiliateShelf(dedupeProducts(products || []).slice(0, flipkartTarget), {
     typeLabel: productTypeLabel,
     logPrefix,
   });
@@ -173,11 +233,43 @@ async function buildBalancedMarketplaceShelf(products, {
     flipkartLinks = flipkartLinks.concat(fallbackLinks).slice(0, flipkartTarget);
   }
 
-  const amazonLinks = amazonAffiliateService.buildSameTypeSearchShelf({
-    query,
-    typeQuery,
+  const amazonQuerySeeds = dedupeProducts([
+    { title: query, url: `query:${query}` },
+    queries.exactMatchQuery ? { title: queries.exactMatchQuery, url: `query:${queries.exactMatchQuery}` } : null,
+    queries.similarMatchQuery ? { title: queries.similarMatchQuery, url: `query:${queries.similarMatchQuery}` } : null,
+    visualQuery ? { title: visualQuery, url: `query:${visualQuery}` } : null,
+    { title: typeQuery, url: `query:${typeQuery}` },
+  ].filter(Boolean)).map((item) => item.title);
+
+  const amazonProducts = [];
+  const amazonSeen = new Set();
+  for (const seed of amazonQuerySeeds) {
+    if (amazonProducts.length >= amazonTarget) break;
+    const found = await amazonAffiliateService.searchAmazonProducts(seed, {
+      limit: Math.max(amazonTarget * 3, 6),
+      logPrefix,
+    });
+
+    for (const product of found) {
+      const candidateTypes = flipkartSearchService.detectAllProductTypes(product.title);
+      const hasWrongType = candidateTypes.some((type) => type !== expectedType);
+      const hasExpectedType = candidateTypes.includes(expectedType);
+      if (hasWrongType || (candidateTypes.length > 0 && !hasExpectedType)) {
+        console.log(`${logPrefix} Amazon skip "${product.title}" - type mismatch (${candidateTypes.join(', ') || 'unknown'} != ${expectedType})`);
+        continue;
+      }
+
+      const signature = productSignature(product);
+      const key = product.asin || signature.urlKey || signature.titleKey;
+      if (!key || amazonSeen.has(key)) continue;
+      amazonSeen.add(key);
+      amazonProducts.push(product);
+      if (amazonProducts.length >= amazonTarget) break;
+    }
+  }
+
+  const amazonLinks = await buildAffiliateShelf(amazonProducts.slice(0, amazonTarget), {
     typeLabel: productTypeLabel,
-    limit: amazonTarget,
     logPrefix,
   });
 
@@ -230,6 +322,7 @@ async function buildSameTypeShelfFromQuery(query, {
 
   const completedLinks = await buildBalancedMarketplaceShelf(products, {
     query: clean,
+    queries,
     expectedType,
     productTypeLabel,
     limit,
@@ -315,6 +408,7 @@ async function buildSameTypeShelfFromProductData(productData, {
 
   const completedLinks = await buildBalancedMarketplaceShelf(products, {
     query: productName,
+    queries,
     expectedType,
     productTypeLabel,
     limit,

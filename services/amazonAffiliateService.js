@@ -23,6 +23,12 @@ function getMarketplaceHost() {
   return raw || 'www.amazon.in';
 }
 
+function fetchWithTimeout(url, init = {}, timeoutMs = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 function isConfigured() {
   return Boolean(getAssociateTag());
 }
@@ -40,6 +46,58 @@ function buildSearchUrl(query, options = {}) {
   });
 
   return `https://${host}/s?${params.toString()}`;
+}
+
+function extractAsin(value = '') {
+  const raw = String(value || '').trim();
+  const decoded = (() => {
+    try { return decodeURIComponent(raw); } catch { return raw; }
+  })();
+  const match = decoded.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?&]|$)/i);
+  return match ? match[1].toUpperCase() : '';
+}
+
+function extractProductPath(value = '', asin = '') {
+  const raw = String(value || '').trim();
+  const decoded = (() => {
+    try { return decodeURIComponent(raw); } catch { return raw; }
+  })();
+  const safeAsin = String(asin || extractAsin(decoded)).toUpperCase();
+  if (!safeAsin) return '';
+
+  const slugMatch = decoded.match(new RegExp(`https?://[^/]+(/[^?#]*?/dp/${safeAsin})(?:[/?#]|$)`, 'i'))
+    || decoded.match(new RegExp(`(/[^?#]*?/dp/${safeAsin})(?:[/?#]|$)`, 'i'));
+  if (slugMatch?.[1]) {
+    return slugMatch[1]
+      .split('/')
+      .filter(Boolean)
+      .map((part) => encodeURIComponent(part))
+      .join('/');
+  }
+
+  return `dp/${safeAsin}`;
+}
+
+function buildTaggedProductUrl(productUrl, options = {}) {
+  const tag = cleanText(options.tag || getAssociateTag());
+  if (!tag) return '';
+
+  try {
+    const parsed = new URL(String(productUrl || '').trim());
+    const asin = extractAsin(parsed.toString());
+    if (!asin) return '';
+
+    const configuredHost = cleanText(options.marketplace || getMarketplaceHost());
+    const host = parsed.hostname.toLowerCase().includes('amazon.')
+      ? parsed.hostname
+      : configuredHost;
+    const canonicalPath = `/${extractProductPath(productUrl, asin)}`;
+    const tagged = new URL(`https://${host}${canonicalPath}`);
+    tagged.searchParams.set('tag', tag);
+    return tagged.toString();
+  } catch {
+    return '';
+  }
 }
 
 function titleizeQuery(query) {
@@ -112,6 +170,93 @@ function buildSameTypeSearchShelf({
   return shelf;
 }
 
+async function searchAmazonProducts(query, options = {}) {
+  const cleanQuery = cleanText(query);
+  const limit = Math.max(1, Number.isFinite(Number(options.limit)) ? Number(options.limit) : 4);
+  const logPrefix = options.logPrefix || '[Amazon]';
+  if (!cleanQuery || !isConfigured()) return [];
+
+  const keys = [
+    process.env.SERPER_API_KEY,
+    process.env.SERPER_API_KEY_BACKUP,
+  ].filter(Boolean);
+
+  if (!keys.length) {
+    console.warn(`${logPrefix} Amazon exact-product search skipped: SERPER_API_KEY is not configured.`);
+    return [];
+  }
+
+  const domain = getMarketplaceHost();
+  const serperQueries = [
+    `site:${domain} ${cleanQuery} dp`,
+    `${cleanQuery} site:${domain} "/dp/"`,
+  ];
+
+  for (const serperQuery of serperQueries) {
+    for (const apiKey of keys) {
+      try {
+        const res = await fetchWithTimeout('https://google.serper.dev/search', {
+          method: 'POST',
+          headers: {
+            'X-API-KEY': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            q: serperQuery,
+            gl: 'in',
+            hl: 'en',
+            num: 10,
+          }),
+        }, 20000);
+
+        if (res.status === 401 || res.status === 429) {
+          console.warn(`${logPrefix} Serper key could not search Amazon (${res.status}); trying fallback if available.`);
+          continue;
+        }
+        if (!res.ok) {
+          console.warn(`${logPrefix} Serper Amazon search HTTP ${res.status}.`);
+          continue;
+        }
+
+        const data = await res.json();
+        const organic = Array.isArray(data?.organic) ? data.organic : [];
+        const seen = new Set();
+        const exactProducts = [];
+
+        for (const product of organic) {
+          const rawUrl = product.link || product.url || '';
+          const taggedUrl = buildTaggedProductUrl(rawUrl);
+          const asin = extractAsin(taggedUrl || rawUrl);
+          if (!taggedUrl || !asin || seen.has(asin)) continue;
+          seen.add(asin);
+
+          exactProducts.push({
+            title: product.title || `Amazon Product ${asin}`,
+            url: taggedUrl,
+            image: product.image || null,
+            price: product.price || null,
+            source: 'amazon_product',
+            affiliateProvider: 'amazon_associates',
+            asin,
+          });
+
+          if (exactProducts.length >= limit) break;
+        }
+
+        if (exactProducts.length > 0) {
+          console.log(`${logPrefix} Amazon exact-product search found ${exactProducts.length}/${limit} for "${cleanQuery}".`);
+          return exactProducts;
+        }
+      } catch (err) {
+        console.warn(`${logPrefix} Amazon exact-product search failed for "${cleanQuery}": ${err.message}`);
+      }
+    }
+  }
+
+  console.log(`${logPrefix} Amazon exact-product search found 0/${limit} for "${cleanQuery}".`);
+  return [];
+}
+
 function isAmazonUrl(value = '') {
   try {
     const parsed = new URL(String(value || '').trim());
@@ -125,8 +270,11 @@ function isAmazonUrl(value = '') {
 module.exports = {
   buildSearchUrl,
   buildSameTypeSearchShelf,
+  buildTaggedProductUrl,
+  extractAsin,
   getAssociateTag,
   getMarketplaceHost,
   isAmazonUrl,
   isConfigured,
+  searchAmazonProducts,
 };
