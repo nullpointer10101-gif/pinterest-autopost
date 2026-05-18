@@ -120,6 +120,23 @@ function hasWord(text, term) {
   return new RegExp(`(^|\\s)${normalizedTerm.replace(/\s+/g, '\\s+')}($|\\s)`, 'i').test(normalized);
 }
 
+const COLOR_FAMILIES = [
+  ['white', 'off white', 'ivory', 'cream'],
+  ['grey', 'gray', 'charcoal'],
+  ['blue', 'navy', 'sky blue'],
+  ['brown', 'tan', 'camel'],
+  ['red', 'maroon', 'burgundy'],
+];
+
+function compatibleColorSet(colors = []) {
+  const allowed = new Set(colors);
+  for (const color of colors) {
+    const family = COLOR_FAMILIES.find((group) => group.includes(color));
+    if (family) family.forEach((item) => allowed.add(item));
+  }
+  return allowed;
+}
+
 function uniqueClean(values = []) {
   const seen = new Set();
   const list = [];
@@ -239,6 +256,15 @@ function candidateMatchesMission(productTitle, mission, roleKey) {
   const colorMatch = !colorRequired || mission.colors.some((color) => hasWord(title, color));
   if (!colorMatch) {
     return { accepted: false, score: 0, reason: `missing color (${mission.colors.join(', ')})` };
+  }
+
+  if (colorRequired) {
+    const candidateColors = flipkartSearchService.extractVisualSignals(productTitle).colors || [];
+    const allowedColors = compatibleColorSet(mission.colors);
+    const conflictingColors = candidateColors.filter((color) => !allowedColors.has(color));
+    if (conflictingColors.length > 0) {
+      return { accepted: false, score: 0, reason: `conflicting color (${conflictingColors.join(', ')})` };
+    }
   }
 
   let score = 0.35;
