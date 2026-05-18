@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Pipeline mode: scan, validate, process-queue'
+        description: 'Pipeline mode: scan, validate, process-queue, cover-test'
         required: false
         default: 'scan'
       username:
@@ -51,7 +51,14 @@ jobs:
         if: steps.cache-puppeteer.outputs.cache-hit != 'true'
         run: npx puppeteer browsers install chrome
 
+      - name: Install ffmpeg (smart cover extraction)
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+
+      - name: Test smart cover extraction
+        run: node scripts/test-ig-cover-service.js
+
       - name: Run IG repost pipeline
+        if: ${{ github.event.inputs.mode != 'cover-test' }}
         run: node scripts/run-ig-repost-pipeline.js
         env:
           NODE_ENV: production

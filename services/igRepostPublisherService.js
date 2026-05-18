@@ -3,6 +3,10 @@ const os = require('os');
 const path = require('path');
 const axios = require('axios');
 const persistencePolicy = require('./persistencePolicy');
+const {
+  cleanupFiles,
+  prepareVideoForPinterestCover,
+} = require('./igRepostCoverService');
 
 let puppeteer = null;
 try {
@@ -270,8 +274,70 @@ async function uploadMedia(page, filePath) {
   throw new Error(`Pinterest media upload did not complete in time (status: ${lastStatus})`);
 }
 
-async function handleVideoCoverEditor(page, isVideo) {
+async function findCoverUploadInput(page) {
+  const inputs = await page.$$('input[type="file"]');
+  for (const input of inputs) {
+    try {
+      const info = await page.evaluate((element) => {
+        const accept = String(element.getAttribute('accept') || '').toLowerCase();
+        const inDialog = !!element.closest('[role="dialog"], [aria-modal="true"], [data-test-id*="cover"], [data-test-id*="video"]');
+        const disabled = !!element.disabled;
+        const imageCapable = !accept || accept.includes('image') || accept.includes('jpg') || accept.includes('jpeg') || accept.includes('png') || accept.includes('*');
+        const videoOnly = accept.includes('video') && !imageCapable;
+        return { accept, inDialog, disabled, imageCapable, videoOnly };
+      }, input);
+
+      if (!info.disabled && info.inDialog && info.imageCapable && !info.videoOnly) {
+        return input;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+async function uploadCustomCoverImage(page, coverPath) {
+  if (!coverPath || !fs.existsSync(coverPath)) return false;
+
+  try {
+    let input = await findCoverUploadInput(page);
+
+    if (!input) {
+      await page.evaluate(() => {
+        const modal = document.querySelector('[role="dialog"], [aria-modal="true"]') || document.body;
+        const controls = Array.from(modal.querySelectorAll('button, [role="button"], label'));
+        const uploadControl = controls.find((control) => {
+          const text = String(control.innerText || control.getAttribute('aria-label') || '').toLowerCase();
+          return (
+            text.includes('upload') ||
+            text.includes('custom cover') ||
+            text.includes('choose cover') ||
+            text.includes('cover image')
+          );
+        });
+        if (uploadControl) uploadControl.click();
+      });
+      await sleep(1000);
+      input = await findCoverUploadInput(page);
+    }
+
+    if (!input) return false;
+
+    await input.uploadFile(coverPath);
+    await sleep(2500);
+    console.log('[IG-Repost Publisher] Uploaded product-focused custom cover image.');
+    return true;
+  } catch (err) {
+    console.warn('[IG-Repost Publisher] Custom cover upload failed:', err.message);
+    return false;
+  }
+}
+
+async function handleVideoCoverEditor(page, isVideo, options = {}) {
   if (!isVideo) return;
+  const coverPath = options.coverPath || '';
+  const preferredPosition = Number.isFinite(options.preferredPosition)
+    ? Math.min(1, Math.max(0, options.preferredPosition))
+    : 0.5;
 
   let editorVisible = false;
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -312,33 +378,37 @@ async function handleVideoCoverEditor(page, isVideo) {
   if (!editorVisible) return;
 
   try {
-    let framesLoaded = false;
-    for (let attempt = 0; attempt < 15; attempt += 1) {
-      framesLoaded = await page.evaluate(() => {
-        const modal = document.querySelector('[role="dialog"], [aria-modal="true"]') || document.body;
-        const images = Array.from(modal.querySelectorAll('img'));
-        const frameThumbs = images.filter((img) => {
-          const rect = img.getBoundingClientRect();
-          const src = img.src || '';
-          return (
-            rect.width > 30 &&
-            rect.width < 300 &&
-            rect.height > 30 &&
-            !src.includes('avatar') &&
-            !src.includes('profile') &&
-            img.complete &&
-            img.naturalWidth > 0
-          );
-        });
-        return frameThumbs.length >= 3;
-      });
+    const customCoverUploaded = await uploadCustomCoverImage(page, coverPath);
 
-      if (framesLoaded) break;
-      await sleep(1000);
+    let framesLoaded = false;
+    if (!customCoverUploaded) {
+      for (let attempt = 0; attempt < 15; attempt += 1) {
+        framesLoaded = await page.evaluate(() => {
+          const modal = document.querySelector('[role="dialog"], [aria-modal="true"]') || document.body;
+          const images = Array.from(modal.querySelectorAll('img'));
+          const frameThumbs = images.filter((img) => {
+            const rect = img.getBoundingClientRect();
+            const src = img.src || '';
+            return (
+              rect.width > 30 &&
+              rect.width < 300 &&
+              rect.height > 30 &&
+              !src.includes('avatar') &&
+              !src.includes('profile') &&
+              img.complete &&
+              img.naturalWidth > 0
+            );
+          });
+          return frameThumbs.length >= 3;
+        });
+
+        if (framesLoaded) break;
+        await sleep(1000);
+      }
     }
 
-    if (framesLoaded) {
-      await page.evaluate(() => {
+    if (!customCoverUploaded && framesLoaded) {
+      const clickResult = await page.evaluate((position) => {
         const modal = document.querySelector('[role="dialog"], [aria-modal="true"]') || document.body;
         const images = Array.from(modal.querySelectorAll('img'));
         const frameThumbs = images.filter((img) => {
@@ -356,12 +426,14 @@ async function handleVideoCoverEditor(page, isVideo) {
         });
 
         if (frameThumbs.length === 0) return;
-        const targetIndex = Math.min(Math.floor(frameThumbs.length * 0.6), frameThumbs.length - 1);
+        const targetIndex = Math.min(Math.max(0, Math.round(position * (frameThumbs.length - 1))), frameThumbs.length - 1);
         const target = frameThumbs[targetIndex];
         const clickTarget = target.closest('[role="button"], button, div[tabindex], label') || target.parentElement || target;
         clickTarget.click();
         target.click();
-      });
+        return `clicked_frame_${targetIndex + 1}_of_${frameThumbs.length}`;
+      }, preferredPosition);
+      console.log(`[IG-Repost Publisher] Cover frame selection: ${clickResult || 'no frame selected'}`);
       await sleep(1500);
     }
 
@@ -862,11 +934,26 @@ async function publish(payload = {}) {
   const isImage = /\.(jpeg|jpg|png|webp)(\?.*)?$/i.test(mediaUrl);
   const extension = isImage ? '.jpg' : '.mp4';
   const mediaPath = path.join(os.tmpdir(), `ig_repost_${Date.now()}${extension}`);
+  let preparedCover = null;
 
   let browser;
   try {
     console.log('[IG-Repost Publisher] Downloading media...');
     await downloadMedia(mediaUrl, mediaPath);
+    const uploadPath = isImage
+      ? mediaPath
+      : (await prepareVideoForPinterestCover(mediaPath, {
+          shortcode: payload.shortcode || '',
+          caption: payload.caption || description || title,
+        }));
+
+    preparedCover = isImage ? null : uploadPath;
+    const mediaUploadPath = isImage ? mediaPath : (preparedCover?.uploadPath || mediaPath);
+    if (preparedCover?.generated) {
+      console.log('[IG-Repost Publisher] Smart product-cover video prepared for upload.');
+    } else if (!isImage) {
+      console.log(`[IG-Repost Publisher] Uploading original video; smart cover unavailable (${preparedCover?.reason || 'unknown'}).`);
+    }
 
     browser = await puppeteer.launch({
       headless: 'new',
@@ -895,8 +982,11 @@ async function publish(payload = {}) {
     await openPinBuilder(page);
 
     console.log('[IG-Repost Publisher] Uploading media...');
-    await uploadMedia(page, mediaPath);
-    await handleVideoCoverEditor(page, !isImage);
+    await uploadMedia(page, mediaUploadPath);
+    await handleVideoCoverEditor(page, !isImage, {
+      coverPath: preparedCover?.coverPath || '',
+      preferredPosition: preparedCover?.preferredPosition,
+    });
 
     await fillTextField(page, [
       'textarea#storyboard-selector-title',
@@ -969,6 +1059,9 @@ async function publish(payload = {}) {
     try {
       if (fs.existsSync(mediaPath)) fs.unlinkSync(mediaPath);
     } catch {}
+    if (preparedCover?.cleanupPaths) {
+      cleanupFiles(...preparedCover.cleanupPaths);
+    }
   }
 }
 

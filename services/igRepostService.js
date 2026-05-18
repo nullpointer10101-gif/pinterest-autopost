@@ -349,6 +349,8 @@ async function preparePublishingPayload(item) {
   }
 
   return {
+    shortcode: item.shortcode,
+    caption: item.caption || '',
     title,
     description,
     altText: buildAltText(item),
