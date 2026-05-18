@@ -267,54 +267,6 @@ function buildTopShelves(looks = [], limit = 6) {
     .map(([label, count]) => ({ label, count }));
 }
 
-function renderFeaturedLook(look) {
-  if (!look) {
-    return `
-      <div class="featured-card empty-feature">
-        <div class="featured-copy">
-          <span class="mini-label">Latest drop</span>
-          <h2>No looks yet</h2>
-          <p>Once FirePost or the independent IG repost pipeline publishes a reel, it will become a shoppable store card here.</p>
-          <a class="primary-cta" href="/">Open dashboard</a>
-        </div>
-      </div>
-    `;
-  }
-
-  const image = look.thumbnail
-    ? `<img src="${escapeHtml(look.thumbnail)}" alt="${escapeHtml(look.title)}" onerror="this.closest('.featured-media').classList.add('image-failed'); this.remove();">`
-    : '';
-  const products = look.productNames.slice(0, 3)
-    .map((name) => `<li>${escapeHtml(name)}</li>`)
-    .join('') || '<li>Open this look to see its product cards.</li>';
-
-  return `
-    <a class="featured-card" href="${escapeHtml(look.href)}">
-      <div class="featured-media">
-        ${image}
-        <div class="image-fallback featured-fallback">
-          <span>NEW</span>
-          <strong>${escapeHtml(look.productType)}</strong>
-        </div>
-        <div class="featured-float">
-          <span>${escapeHtml(look.sourceLabel)}</span>
-          <strong>${look.productCount || 0} products</strong>
-        </div>
-      </div>
-      <div class="featured-copy">
-        <span class="mini-label">Latest shoppable drop</span>
-        <h2>${escapeHtml(look.title)}</h2>
-        <p>${escapeHtml(look.description).slice(0, 145)}${look.description.length > 145 ? '...' : ''}</p>
-        <ul>${products}</ul>
-        <div class="featured-foot">
-          <span>${look.username ? `@${escapeHtml(look.username)}` : 'Reel Orbit'}</span>
-          <strong>Open products</strong>
-        </div>
-      </div>
-    </a>
-  `;
-}
-
 function renderCard(look, index) {
   const image = look.thumbnail
     ? `<img src="${escapeHtml(look.thumbnail)}" alt="${escapeHtml(look.title)}" loading="${index < 8 ? 'eager' : 'lazy'}" onerror="this.closest('.look-media').classList.add('image-failed'); this.remove();">`
@@ -366,8 +318,6 @@ function renderCard(look, index) {
 
 function renderStorePage(looks = []) {
   const stats = buildStats(looks);
-  const latest = looks[0]?.displayDate || 'No looks yet';
-  const featuredLook = looks[0] || null;
   const topShelves = buildTopShelves(looks);
   return `<!DOCTYPE html>
 <html lang="en">
@@ -477,7 +427,7 @@ function renderStorePage(looks = []) {
     .hero {
       padding: 52px 0 26px;
       display: grid;
-      grid-template-columns: minmax(320px, .78fr) minmax(440px, 1.22fr);
+      grid-template-columns: minmax(320px, 1.05fr) minmax(390px, .95fr);
       gap: 34px;
       align-items: stretch;
     }
@@ -535,6 +485,54 @@ function renderStorePage(looks = []) {
       font-weight: 950;
       border: 0;
       box-shadow: 0 18px 42px rgba(240, 201, 90, .18);
+    }
+    .hero-search-panel {
+      width: 100%;
+      margin-top: 24px;
+      min-height: 66px;
+      border: 1px solid rgba(248, 240, 223, .16);
+      border-radius: 22px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: rgba(7, 7, 6, .34);
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+    .hero-search-panel:hover {
+      transform: translateY(-2px);
+      border-color: rgba(240, 201, 90, .5);
+      background: rgba(240, 201, 90, .08);
+    }
+    .hero-search-panel span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 950;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+    .hero-search-panel strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .hero-search-panel em {
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      background: var(--gold);
+      color: #15120c;
+      font-style: normal;
+      font-weight: 950;
     }
     .quick-shelves {
       margin-top: 28px;
@@ -597,130 +595,120 @@ function renderStorePage(looks = []) {
       font-size: 12px;
       line-height: 1.45;
     }
-    .hero-stage {
-      display: grid;
-      grid-template-columns: minmax(0, 1.16fr) minmax(210px, .84fr);
-      gap: 12px;
-    }
-    .featured-card {
-      min-height: 100%;
+    .store-console {
       border: 1px solid rgba(240, 201, 90, .22);
       border-radius: 30px;
       background:
         linear-gradient(150deg, rgba(240, 201, 90, .12), transparent 32%),
         linear-gradient(160deg, rgba(25, 25, 21, .98), rgba(12, 12, 10, .98));
-      overflow: hidden;
       box-shadow: var(--shadow);
-      display: grid;
-      grid-template-rows: minmax(260px, 1.05fr) auto;
-      transition: transform .22s ease, border-color .22s ease;
-    }
-    .featured-card:hover {
-      transform: translateY(-5px);
-      border-color: rgba(240, 201, 90, .5);
-    }
-    .empty-feature {
-      display: flex;
-      align-items: center;
-      padding: 26px;
-    }
-    .featured-media {
+      padding: clamp(18px, 2.8vw, 28px);
       position: relative;
-      min-height: 260px;
-      background:
-        radial-gradient(circle at 40% 28%, rgba(240, 201, 90, .22), transparent 42%),
-        linear-gradient(145deg, #201d18, #0f0f0d);
       overflow: hidden;
     }
-    .featured-media img {
-      width: 100%;
-      height: 100%;
-      min-height: 260px;
-      object-fit: cover;
-      display: block;
-      transition: transform .35s ease;
-    }
-    .featured-card:hover .featured-media img { transform: scale(1.04); }
-    .featured-fallback span {
-      color: rgba(240, 201, 90, .16);
-    }
-    .featured-float {
+    .store-console::before {
+      content: '';
       position: absolute;
-      left: 16px;
-      right: 16px;
-      bottom: 16px;
-      border: 1px solid rgba(248, 240, 223, .18);
-      border-radius: 18px;
-      padding: 12px 14px;
-      background: rgba(7, 7, 6, .68);
-      backdrop-filter: blur(14px);
+      inset: -1px;
+      background:
+        linear-gradient(90deg, transparent 0 46%, rgba(248, 240, 223, .08) 46% 47%, transparent 47% 100%),
+        linear-gradient(0deg, transparent 0 46%, rgba(248, 240, 223, .06) 46% 47%, transparent 47% 100%);
+      background-size: 86px 86px;
+      opacity: .22;
+      pointer-events: none;
+    }
+    .console-head {
+      position: relative;
+      z-index: 1;
       display: flex;
       justify-content: space-between;
-      gap: 12px;
       align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
     }
-    .featured-float span {
+    .console-head span {
       color: var(--muted);
       font-size: 11px;
       font-weight: 950;
+      letter-spacing: .16em;
       text-transform: uppercase;
     }
-    .featured-float strong {
+    .console-head strong {
+      min-height: 28px;
+      border: 1px solid rgba(129, 214, 164, .34);
+      border-radius: 999px;
+      padding: 0 10px;
+      display: grid;
+      place-items: center;
       color: var(--green);
-      font-size: 12px;
-      font-weight: 950;
-      text-transform: uppercase;
-    }
-    .featured-copy {
-      padding: 20px;
-    }
-    .mini-label {
-      display: inline-flex;
-      color: var(--green);
+      background: rgba(129, 214, 164, .09);
       font-size: 11px;
       font-weight: 950;
-      letter-spacing: .12em;
-      text-transform: uppercase;
     }
-    .featured-copy h2 {
-      margin: 10px 0 10px;
+    .store-stat-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .mission-card {
+      position: relative;
+      z-index: 1;
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 18px;
+      background: rgba(7, 7, 6, .35);
+    }
+    .mission-card h2 {
+      margin: 0 0 14px;
       font-family: 'Space Grotesk', sans-serif;
-      font-size: clamp(26px, 3.2vw, 44px);
+      font-size: clamp(24px, 3vw, 38px);
       line-height: .98;
       letter-spacing: -.05em;
     }
-    .featured-copy p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.6;
-    }
-    .featured-copy ul {
-      margin: 14px 0 0;
-      padding: 0 0 0 18px;
-      color: rgba(248, 240, 223, .78);
-      font-size: 12px;
-      line-height: 1.55;
-    }
-    .featured-foot {
-      margin-top: 16px;
-      padding-top: 14px;
-      border-top: 1px solid var(--line);
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 900;
-    }
-    .featured-foot strong {
-      color: var(--gold);
-      text-transform: uppercase;
-    }
-    .hero-board {
+    .mission-steps {
       display: grid;
-      grid-template-columns: 1fr;
+      gap: 9px;
+    }
+    .mission-step {
+      display: flex;
+      align-items: flex-start;
       gap: 12px;
+      color: rgba(248, 240, 223, .78);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .mission-step span {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      color: #15120c;
+      background: var(--green);
+      font-size: 11px;
+      font-weight: 950;
+    }
+    .source-row {
+      position: relative;
+      z-index: 1;
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .source-row span {
+      border: 1px solid rgba(248, 240, 223, .16);
+      border-radius: 999px;
+      padding: 8px 10px;
+      color: var(--muted);
+      background: rgba(248, 240, 223, .06);
+      font-size: 11px;
+      font-weight: 950;
+      text-transform: uppercase;
     }
     .stat-card {
       min-height: 116px;
@@ -1017,8 +1005,7 @@ function renderStorePage(looks = []) {
     .toast.visible { opacity: 1; transform: translateY(0); }
     @media (max-width: 980px) {
       .hero { grid-template-columns: 1fr; padding-top: 28px; }
-      .hero-stage { grid-template-columns: 1fr; }
-      .hero-board { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .store-stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .stat-card { min-height: 124px; padding: 16px; border-radius: 20px; }
       .toolbar { grid-template-columns: 1fr; }
       .filter-row { justify-content: flex-start; }
@@ -1031,7 +1018,7 @@ function renderStorePage(looks = []) {
       .hero-copy { border-radius: 24px; padding: 24px; }
       .benefit-grid,
       .insight-strip { grid-template-columns: 1fr; }
-      .hero-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .store-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .stat-card strong { font-size: 38px; }
       .section-head { align-items: flex-start; flex-direction: column; }
       .grid { grid-template-columns: 1fr; }
@@ -1059,18 +1046,23 @@ function renderStorePage(looks = []) {
   <main class="shell">
     <section class="hero">
       <div class="hero-copy">
-        <span class="kicker">Shop the reel archive</span>
-        <h1>Every reel becomes a shoppable look.</h1>
-        <p>Browse all Reel Orbit posts in one wide store. Open any look to watch the reel context and shop the AI-matched products inside.</p>
+        <span class="kicker">Reel Orbit Storefront</span>
+        <h1>One clean shop for every posted reel.</h1>
+        <p>A dark, simple storefront for your men&apos;s fashion archive. Browse by category, open any reel card, and shop the matched products inside the look page.</p>
         <div class="hero-actions">
           <a class="primary-cta" href="#looks">Browse looks</a>
           <a class="nav-btn" href="/">Dashboard</a>
         </div>
+        <button class="hero-search-panel" type="button" data-focus-search>
+          <span>Find a look fast</span>
+          <strong>Search shirts, shoes, pants, channels, Amazon, or Flipkart</strong>
+          <em>Go</em>
+        </button>
         <div class="quick-shelves">
           <strong>Quick shelves</strong>
           <div class="shelf-row">
             ${topShelves.length
-              ? topShelves.map((shelf) => `<button class="shelf-chip" type="button" data-search-chip="${escapeHtml(shelf.label)}">${escapeHtml(shelf.label)} · ${shelf.count}</button>`).join('')
+              ? topShelves.map((shelf) => `<button class="shelf-chip" type="button" data-search-chip="${escapeHtml(shelf.label)}">${escapeHtml(shelf.label)} - ${shelf.count}</button>`).join('')
               : '<button class="shelf-chip" type="button" data-search-chip="shirt">Shirts</button><button class="shelf-chip" type="button" data-search-chip="shoes">Shoes</button><button class="shelf-chip" type="button" data-search-chip="pants">Pants</button>'}
           </div>
         </div>
@@ -1080,15 +1072,32 @@ function renderStorePage(looks = []) {
           <div class="benefit-card"><span>No dead archive</span><p>New posted reels appear here from the same history records.</p></div>
         </div>
       </div>
-      <div class="hero-stage">
-        ${renderFeaturedLook(featuredLook)}
-        <div class="hero-board">
+      <aside class="store-console" aria-label="Store status">
+        <div class="console-head">
+          <span>Shop system</span>
+          <strong>Live</strong>
+        </div>
+        <div class="store-stat-grid">
           <div class="stat-card"><span>Total looks</span><strong>${stats.looks}</strong></div>
           <div class="stat-card"><span>With products</span><strong>${stats.withProducts}</strong></div>
           <div class="stat-card"><span>Product cards</span><strong>${stats.products}</strong></div>
-          <div class="stat-card"><span>Latest drop</span><strong style="font-size:clamp(22px,3vw,36px)">${escapeHtml(latest)}</strong></div>
+          <div class="stat-card"><span>Sources</span><strong>${stats.marketplaces || 0}</strong></div>
         </div>
-      </div>
+        <div class="mission-card">
+          <h2>How shoppers use it</h2>
+          <div class="mission-steps">
+            <div class="mission-step"><span>1</span><p>Pick a reel from the archive grid.</p></div>
+            <div class="mission-step"><span>2</span><p>Open the look page with product cards inside.</p></div>
+            <div class="mission-step"><span>3</span><p>Shop matching Amazon and Flipkart finds directly.</p></div>
+          </div>
+        </div>
+        <div class="source-row">
+          <span>Amazon ready</span>
+          <span>Flipkart ready</span>
+          <span>Mobile first</span>
+          <span>No random featured product</span>
+        </div>
+      </aside>
     </section>
 
     <section class="insight-strip" aria-label="Store benefits">
@@ -1197,6 +1206,13 @@ function renderStorePage(looks = []) {
         document.querySelectorAll('[data-filter]').forEach((item) => item.classList.toggle('active', item.dataset.filter === 'all'));
         document.getElementById('looks')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         applyFilters();
+      });
+    });
+
+    document.querySelectorAll('[data-focus-search]').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelector('.toolbar')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.setTimeout(() => searchInput?.focus(), 320);
       });
     });
 
