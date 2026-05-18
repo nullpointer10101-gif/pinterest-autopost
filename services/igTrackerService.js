@@ -88,6 +88,42 @@ function pickProfilePicUrl(...values) {
   return values.map(cleanExternalUrl).find(Boolean) || null;
 }
 
+async function fetchProfilePicViaApify(username) {
+  if (!APIFY_API_TOKEN) return null;
+
+  try {
+    console.log(`[IG-Tracker] Fetching profile picture via Apify for @${username}...`);
+    const runRes = await axios.post(
+      `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${APIFY_API_TOKEN}`,
+      { usernames: [username] },
+      { timeout: 45000 }
+    );
+
+    const profile = Array.isArray(runRes.data) ? runRes.data[0] : null;
+    const latestPosts = Array.isArray(profile?.latestPosts) ? profile.latestPosts : [];
+    const profilePicUrl = pickProfilePicUrl(
+      profile?.profilePicUrlHD,
+      profile?.profilePicUrl,
+      profile?.profilePictureUrl,
+      profile?.avatarUrl,
+      profile?.profilePic,
+      latestPosts[0]?.ownerProfilePicUrl,
+      latestPosts[0]?.owner?.profilePicUrl,
+      latestPosts[0]?.owner?.profile_pic_url,
+      latestPosts[0]?.profilePicUrl
+    );
+
+    if (profilePicUrl) {
+      await updateChannelMeta(username, { profilePicUrl });
+      return profilePicUrl;
+    }
+  } catch (err) {
+    console.log(`[IG-Tracker] Apify profile picture failed for @${username}: ${err.message}`);
+  }
+
+  return null;
+}
+
 function hasSeen(state, username, shortcode) {
   return Array.isArray(state.seen[username]) && state.seen[username].includes(shortcode);
 }
@@ -383,6 +419,7 @@ async function ensureChannelProfilePic(input, options = {}) {
   const username = normalizeUsername(input);
   if (!username) return null;
   const forceRefresh = options.forceRefresh === true || options.refresh === true;
+  const allowApify = options.allowApify === true;
 
   const state = await readState();
   const cached = state.channelMeta?.[username]?.profilePicUrl;
@@ -466,6 +503,11 @@ async function ensureChannelProfilePic(input, options = {}) {
     }
   } catch (err) {
     console.log(`[IG-Tracker] ensureChannelProfilePic HTML method failed for @${username}: ${err.message}`);
+  }
+
+  if (allowApify) {
+    const apifyProfilePicUrl = await fetchProfilePicViaApify(username);
+    if (apifyProfilePicUrl) return apifyProfilePicUrl;
   }
 
   return forceRefresh ? null : (cached || null);

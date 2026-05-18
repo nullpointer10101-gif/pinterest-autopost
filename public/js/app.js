@@ -2608,13 +2608,17 @@ function escAttr(value) {
   return escHtml(value).replace(/"/g, '&quot;');
 }
 
-function getAvatarCandidates(profilePicUrl) {
+function getAvatarCandidates(profilePicUrl, username = '') {
   const clean = String(profilePicUrl || '').trim();
-  if (!/^https?:\/\//i.test(clean)) return [];
+  const cleanUsername = normalizeUsernameValue(username);
+  const avatarEndpoint = cleanUsername
+    ? `/api/ig-tracker/avatar?username=${encodeURIComponent(cleanUsername)}`
+    : '';
 
   return Array.from(new Set([
-    proxyMediaUrl(clean),
-    clean,
+    avatarEndpoint,
+    /^https?:\/\//i.test(clean) ? proxyMediaUrl(clean) : '',
+    /^https?:\/\//i.test(clean) ? clean : '',
   ].filter(Boolean)));
 }
 
@@ -2636,7 +2640,7 @@ function decodeAvatarCandidates(value) {
 }
 
 function channelAvatarImageHtml(username, profilePicUrl) {
-  const candidates = getAvatarCandidates(profilePicUrl);
+  const candidates = getAvatarCandidates(profilePicUrl, username);
   if (candidates.length === 0) return '';
 
   return `<img src="${escAttr(candidates[0])}" class="avatar-img" alt="@${escAttr(username)} profile picture" loading="lazy" referrerpolicy="no-referrer" data-avatar-index="0" data-avatar-candidates="${escAttr(encodeAvatarCandidates(candidates))}" onload="handleChannelAvatarLoad(this)" onerror="handleChannelAvatarError(this)">`;
@@ -2677,8 +2681,8 @@ function handleChannelAvatarError(img) {
   }
 }
 
-function setAvatarImageSource(img, profilePicUrl) {
-  const candidates = getAvatarCandidates(profilePicUrl);
+function setAvatarImageSource(img, profilePicUrl, username = '') {
+  const candidates = getAvatarCandidates(profilePicUrl, username);
   if (!img || candidates.length === 0) return false;
 
   img.dataset.avatarIndex = '0';
@@ -2759,10 +2763,11 @@ function renderChannelsList() {
     const metaLine = [lastPost, lastScan].filter(Boolean).join(' - ') || 'Awaiting next scan';
     const errorLine = lastError ? `<div class="item-meta error-text">${escHtml(lastError)}</div>` : '';
     const avatarLabel = (username.charAt(0) || '@').toUpperCase();
+    const avatarImageHtml = channelAvatarImageHtml(username, pic);
     const avatarHtml = `
-      <div class="avatar-circle avatar-stack channel-avatar ${pic ? 'has-avatar' : ''}" data-avatar-username="${escAttr(normalizeUsernameValue(username))}" data-avatar-state="${pic ? 'loading' : 'pending'}" data-avatar-raw-src="${escAttr(pic)}">
+      <div class="avatar-circle avatar-stack channel-avatar ${pic ? 'has-avatar' : ''}" data-avatar-username="${escAttr(normalizeUsernameValue(username))}" data-avatar-state="${avatarImageHtml ? 'loading' : 'pending'}" data-avatar-raw-src="${escAttr(pic)}">
         <span class="avatar-fallback">${escHtml(avatarLabel)}</span>
-        ${pic ? channelAvatarImageHtml(username, pic) : ''}
+        ${avatarImageHtml}
       </div>
     `;
 
@@ -2845,7 +2850,7 @@ function applyChannelAvatar(username, profilePicUrl) {
     avatarEl.appendChild(img);
   }
 
-  if (!setAvatarImageSource(img, profilePicUrl)) {
+  if (!setAvatarImageSource(img, profilePicUrl, cleanUsername)) {
     avatarEl.classList.remove('has-avatar');
     avatarEl.dataset.avatarState = 'missing';
     img.remove();

@@ -6,6 +6,41 @@ const igTrackerService = require('../services/igTrackerService');
 
 const router = express.Router();
 
+function avatarHeaders() {
+  return {
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
+    'Referer': 'https://www.instagram.com/',
+    'Origin': 'https://www.instagram.com',
+    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'sec-fetch-dest': 'image',
+    'sec-fetch-mode': 'no-cors',
+    'sec-fetch-site': 'cross-site',
+  };
+}
+
+async function fetchAvatarStream(profilePicUrl) {
+  const cleanUrl = String(profilePicUrl || '').trim();
+  if (!/^https?:\/\//i.test(cleanUrl)) return null;
+
+  const axios = require('axios');
+  const response = await axios.get(cleanUrl, {
+    responseType: 'stream',
+    headers: avatarHeaders(),
+    timeout: 15000,
+    maxRedirects: 5,
+    validateStatus: () => true,
+  });
+
+  const contentType = response.headers['content-type'] || '';
+  if (response.status < 200 || response.status >= 300 || !contentType.startsWith('image/')) {
+    if (response.data?.resume) response.data.resume();
+    return null;
+  }
+
+  return response;
+}
+
 router.get('/status', async (req, res) => {
   try {
     await igRepostService.migrateLegacyChannels({ onlyIfEmpty: true });
@@ -24,7 +59,10 @@ router.get('/profile-pic', async (req, res) => {
     }
 
     const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
-    const profilePicUrl = await igTrackerService.ensureChannelProfilePic(rawInput, { forceRefresh });
+    const profilePicUrl = await igTrackerService.ensureChannelProfilePic(rawInput, {
+      forceRefresh,
+      allowApify: true,
+    });
     if (profilePicUrl) {
       await igRepostService.setChannelProfilePic(rawInput, profilePicUrl);
     }
@@ -36,6 +74,47 @@ router.get('/profile-pic', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/avatar', async (req, res) => {
+  try {
+    const { username: rawInput } = req.query;
+    if (!rawInput) {
+      return res.status(400).send('username is required');
+    }
+
+    const username = igTrackerService.normalizeUsername(rawInput);
+    if (!username) {
+      return res.status(400).send('invalid username');
+    }
+
+    let profilePicUrl = await igTrackerService.ensureChannelProfilePic(username, {
+      allowApify: true,
+      forceRefresh: req.query.refresh === '1' || req.query.refresh === 'true',
+    });
+
+    let avatarResponse = await fetchAvatarStream(profilePicUrl);
+    if (!avatarResponse) {
+      profilePicUrl = await igTrackerService.ensureChannelProfilePic(username, {
+        forceRefresh: true,
+        allowApify: true,
+      });
+      avatarResponse = await fetchAvatarStream(profilePicUrl);
+    }
+
+    if (!avatarResponse) {
+      return res.status(404).send('profile picture unavailable');
+    }
+
+    await igRepostService.setChannelProfilePic(username, profilePicUrl);
+
+    res.setHeader('Content-Type', avatarResponse.headers['content-type'] || 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=1800, stale-while-revalidate=86400');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    avatarResponse.data.pipe(res);
+  } catch (err) {
+    res.status(500).send(err.message);
   }
 });
 
