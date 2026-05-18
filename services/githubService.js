@@ -44,19 +44,18 @@ async function dispatchWorkflow(workflowFile, label, inputs = {}) {
   }
 }
 
-// 🚀 NEW: Dedicated fast-post workflow — no automation overhead
+// Dedicated fast-post workflow with no hourly automation overhead.
 async function triggerFirePost() {
   return dispatchWorkflow('fire-post.yml', 'Fire Post');
 }
 
-// Legacy: Full hourly automation (posts + engagement)
+// Full hourly automation (queue + engagement).
 async function triggerAutomation() {
   return dispatchWorkflow('hourly-automation.yml', 'Hourly Automation');
 }
 
-// Legacy: Old instant mission (runs full automation with 1 post limit)
+// Compatibility alias for older callers. This now dispatches FirePost directly.
 async function triggerInstantMission() {
-  // Now points to the new fire-post workflow for speed
   return dispatchWorkflow('fire-post.yml', 'Instant Mission → Fire Post');
 }
 

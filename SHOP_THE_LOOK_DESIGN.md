@@ -21,8 +21,8 @@ The "Shop The Look" engine transforms the bot from a single-product affiliate po
   }
   ```
 
-### B. Multi-Affiliate Generation (`services/automationService.js`)
-- Update `processInstagramReels` to loop through the AI's outfit items.
+### B. Multi-Affiliate Generation (`services/igRepostService.js` or `services/queueService.js`)
+- Use the isolated IG repost pipeline or the live queue pipeline to loop through the AI's outfit items.
 - For each item, search Flipkart (`flipkartSearchService.js`) and generate an EarnKaro link (`earnKaroService.js`).
 - Bundle all successfully found products into an `outfit` array attached to the queue item.
 
@@ -34,7 +34,7 @@ The "Shop The Look" engine transforms the bot from a single-product affiliate po
   2. A "Shop This Look" grid displaying the 4 product cards.
   3. "Buy Now" buttons routing through EarnKaro.
 
-### D. Pinterest Link Routing (`services/puppeteerService.js` & `automationService.js`)
+### D. Pinterest Link Routing (`services/puppeteerService.js`, `services/igRepostPublisherService.js` and queue/live pipeline services)
 - Change the `destinationLink` for the Pinterest Pin from the raw EarnKaro link to the custom landing page URL: `https://[YOUR_DOMAIN]/look/[SHORTCODE]`.
 - This ensures Pinterest sees a high-quality, branded domain, boosting algorithmic reach.
 
@@ -48,6 +48,6 @@ The "Shop The Look" engine transforms the bot from a single-product affiliate po
 
 ## 4. Implementation Steps
 1. **Phase 1**: Update `aiService.js` to return multiple outfit items.
-2. **Phase 2**: Update `automationService.js` to process multiple items and bundle them into the queue object.
+2. **Phase 2**: Update the live IG repost or queue pipeline to process multiple items and bundle them into the saved item payload.
 3. **Phase 3**: Create the frontend `look.html`/template and the backend `routes/look.js` endpoint to serve the page.
 4. **Phase 4**: Update Pinterest destination link logic to point to the new landing pages.

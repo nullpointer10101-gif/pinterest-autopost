@@ -1,14 +1,17 @@
+// Archived on 2026-05-18.
+// This test script belongs to the retired queue-coupled IG pipeline and is not part of the live system.
+
 /**
  * Test script: runs the FULL affiliate pipeline for 1 new reel per channel.
  * Bypasses the seen-dedup so we can test without waiting for new uploads.
  * Does NOT mark reels as seen, so the real tracker still picks them up normally.
  */
 require('dotenv').config();
-const igTrackerService = require('../services/igTrackerService');
-const aiService = require('../services/aiService');
-const flipkartSearchService = require('../services/flipkartSearchService');
-const earnKaroService = require('../services/earnKaroService');
-const queueService = require('../services/queueService');
+const igTrackerService = require('../../services/igTrackerService');
+const aiService = require('../../services/aiService');
+const flipkartSearchService = require('../../services/flipkartSearchService');
+const earnKaroService = require('../../services/earnKaroService');
+const queueService = require('../../services/queueService');
 
 const CHANNELS = ['vishu_rajput_22'];
 

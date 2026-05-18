@@ -1,11 +1,14 @@
+// Archived on 2026-05-18.
+// This standalone IG pipeline is retained only for reference and is not used by the live app.
+
 require('dotenv').config();
-const igTrackerService = require('../services/igTrackerService');
-const aiService = require('../services/aiService');
-const flipkartSearchService = require('../services/flipkartSearchService');
-const earnKaroService = require('../services/earnKaroService');
-const queueService = require('../services/queueService');
-const historyService = require('../services/historyService');
-const puppeteerService = require('../services/puppeteerService');
+const igTrackerService = require('../../services/igTrackerService');
+const aiService = require('../../services/aiService');
+const flipkartSearchService = require('../../services/flipkartSearchService');
+const earnKaroService = require('../../services/earnKaroService');
+const queueService = require('../../services/queueService');
+const historyService = require('../../services/historyService');
+const puppeteerService = require('../../services/puppeteerService');
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════

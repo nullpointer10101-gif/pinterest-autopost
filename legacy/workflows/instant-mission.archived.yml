@@ -1,3 +1,4 @@
+# Archived on 2026-05-18. Moved out of .github/workflows so GitHub no longer treats it as a live workflow.
 name: Instant Pinterest Post Mission
 
 on:
@@ -39,7 +40,7 @@ jobs:
           AUTOMATION_TIMEZONE: ${{ secrets.AUTOMATION_TIMEZONE || 'Asia/Calcutta' }}
           AUTOMATION_MAX_POSTS_PER_DAY: 100
           AUTOMATION_MAX_POSTS_PER_RUN: 1
-          AUTOMATION_ENGAGEMENTS_PER_HOUR: 0 # Skip engagements to finish in seconds!
+          AUTOMATION_ENGAGEMENTS_PER_HOUR: 0
           AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
           PINTEREST_POSTING_MODE: bot
           PINTEREST_SESSION_COOKIE: ${{ secrets.PINTEREST_SESSION_COOKIE }}
