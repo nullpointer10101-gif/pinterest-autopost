@@ -406,6 +406,13 @@ async function scanAccount(username, options = {}) {
     return { username: normalized, queued: 0, skipped: 0, scanned: 0, error: reason };
   }
 
+  const discoveredProfilePicUrl = reels
+    .map((reel) => String(reel.profilePicUrl || reel.profilePic || '').trim())
+    .find(Boolean);
+  if (discoveredProfilePicUrl) {
+    await stateService.setAccountProfilePic(normalized, discoveredProfilePicUrl);
+  }
+
   const pinnedInfo = await fetchPinnedShortcodes(normalized);
   const pinnedDetectionUnavailable = !pinnedInfo.known && requirePinnedDetection;
   let warning = '';

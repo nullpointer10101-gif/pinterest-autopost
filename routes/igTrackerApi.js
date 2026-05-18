@@ -23,7 +23,8 @@ router.get('/profile-pic', async (req, res) => {
       return res.status(400).json({ success: false, error: 'username is required' });
     }
 
-    const profilePicUrl = await igTrackerService.ensureChannelProfilePic(rawInput);
+    const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    const profilePicUrl = await igTrackerService.ensureChannelProfilePic(rawInput, { forceRefresh });
     if (profilePicUrl) {
       await igRepostService.setChannelProfilePic(rawInput, profilePicUrl);
     }

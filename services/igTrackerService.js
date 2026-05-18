@@ -76,7 +76,16 @@ function extractOgImageFromHtml(html) {
   const ogImageMatch = html.match(
     /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i
   );
-  return ogImageMatch?.[1] || null;
+  return cleanExternalUrl(ogImageMatch?.[1]) || null;
+}
+
+function cleanExternalUrl(value) {
+  const clean = String(value || '').replace(/&amp;/g, '&').trim();
+  return /^https?:\/\//i.test(clean) ? clean : '';
+}
+
+function pickProfilePicUrl(...values) {
+  return values.map(cleanExternalUrl).find(Boolean) || null;
 }
 
 function hasSeen(state, username, shortcode) {
@@ -134,10 +143,10 @@ async function fetchViaSessionApi(username) {
     );
     const user = profileRes.data?.data?.user;
     const userId = user?.id;
-    const profilePicUrl = user?.profile_pic_url;
+    const profilePicUrl = pickProfilePicUrl(user?.profile_pic_url_hd, user?.profile_pic_url);
 
     if (profilePicUrl) {
-      updateChannelMeta(username, { profilePicUrl });
+      await updateChannelMeta(username, { profilePicUrl });
     }
 
     if (!userId) {
@@ -175,6 +184,7 @@ async function fetchViaSessionApi(username) {
         thumbnailUrl,
         caption: item.caption?.text || '',
         username,
+        profilePicUrl,
         mediaType: isVideo ? 'video' : 'image',
         isPinned: false,
         pinnedStateKnown: true,
@@ -340,8 +350,9 @@ async function fetchViaUnofficialApi(username) {
     });
     const user = res.data?.graphql?.user || res.data?.data?.user;
     if (!user) return [];
-    if (user.profile_pic_url) {
-      updateChannelMeta(username, { profilePicUrl: user.profile_pic_url });
+    const profilePicUrl = pickProfilePicUrl(user.profile_pic_url_hd, user.profile_pic_url);
+    if (profilePicUrl) {
+      await updateChannelMeta(username, { profilePicUrl });
     }
 
     const edges = user?.edge_owner_to_timeline_media?.edges || [];
@@ -356,6 +367,7 @@ async function fetchViaUnofficialApi(username) {
         thumbnailUrl: node.thumbnail_src || node.display_url,
         caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
         username,
+        profilePicUrl,
         mediaType: isVideo ? 'video' : 'image',
         isPinned: node.is_pinned === true,
         pinnedStateKnown: typeof node.is_pinned === 'boolean',
@@ -367,13 +379,14 @@ async function fetchViaUnofficialApi(username) {
   }
 }
 
-async function ensureChannelProfilePic(input) {
+async function ensureChannelProfilePic(input, options = {}) {
   const username = normalizeUsername(input);
   if (!username) return null;
+  const forceRefresh = options.forceRefresh === true || options.refresh === true;
 
   const state = await readState();
   const cached = state.channelMeta?.[username]?.profilePicUrl;
-  if (cached) return cached;
+  if (cached && !forceRefresh) return cached;
 
   const profileInfoEndpoint = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${username}&__d=dis`;
 
@@ -383,7 +396,8 @@ async function ensureChannelProfilePic(input) {
         headers: igHeaders(),
         timeout: 8000,
       });
-      const profilePicUrl = profileRes.data?.data?.user?.profile_pic_url || null;
+      const user = profileRes.data?.data?.user || {};
+      const profilePicUrl = pickProfilePicUrl(user.profile_pic_url_hd, user.profile_pic_url);
       if (profilePicUrl) {
         await updateChannelMeta(username, { profilePicUrl });
         return profilePicUrl;
@@ -409,7 +423,7 @@ async function ensureChannelProfilePic(input) {
       }
     );
     const user = profileRes.data?.data?.user;
-    const profilePicUrl = user?.profile_pic_url_hd || user?.profile_pic_url || null;
+    const profilePicUrl = pickProfilePicUrl(user?.profile_pic_url_hd, user?.profile_pic_url);
     if (profilePicUrl) {
       await updateChannelMeta(username, { profilePicUrl });
       return profilePicUrl;
@@ -429,7 +443,7 @@ async function ensureChannelProfilePic(input) {
       timeout: 8000,
     });
     const user = res.data?.graphql?.user || res.data?.data?.user;
-    const profilePicUrl = user?.profile_pic_url || null;
+    const profilePicUrl = pickProfilePicUrl(user?.profile_pic_url_hd, user?.profile_pic_url);
     if (profilePicUrl) {
       await updateChannelMeta(username, { profilePicUrl });
       return profilePicUrl;
@@ -454,7 +468,7 @@ async function ensureChannelProfilePic(input) {
     console.log(`[IG-Tracker] ensureChannelProfilePic HTML method failed for @${username}: ${err.message}`);
   }
 
-  return null;
+  return forceRefresh ? null : (cached || null);
 }
 
 /**
@@ -526,6 +540,12 @@ async function fetchViaRapidAPI(username) {
     return items.slice(0, 5).map(item => {
       const isVideo = item.media_type === 2 || !!item.video_url;
       const shortcode = item.code || item.shortcode || parseShortcode(item.link || '');
+      const profilePicUrl = pickProfilePicUrl(
+        item.user?.profile_pic_url_hd,
+        item.user?.profile_pic_url,
+        item.owner?.profile_pic_url,
+        item.profile_pic_url
+      );
       return {
         shortcode,
         url: `https://www.instagram.com/reel/${shortcode}/`,
@@ -533,6 +553,7 @@ async function fetchViaRapidAPI(username) {
         thumbnailUrl: item.image_versions?.items?.[0]?.url || '',
         caption: item.caption?.text || '',
         username,
+        profilePicUrl,
         mediaType: isVideo ? 'video' : 'image',
         isPinned: item.is_pinned === true || item.isPinned === true,
         pinnedStateKnown: typeof item.is_pinned === 'boolean' || typeof item.isPinned === 'boolean',
@@ -563,9 +584,28 @@ async function fetchViaApify(username) {
 
     const items = runRes.data || [];
     if (items.length === 0 || !items[0].latestPosts) return [];
+    const profile = items[0] || {};
+    const profilePicUrl = pickProfilePicUrl(
+      profile.profilePicUrlHD,
+      profile.profilePicUrl,
+      profile.profilePictureUrl,
+      profile.avatarUrl,
+      profile.profilePic
+    );
+
+    if (profilePicUrl) {
+      await updateChannelMeta(username, { profilePicUrl });
+    }
 
     return items[0].latestPosts.slice(0, 5).map(item => {
       const isVideo = item.type === 'Video' || item.isVideo;
+      const postProfilePicUrl = pickProfilePicUrl(
+        profilePicUrl,
+        item.ownerProfilePicUrl,
+        item.owner?.profilePicUrl,
+        item.owner?.profile_pic_url,
+        item.profilePicUrl
+      );
       return {
         shortcode: item.shortCode,
         url: item.url || `https://www.instagram.com/reel/${item.shortCode}/`,
@@ -573,6 +613,7 @@ async function fetchViaApify(username) {
         thumbnailUrl: item.displayUrl,
         caption: item.caption || '',
         username,
+        profilePicUrl: postProfilePicUrl,
         mediaType: isVideo ? 'video' : 'image',
         isPinned: item.isPinned === true,
         pinnedStateKnown: typeof item.isPinned === 'boolean',

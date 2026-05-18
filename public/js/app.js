@@ -2608,6 +2608,87 @@ function escAttr(value) {
   return escHtml(value).replace(/"/g, '&quot;');
 }
 
+function getAvatarCandidates(profilePicUrl) {
+  const clean = String(profilePicUrl || '').trim();
+  if (!/^https?:\/\//i.test(clean)) return [];
+
+  return Array.from(new Set([
+    proxyMediaUrl(clean),
+    clean,
+  ].filter(Boolean)));
+}
+
+function encodeAvatarCandidates(candidates) {
+  try {
+    return encodeURIComponent(JSON.stringify(candidates || []));
+  } catch {
+    return '%5B%5D';
+  }
+}
+
+function decodeAvatarCandidates(value) {
+  try {
+    const decoded = JSON.parse(decodeURIComponent(String(value || '%5B%5D')));
+    return Array.isArray(decoded) ? decoded.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function channelAvatarImageHtml(username, profilePicUrl) {
+  const candidates = getAvatarCandidates(profilePicUrl);
+  if (candidates.length === 0) return '';
+
+  return `<img src="${escAttr(candidates[0])}" class="avatar-img" alt="@${escAttr(username)} profile picture" loading="lazy" referrerpolicy="no-referrer" data-avatar-index="0" data-avatar-candidates="${escAttr(encodeAvatarCandidates(candidates))}" onload="handleChannelAvatarLoad(this)" onerror="handleChannelAvatarError(this)">`;
+}
+
+function handleChannelAvatarLoad(img) {
+  const avatarEl = img?.closest?.('.channel-avatar');
+  if (!avatarEl) return;
+  avatarEl.dataset.avatarState = 'ready';
+  avatarEl.classList.add('has-avatar');
+}
+
+function handleChannelAvatarError(img) {
+  const avatarEl = img?.closest?.('.channel-avatar');
+  const candidates = decodeAvatarCandidates(img?.dataset?.avatarCandidates);
+  const currentIndex = Number.parseInt(img?.dataset?.avatarIndex || '0', 10);
+  const nextIndex = Number.isFinite(currentIndex) ? currentIndex + 1 : 1;
+
+  if (img && nextIndex < candidates.length) {
+    img.dataset.avatarIndex = String(nextIndex);
+    img.src = candidates[nextIndex];
+    return;
+  }
+
+  const username = String(avatarEl?.dataset?.avatarUsername || '').trim();
+  const alreadyForcedRefresh = avatarEl?.dataset?.avatarRefreshTried === '1';
+
+  if (avatarEl) {
+    avatarEl.classList.remove('has-avatar');
+    avatarEl.dataset.avatarState = alreadyForcedRefresh ? 'missing' : 'loading';
+  }
+  img?.remove?.();
+
+  if (username && !alreadyForcedRefresh) {
+    avatarEl.dataset.avatarRefreshTried = '1';
+    delete state.channelAvatarRequests[`${username}:normal`];
+    void refreshChannelAvatar(username, { force: true, avatarEl });
+  }
+}
+
+function setAvatarImageSource(img, profilePicUrl) {
+  const candidates = getAvatarCandidates(profilePicUrl);
+  if (!img || candidates.length === 0) return false;
+
+  img.dataset.avatarIndex = '0';
+  img.dataset.avatarCandidates = encodeAvatarCandidates(candidates);
+  img.onload = () => handleChannelAvatarLoad(img);
+  img.onerror = () => handleChannelAvatarError(img);
+  img.src = candidates[0];
+  return true;
+}
+
 function normalizeUsernameValue(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -2679,9 +2760,9 @@ function renderChannelsList() {
     const errorLine = lastError ? `<div class="item-meta error-text">${escHtml(lastError)}</div>` : '';
     const avatarLabel = (username.charAt(0) || '@').toUpperCase();
     const avatarHtml = `
-      <div class="avatar-circle avatar-stack channel-avatar ${pic ? 'has-avatar' : ''}" data-avatar-username="${escAttr(normalizeUsernameValue(username))}" data-avatar-state="${pic ? 'ready' : 'pending'}">
+      <div class="avatar-circle avatar-stack channel-avatar ${pic ? 'has-avatar' : ''}" data-avatar-username="${escAttr(normalizeUsernameValue(username))}" data-avatar-state="${pic ? 'loading' : 'pending'}" data-avatar-raw-src="${escAttr(pic)}">
         <span class="avatar-fallback">${escHtml(avatarLabel)}</span>
-        ${pic ? `<img src="${escAttr(proxyMediaUrl(pic))}" class="avatar-img" alt="@${escAttr(username)} profile picture" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.channel-avatar')?.classList.remove('has-avatar'); this.remove();">` : ''}
+        ${pic ? channelAvatarImageHtml(username, pic) : ''}
       </div>
     `;
 
@@ -2746,7 +2827,12 @@ function applyChannelAvatar(username, profilePicUrl) {
   const avatarEl = Array.from(document.querySelectorAll('.channel-avatar')).find(el => el.dataset.avatarUsername === cleanUsername);
   if (!avatarEl) return;
 
-  avatarEl.dataset.avatarState = 'ready';
+  const previousRawSrc = String(avatarEl.dataset.avatarRawSrc || '').trim();
+  if (previousRawSrc && previousRawSrc !== profilePicUrl) {
+    delete avatarEl.dataset.avatarRefreshTried;
+  }
+  avatarEl.dataset.avatarRawSrc = profilePicUrl;
+  avatarEl.dataset.avatarState = 'loading';
   avatarEl.classList.add('has-avatar');
 
   let img = avatarEl.querySelector('.avatar-img');
@@ -2756,15 +2842,44 @@ function applyChannelAvatar(username, profilePicUrl) {
     img.alt = `@${username} profile picture`;
     img.loading = 'lazy';
     img.referrerPolicy = 'no-referrer';
-    img.onerror = () => {
-      avatarEl.classList.remove('has-avatar');
-      avatarEl.dataset.avatarState = 'missing';
-      img.remove();
-    };
     avatarEl.appendChild(img);
   }
 
-  img.src = proxyMediaUrl(profilePicUrl);
+  if (!setAvatarImageSource(img, profilePicUrl)) {
+    avatarEl.classList.remove('has-avatar');
+    avatarEl.dataset.avatarState = 'missing';
+    img.remove();
+  }
+}
+
+async function refreshChannelAvatar(username, options = {}) {
+  const cleanUsername = normalizeUsernameValue(username);
+  if (!cleanUsername) return false;
+
+  const { force = false, avatarEl = null } = options;
+  const requestKey = `${cleanUsername}:${force ? 'force' : 'normal'}`;
+  const lastRequestAt = Number(state.channelAvatarRequests?.[requestKey] || 0);
+  if (!force && lastRequestAt && (Date.now() - lastRequestAt) < 60000) return false;
+
+  state.channelAvatarRequests[requestKey] = Date.now();
+  if (avatarEl) avatarEl.dataset.avatarState = 'loading';
+
+  try {
+    const query = new URLSearchParams({ username: cleanUsername });
+    if (force) query.set('refresh', '1');
+    const res = await apiRequest(`/api/ig-tracker/profile-pic?${query.toString()}`);
+
+    if (res.profilePicUrl) {
+      applyChannelAvatar(res.username || cleanUsername, res.profilePicUrl);
+      return true;
+    }
+
+    if (avatarEl) avatarEl.dataset.avatarState = 'missing';
+    return false;
+  } catch {
+    if (avatarEl) avatarEl.dataset.avatarState = 'missing';
+    return false;
+  }
 }
 
 async function hydrateChannelAvatars() {
@@ -2775,20 +2890,8 @@ async function hydrateChannelAvatars() {
     const username = String(avatarEl.dataset.avatarUsername || '').trim();
     if (!username) return;
 
-    const lastRequestAt = Number(state.channelAvatarRequests?.[username] || 0);
-    if (lastRequestAt && (Date.now() - lastRequestAt) < 60000) return;
-
-    state.channelAvatarRequests[username] = Date.now();
-    avatarEl.dataset.avatarState = 'loading';
-
-    try {
-      const res = await apiRequest(`/api/ig-tracker/profile-pic?username=${encodeURIComponent(username)}`);
-      if (res.profilePicUrl) {
-        applyChannelAvatar(res.username || username, res.profilePicUrl);
-      } else {
-        avatarEl.dataset.avatarState = 'missing';
-      }
-    } catch {
+    const loaded = await refreshChannelAvatar(username, { avatarEl });
+    if (!loaded && avatarEl.dataset.avatarState === 'loading') {
       avatarEl.dataset.avatarState = 'missing';
     }
   }));
@@ -2859,6 +2962,8 @@ async function handleRemoveChannel(username) {
 }
 
 window.handleRemoveChannel = handleRemoveChannel;
+window.handleChannelAvatarLoad = handleChannelAvatarLoad;
+window.handleChannelAvatarError = handleChannelAvatarError;
 
 async function handleWorkflowToggle(id, enabled) {
   const mapping = {
