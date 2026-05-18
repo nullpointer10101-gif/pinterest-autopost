@@ -405,16 +405,13 @@ async function scanAccount(username, options = {}) {
   }
 
   const pinnedInfo = await fetchPinnedShortcodes(normalized);
-  if (!pinnedInfo.known && requirePinnedDetection) {
-    const reason = 'Pinned reel detection unavailable; skipping account for safety';
-    if (validation) {
-      await stateService.markAccountFailed(normalized, reason, { keepPending: false, stage: 'pinned_check' });
-    } else {
-      await stateService.appendLog('warn', 'scan.pinned_unknown', `Skipped @${normalized} because pinned detection was unavailable.`, {
-        username: normalized,
-      });
-    }
-    return { username: normalized, queued: 0, skipped: reels.length, scanned: reels.length, error: reason };
+  const pinnedDetectionUnavailable = !pinnedInfo.known && requirePinnedDetection;
+  let warning = '';
+  if (pinnedDetectionUnavailable) {
+    warning = 'Pinned reel detection unavailable; fresh reels skipped for safety';
+    await stateService.appendLog('warn', 'scan.pinned_unknown', `Pinned detection was unavailable for @${normalized}. Fresh reels will be skipped for safety.`, {
+      username: normalized,
+    });
   }
 
   const queueItems = [];
@@ -423,16 +420,25 @@ async function scanAccount(username, options = {}) {
   for (const reel of reels) {
     await stateService.upsertReelMeta(reel);
 
-    if (reel.isPinned === true || pinnedInfo.shortcodes.has(reel.shortcode)) {
+    const alreadyPosted = await stateService.hasSuccessfulPost(normalized, reel.shortcode);
+    if (alreadyPosted) {
+      skipped += 1;
+      await stateService.appendLog('info', 'scan.duplicate', `Skipped duplicate reel ${reel.shortcode} from @${normalized}.`, {
+        username: normalized,
+        shortcode: reel.shortcode,
+      });
+      continue;
+    }
+
+    if (reel.isPinned === true || (pinnedInfo.known && pinnedInfo.shortcodes.has(reel.shortcode))) {
       await stateService.markPinnedSkipped(reel, { username: normalized });
       skipped += 1;
       continue;
     }
 
-    const alreadyPosted = await stateService.hasSuccessfulPost(normalized, reel.shortcode);
-    if (alreadyPosted) {
+    if (pinnedDetectionUnavailable) {
       skipped += 1;
-      await stateService.appendLog('info', 'scan.duplicate', `Skipped duplicate reel ${reel.shortcode} from @${normalized}.`, {
+      await stateService.appendLog('warn', 'scan.skipped_without_pinned_detection', `Skipped fresh reel ${reel.shortcode} from @${normalized} because pinned detection was unavailable.`, {
         username: normalized,
         shortcode: reel.shortcode,
       });
@@ -448,7 +454,9 @@ async function scanAccount(username, options = {}) {
   }
 
   if (validation && queueItems.length === 0) {
-    const reason = 'No fresh non-pinned reels available for validation';
+    const reason = pinnedDetectionUnavailable
+      ? 'Pinned reel detection unavailable; no safe reels available for validation'
+      : 'No fresh non-pinned reels available for validation';
     await stateService.markAccountFailed(normalized, reason, { keepPending: false, stage: 'scan' });
     return { username: normalized, queued: 0, skipped, scanned: reels.length, error: reason };
   }
@@ -460,6 +468,7 @@ async function scanAccount(username, options = {}) {
     scanned: reels.length,
     added: queued.added.length,
     skipped: skipped + queued.skipped.length,
+    warning,
   });
 
   return {
@@ -469,6 +478,7 @@ async function scanAccount(username, options = {}) {
     skipped: skipped + queued.skipped.length,
     added: queued.added,
     queueSkips: queued.skipped,
+    warning,
   };
 }
 
