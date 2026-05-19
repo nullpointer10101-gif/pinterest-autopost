@@ -1,0 +1,22 @@
+name: Keepalive Workflows
+
+on:
+  schedule:
+    # Run once every 7 days at midnight
+    - cron: '0 0 */7 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Keepalive Workflow
+        uses: gautamkrishnar/keepalive-workflow@v2
+        with:
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
