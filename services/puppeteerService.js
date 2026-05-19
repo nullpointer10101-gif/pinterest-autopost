@@ -480,6 +480,23 @@ async function createPinWithBot(pinData) {
       httpOnly: true
     });
 
+    console.log('[Bot] Verifying Pinterest session...');
+    const isLoggedIn = await checkPinterestLoggedIn(page);
+    if (!isLoggedIn) {
+      console.error('[Bot] ❌ Pinterest session verification failed. Session cookie is invalid or expired. Triggering 24h circuit breaker.');
+      const automationState = await historyService.getAutomationState();
+      const breakerState = {
+        ...automationState,
+        circuitBreaker: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      };
+      await runEngagementStorageWrite(
+        'Login validation circuit breaker write (pin builder)',
+        () => historyService.setAutomationState(breakerState)
+      );
+      throw new Error('Pinterest session verification failed: cookie is invalid or expired.');
+    }
+    console.log('[Bot] ✅ Pinterest session verified (logged in).');
+
     console.log('[Bot] Logged in. Navigating to Pin Builder...');
     // Retry navigation up to 3 times in case Pinterest is slow
     let navSuccess = false;
