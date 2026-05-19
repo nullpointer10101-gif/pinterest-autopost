@@ -500,6 +500,9 @@ function buildSameTypeQueries(queries, originalProductName, expectedType) {
 
 async function findProductsForSameType(queries, originalProductName, options = {}) {
   const limit = Number.isFinite(Number(options.limit)) ? Number(options.limit) : 4;
+  const maxQueries = Math.max(1, Number.isFinite(Number(options.maxQueries))
+    ? Number(options.maxQueries)
+    : parseInt(process.env.PRODUCT_SEARCH_MAX_FLIPKART_QUERIES || '2', 10));
   const expectedType = options.expectedType || detectProductType([
     originalProductName,
     queries?.exactMatchQuery,
@@ -513,7 +516,7 @@ async function findProductsForSameType(queries, originalProductName, options = {
     console.log('[Flipkart] Same-type product shelf: type unknown, using similarity only.');
   }
 
-  const queryList = buildSameTypeQueries(queries, originalProductName, expectedType);
+  const queryList = buildSameTypeQueries(queries, originalProductName, expectedType).slice(0, maxQueries);
   const seen = new Set();
   const scoredMatches = [];
 

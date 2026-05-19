@@ -6,6 +6,46 @@ function cleanText(value) {
     .trim();
 }
 
+const AMAZON_SEARCH_CACHE_TTL_MS = Math.max(60000, parseInt(process.env.PRODUCT_SEARCH_CACHE_TTL_MS || '21600000', 10));
+const amazonSearchCache = new Map();
+const amazonInFlight = new Map();
+
+function cleanCacheText(value) {
+  return cleanText(value).toLowerCase();
+}
+
+function getCachedSearch(key) {
+  const hit = amazonSearchCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > AMAZON_SEARCH_CACHE_TTL_MS) {
+    amazonSearchCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+async function withAmazonSearchCache(key, loader) {
+  const cached = getCachedSearch(key);
+  if (cached) return cached.map((item) => ({ ...item }));
+  if (amazonInFlight.has(key)) {
+    const value = await amazonInFlight.get(key);
+    return value.map((item) => ({ ...item }));
+  }
+
+  const promise = Promise.resolve()
+    .then(loader)
+    .then((value) => {
+      const safeValue = Array.isArray(value) ? value : [];
+      amazonSearchCache.set(key, { at: Date.now(), value: safeValue });
+      return safeValue;
+    })
+    .finally(() => amazonInFlight.delete(key));
+
+  amazonInFlight.set(key, promise);
+  const value = await promise;
+  return value.map((item) => ({ ...item }));
+}
+
 function getAssociateTag() {
   return cleanText(
     process.env.AMAZON_ASSOCIATE_TAG ||
@@ -186,14 +226,34 @@ async function searchAmazonProducts(query, options = {}) {
     return [];
   }
 
+  const cacheKey = ['amazon-products', getMarketplaceHost(), limit, cleanCacheText(cleanQuery)].join(':');
+  return withAmazonSearchCache(cacheKey, () => searchAmazonProductsUncached(cleanQuery, {
+    ...options,
+    limit,
+    keys,
+    logPrefix,
+  }));
+}
+
+async function searchAmazonProductsUncached(cleanQuery, options = {}) {
+  const limit = Math.max(1, Number.isFinite(Number(options.limit)) ? Number(options.limit) : 4);
+  const logPrefix = options.logPrefix || '[Amazon]';
+  const keys = Array.isArray(options.keys) ? options.keys.filter(Boolean) : [
+    process.env.SERPER_API_KEY,
+    process.env.SERPER_API_KEY_BACKUP,
+  ].filter(Boolean);
   const domain = getMarketplaceHost();
   const serperQueries = [
     `site:${domain} ${cleanQuery} dp`,
     `${cleanQuery} site:${domain} "/dp/"`,
-  ];
+  ].slice(0, Math.max(1, parseInt(process.env.AMAZON_SERPER_QUERY_VARIANTS || '1', 10)));
 
   for (const serperQuery of serperQueries) {
-    for (const apiKey of keys) {
+    let retryWithBackup = false;
+    for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
+      if (keyIndex > 0 && !retryWithBackup) break;
+      const apiKey = keys[keyIndex];
+      retryWithBackup = false;
       try {
         const res = await fetchWithTimeout('https://google.serper.dev/search', {
           method: 'POST',
@@ -205,12 +265,13 @@ async function searchAmazonProducts(query, options = {}) {
             q: serperQuery,
             gl: 'in',
             hl: 'en',
-            num: 10,
+            num: Math.max(3, Math.min(5, limit * 2)),
           }),
         }, 20000);
 
         if (res.status === 401 || res.status === 429) {
           console.warn(`${logPrefix} Serper key could not search Amazon (${res.status}); trying fallback if available.`);
+          retryWithBackup = true;
           continue;
         }
         if (!res.ok) {
@@ -247,8 +308,10 @@ async function searchAmazonProducts(query, options = {}) {
           console.log(`${logPrefix} Amazon exact-product search found ${exactProducts.length}/${limit} for "${cleanQuery}".`);
           return exactProducts;
         }
+        break;
       } catch (err) {
         console.warn(`${logPrefix} Amazon exact-product search failed for "${cleanQuery}": ${err.message}`);
+        break;
       }
     }
   }

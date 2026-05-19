@@ -25,6 +25,45 @@ const PLATFORMS = {
 };
 
 const EARNKARO_SUPPORTED = ['flipkart', 'amazon', 'myntra', 'ajio', 'meesho'];
+const SEARCH_CACHE_TTL_MS = Math.max(60000, parseInt(process.env.PRODUCT_SEARCH_CACHE_TTL_MS || '21600000', 10));
+const searchCache = new Map();
+const inFlightSearches = new Map();
+
+function cleanCacheText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function getCached(key) {
+  const hit = searchCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > SEARCH_CACHE_TTL_MS) {
+    searchCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+async function withSearchCache(key, loader) {
+  const cached = getCached(key);
+  if (cached) return cached.map((item) => ({ ...item }));
+  if (inFlightSearches.has(key)) {
+    const value = await inFlightSearches.get(key);
+    return value.map((item) => ({ ...item }));
+  }
+
+  const promise = Promise.resolve()
+    .then(loader)
+    .then((value) => {
+      const safeValue = Array.isArray(value) ? value : [];
+      searchCache.set(key, { at: Date.now(), value: safeValue });
+      return safeValue;
+    })
+    .finally(() => inFlightSearches.delete(key));
+
+  inFlightSearches.set(key, promise);
+  const value = await promise;
+  return value.map((item) => ({ ...item }));
+}
 
 function fetchWithTimeout(url, init = {}, timeoutMs = 10000) {
   const controller = new AbortController();
@@ -125,7 +164,7 @@ async function searchSerperWithFailover(query, domain, options = {}) {
   throw new Error('Serper: no API keys available');
 }
 
-async function findProductUrls(query, opts = {}) {
+async function findProductUrlsUncached(query, opts = {}) {
   const { platform = 'flipkart', strictMatch = true } = opts;
 
   const config = {
@@ -189,6 +228,18 @@ async function findProductUrls(query, opts = {}) {
   }
 
   return [];
+}
+
+async function findProductUrls(query, opts = {}) {
+  const { platform = 'flipkart', strictMatch = true } = opts;
+  const key = [
+    'product-url',
+    cleanCacheText(platform || 'all'),
+    strictMatch ? 'strict' : 'loose',
+    cleanCacheText(query),
+  ].join(':');
+
+  return withSearchCache(key, () => findProductUrlsUncached(query, opts));
 }
 
 module.exports = { findProductUrls, PLATFORMS, EARNKARO_SUPPORTED };

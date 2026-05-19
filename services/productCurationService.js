@@ -150,6 +150,44 @@ function uniqueClean(values = []) {
   return list;
 }
 
+function intEnv(name, fallback, min = 0, max = 100) {
+  const parsed = parseInt(process.env[name] || '', 10);
+  const value = Number.isFinite(parsed) ? parsed : fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+function boolEnv(name, fallback = false) {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(raw).toLowerCase());
+}
+
+function getSearchPolicy() {
+  const roleKeys = uniqueClean(String(process.env.PRODUCT_HUNTER_ROLES || 'exact_flipkart,budget_pick').split(','))
+    .map((key) => key.toLowerCase());
+  return {
+    maxRoles: intEnv('PRODUCT_HUNTER_MAX_ROLES', 2, 1, 4),
+    roleKeys,
+    maxInitialQueries: intEnv('PRODUCT_SEARCH_MAX_INITIAL_QUERIES', 2, 1, 4),
+    maxQueriesPerRole: intEnv('PRODUCT_SEARCH_MAX_QUERIES_PER_ROLE', 1, 1, 4),
+    maxMarketplacesPerRole: intEnv('PRODUCT_SEARCH_MAX_MARKETPLACES_PER_ROLE', 1, 1, 2),
+    maxValidationCandidates: intEnv('PRODUCT_SEARCH_MAX_VALIDATION_CANDIDATES', 2, 1, 8),
+    maxImageLookups: intEnv('SERPER_MAX_IMAGE_SEARCHES_PER_POST', 2, 0, 8),
+    imageLookupEnabled: boolEnv('SERPER_IMAGE_LOOKUP_ENABLED', true),
+  };
+}
+
+function createSearchBudget(policy = getSearchPolicy()) {
+  return {
+    imageLookups: 0,
+    maxImageLookups: policy.maxImageLookups,
+  };
+}
+
+function takeRoleQueries(mission, roleKey, policy) {
+  return roleQueriesForMission(mission, roleKey).slice(0, policy.maxQueriesPerRole);
+}
+
 const FABRIC_TERMS = ['linen', 'cotton', 'denim', 'corduroy', 'leather', 'suede', 'satin'];
 const FIT_TERMS = ['oversized', 'slim fit', 'regular fit', 'relaxed fit', 'loose fit', 'baggy'];
 
@@ -306,9 +344,42 @@ function choosePreferredImage(images = [], provider = '') {
   return preferred[0] || null;
 }
 
-async function findProductImage(name, url, logPrefix = '[Product Curation]') {
+const IMAGE_LOOKUP_CACHE_TTL_MS = Math.max(60000, parseInt(process.env.PRODUCT_SEARCH_CACHE_TTL_MS || '21600000', 10));
+const imageLookupCache = new Map();
+const imageLookupInFlight = new Map();
+
+function getCachedImage(key) {
+  const hit = imageLookupCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > IMAGE_LOOKUP_CACHE_TTL_MS) {
+    imageLookupCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+async function withImageCache(key, loader) {
+  const cached = getCachedImage(key);
+  if (cached !== null) return cached;
+  if (imageLookupInFlight.has(key)) return imageLookupInFlight.get(key);
+
+  const promise = Promise.resolve()
+    .then(loader)
+    .then((value) => {
+      imageLookupCache.set(key, { at: Date.now(), value: value || '' });
+      return value || null;
+    })
+    .finally(() => imageLookupInFlight.delete(key));
+
+  imageLookupInFlight.set(key, promise);
+  return promise;
+}
+
+async function findProductImage(name, url, logPrefix = '[Product Curation]', searchBudget = null) {
   const key = process.env.SERPER_API_KEY || process.env.SERPER_API_KEY_BACKUP || '';
   if (!key) return null;
+  const policy = getSearchPolicy();
+  if (!policy.imageLookupEnabled) return null;
 
   const isAmazon = amazonAffiliateService.isAmazonUrl(url);
   const isFlipkart = /flipkart\.com|fktr\.in/i.test(String(url || ''));
@@ -316,8 +387,19 @@ async function findProductImage(name, url, logPrefix = '[Product Curation]') {
   const providerHint = provider === 'amazon' ? 'amazon product' : provider === 'flipkart' ? 'flipkart product' : 'product';
   const query = cleanQuery(name || url);
   if (!query) return null;
+  const cacheKey = ['image', provider || 'any', normalizeForDedupe(query)].join(':');
+  const cached = getCachedImage(cacheKey);
+  if (cached !== null) return cached || null;
 
-  try {
+  if (searchBudget) {
+    if (searchBudget.imageLookups >= searchBudget.maxImageLookups) {
+      console.warn(`${logPrefix} Image lookup skipped for "${query}" - per-post Serper image budget reached.`);
+      return null;
+    }
+    searchBudget.imageLookups += 1;
+  }
+
+  return withImageCache(cacheKey, async () => {
     const res = await fetchWithTimeout('https://google.serper.dev/images', {
       method: 'POST',
       headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
@@ -327,16 +409,17 @@ async function findProductImage(name, url, logPrefix = '[Product Curation]') {
     if (!res.ok) return null;
     const data = await res.json();
     return choosePreferredImage(data?.images || [], provider);
-  } catch (err) {
+  }).catch((err) => {
     console.warn(`${logPrefix} Image lookup failed for "${query}": ${err.message}`);
     return null;
-  }
+  });
 }
 
 async function enrichAndValidateLinks(links, {
   expectedType,
   logPrefix = '[Product Curation]',
   limit = 4,
+  searchBudget = null,
 } = {}) {
   const validated = [];
 
@@ -357,7 +440,7 @@ async function enrichAndValidateLinks(links, {
 
     let image = cleanQuery(link.image);
     if (!image) {
-      image = await findProductImage(link.name, link.url, logPrefix);
+      image = await findProductImage(link.name, link.url, logPrefix, searchBudget);
     }
 
     if (!image) {
@@ -490,14 +573,27 @@ const HUNTER_ROLES = [
   },
 ];
 
-async function searchFlipkartHunterCandidates(mission, role, seedProducts = [], logPrefix = '[Product Curation]') {
+function getActiveHunterRoles(policy = getSearchPolicy()) {
+  const keyedRoles = policy.roleKeys.length
+    ? HUNTER_ROLES.filter((role) => policy.roleKeys.includes(role.key))
+    : HUNTER_ROLES;
+  return (keyedRoles.length ? keyedRoles : HUNTER_ROLES).slice(0, policy.maxRoles);
+}
+
+async function searchFlipkartHunterCandidates(mission, role, seedProducts = [], logPrefix = '[Product Curation]', policy = getSearchPolicy()) {
   const roleKey = role.queryGroup || 'exact';
   const products = role.key === 'exact_flipkart' && Array.isArray(seedProducts) && seedProducts.length
     ? seedProducts
     : [];
   const seen = new Set(products.map((product) => productSignature(product).urlKey).filter(Boolean));
 
-  for (const query of roleQueriesForMission(mission, roleKey)) {
+  if (role.key === 'exact_flipkart' && products.length) {
+    const sortedSeed = sortCandidatesForMission(products, mission, roleKey);
+    console.log(`${logPrefix} Hunter ${role.label} Flipkart candidates from seed cache: ${sortedSeed.length}.`);
+    return sortedSeed;
+  }
+
+  for (const query of takeRoleQueries(mission, roleKey, policy)) {
     if (products.length >= 10) break;
 
     const roleQueries = {
@@ -509,6 +605,7 @@ async function searchFlipkartHunterCandidates(mission, role, seedProducts = [], 
     const found = await flipkartSearchService.findProductsForSameType(roleQueries, mission.primaryQuery, {
       limit: 6,
       expectedType: mission.productType,
+      maxQueries: 1,
     });
 
     for (const product of found || []) {
@@ -529,12 +626,12 @@ async function searchFlipkartHunterCandidates(mission, role, seedProducts = [], 
   return sorted;
 }
 
-async function searchAmazonHunterCandidates(mission, role, logPrefix = '[Product Curation]') {
+async function searchAmazonHunterCandidates(mission, role, logPrefix = '[Product Curation]', policy = getSearchPolicy()) {
   const roleKey = role.queryGroup || 'exact';
   const products = [];
   const seen = new Set();
 
-  for (const query of roleQueriesForMission(mission, roleKey)) {
+  for (const query of takeRoleQueries(mission, roleKey, policy)) {
     if (products.length >= 10) break;
     const found = await amazonAffiliateService.searchAmazonProducts(query, {
       limit: 8,
@@ -578,7 +675,7 @@ function rememberGlobalProduct(link, seenGlobal) {
   ].filter(Boolean).forEach((key) => seenGlobal.add(key));
 }
 
-async function validateHunterCandidate(candidate, role, mission, seenGlobal, logPrefix) {
+async function validateHunterCandidate(candidate, role, mission, seenGlobal, logPrefix, searchBudget) {
   const rawLinks = await buildAffiliateShelf([candidate], {
     typeLabel: mission.productTypeLabel,
     logPrefix,
@@ -588,6 +685,7 @@ async function validateHunterCandidate(candidate, role, mission, seenGlobal, log
     expectedType: mission.productType,
     logPrefix,
     limit: 1,
+    searchBudget,
   });
 
   const link = validated[0];
@@ -639,21 +737,24 @@ async function buildProductHunterShelf(products, {
 
   const finalLinks = [];
   const seenGlobal = new Set();
-  const maxItems = Number.isFinite(Number(limit)) ? Number(limit) : 4;
+  const policy = getSearchPolicy();
+  const searchBudget = createSearchBudget(policy);
+  const maxItems = Math.min(Number.isFinite(Number(limit)) ? Number(limit) : 4, policy.maxRoles);
 
-  for (const role of HUNTER_ROLES.slice(0, maxItems)) {
-    const marketplaces = role.preferredMarketplace === 'amazon'
+  for (const role of getActiveHunterRoles(policy).slice(0, maxItems)) {
+    const preferredMarketplaces = role.preferredMarketplace === 'amazon'
       ? ['amazon', 'flipkart']
       : ['flipkart', 'amazon'];
+    const marketplaces = preferredMarketplaces.slice(0, policy.maxMarketplacesPerRole);
     let selected = null;
 
     for (const marketplace of marketplaces) {
       const candidates = marketplace === 'amazon'
-        ? await searchAmazonHunterCandidates(mission, role, logPrefix)
-        : await searchFlipkartHunterCandidates(mission, role, products, logPrefix);
+        ? await searchAmazonHunterCandidates(mission, role, logPrefix, policy)
+        : await searchFlipkartHunterCandidates(mission, role, products, logPrefix, policy);
 
-      for (const candidate of candidates) {
-        selected = await validateHunterCandidate(candidate, role, mission, seenGlobal, logPrefix);
+      for (const candidate of candidates.slice(0, policy.maxValidationCandidates)) {
+        selected = await validateHunterCandidate(candidate, role, mission, seenGlobal, logPrefix, searchBudget);
         if (selected) break;
       }
 
@@ -712,9 +813,11 @@ async function buildSameTypeShelfFromQuery(query, {
   }
 
   console.log(`${logPrefix} Building same-type shelf from "${clean}"${expectedType ? ` (${productTypeLabel})` : ''}`);
+  const policy = getSearchPolicy();
   const products = await flipkartSearchService.findProductsForSameType(queries, clean, {
     limit: getBalancedTargets(limit).flipkartTarget,
     expectedType,
+    maxQueries: policy.maxInitialQueries,
   });
 
   const hunterResult = await buildProductHunterShelf(products, {
@@ -800,9 +903,11 @@ async function buildSameTypeShelfFromProductData(productData, {
   }
 
   console.log(`${logPrefix} Building same-type shelf from single product "${productName}"${expectedType ? ` (${productTypeLabel})` : ''}`);
+  const policy = getSearchPolicy();
   const products = await flipkartSearchService.findProductsForSameType(queries, productName, {
     limit: getBalancedTargets(limit).flipkartTarget,
     expectedType,
+    maxQueries: policy.maxInitialQueries,
   });
 
   const hunterResult = await buildProductHunterShelf(products, {
