@@ -48,11 +48,15 @@ const DEFAULT_REFRESH_THROTTLE_MS = 2500;
 const VISUAL_MODE_STORAGE_KEY = 'pmc_visual_mode_v1';
 const PERFORMANCE_MODE_STORAGE_KEY = 'pmc_performance_mode_v1';
 const MOBILE_VIEWPORT_QUERY = '(max-width: 760px)';
-const MOBILE_WORKING_TABS = new Set(['dashboard', 'studio', 'channels', 'queue', 'history']);
+const MOBILE_WORKING_TABS = new Set(['dashboard', 'studio', 'channels', 'engagements', 'history']);
+const HISTORY_PIN_LIMIT = 10;
+const ENGAGEMENT_LOG_HOURS = 24;
+const ENGAGEMENT_LOG_LIMIT = 50;
+const POSTED_HISTORY_STATUSES = new Set(['success', 'completed', 'posted']);
 const MOBILE_TAB_FALLBACKS = {
   pinterest: 'studio',
   settings: 'dashboard',
-  engagements: 'dashboard',
+  queue: 'dashboard',
 };
 const QUEUE_PRIORITY_ORDER = ['low', 'normal', 'high', 'urgent'];
 const VISUAL_MODES = {
@@ -195,7 +199,6 @@ function bindEvents() {
   on('queue-bulk-apply-btn', 'click', applyQueueBulkAction);
   on('queue-bulk-clear-btn', 'click', clearQueueSelection);
   on('history-search', 'input', renderHistoryList);
-  on('history-status-filter', 'change', renderHistoryList);
   on('engagement-search', 'input', renderEngagementAuditList);
 
   on('field-title', 'input', updateComposerMeta);
@@ -534,7 +537,7 @@ async function refreshOverview() {
   const [queueResp, historyResp, pinterestResp, systemStatus, trackerStatusResp] =
     await Promise.all([
       apiRequest('/api/queue').catch(err => { console.warn('[Dashboard] Queue fetch failed:', err.message); return null; }),
-      apiRequest('/api/history').catch(err => { console.warn('[Dashboard] History fetch failed:', err.message); return null; }),
+      apiRequest(getHistoryApiPath()).catch(err => { console.warn('[Dashboard] History fetch failed:', err.message); return null; }),
       apiRequest('/api/pinterest/status').catch(err => { console.warn('[Dashboard] Pinterest status failed:', err.message); return {}; }),
       apiRequest('/api/system/status').catch(err => { console.warn('[Dashboard] System status failed:', err.message); return {}; }),
       apiRequest('/api/ig-tracker/status').catch(() => null),
@@ -617,6 +620,31 @@ function getSuccessRatePercent() {
   const failedCount = state.history.filter((item) => item.status === 'error' || item.status === 'failed').length;
   const total = successCount + failedCount;
   return total > 0 ? Math.round((successCount / total) * 100) : 0;
+}
+
+function isPostedHistoryPin(item = {}) {
+  const status = String(item.status || '').toLowerCase();
+  return POSTED_HISTORY_STATUSES.has(status);
+}
+
+function getRecentPostedHistoryPins(history = state.history, limit = HISTORY_PIN_LIMIT) {
+  return [...(Array.isArray(history) ? history : [])]
+    .filter(isPostedHistoryPin)
+    .sort((a, b) => {
+      const bTime = new Date(b.postedAt || b.createdAt || 0).getTime();
+      const aTime = new Date(a.postedAt || a.createdAt || 0).getTime();
+      return bTime - aTime;
+    })
+    .slice(0, limit);
+}
+
+function getHistoryApiPath() {
+  if (!isMobileViewport()) return '/api/history';
+  return `/api/history?postedOnly=1&limit=${HISTORY_PIN_LIMIT}`;
+}
+
+function getEngagementApiPath() {
+  return `/api/engagements?hours=${ENGAGEMENT_LOG_HOURS}&limit=${ENGAGEMENT_LOG_LIMIT}`;
 }
 
 function initDynamicHud() {
@@ -1599,12 +1627,13 @@ function renderDashboardHistory() {
   const list = byId('dashboard-history-list');
   if (!list) return;
 
-  if (!state.history.length) {
+  const recentPins = getRecentPostedHistoryPins(state.history, 5);
+  if (!recentPins.length) {
     list.innerHTML = '<div class="pulse-item">No recent post history yet. Posts will appear here after the bot runs.</div>';
     return;
   }
 
-  list.innerHTML = state.history.slice(0, 5).map(item => {
+  list.innerHTML = recentPins.map(item => {
     const title = escHtml(item.aiContent?.title || item.title || 'Untitled');
     const status = item.status || 'success';
     const badgeClass = status === 'success' ? 'badge-success' : 'badge-error';
@@ -1634,35 +1663,31 @@ function renderHistoryList() {
   if (!list) return;
 
   const search = String(byId('history-search')?.value || '').trim().toLowerCase();
-  const statusFilter = byId('history-status-filter')?.value || 'all';
+  const recentPostedPins = getRecentPostedHistoryPins(state.history, HISTORY_PIN_LIMIT);
 
-  const rows = state.history.filter((item) => {
-    const status = item.status || '';
-    const matchStatus = statusFilter === 'all' ? true : status === statusFilter;
-    if (!matchStatus) return false;
+  const rows = recentPostedPins.filter((item) => {
     if (!search) return true;
 
-    const title = item.aiContent?.title || '';
+    const title = item.aiContent?.title || item.title || '';
     const username = item.reelData?.username || '';
     const haystack = `${title} ${username}`.toLowerCase();
     return haystack.includes(search);
   });
 
   if (!rows.length) {
-    list.innerHTML = '<div class="pulse-item">No history records match your filters.</div>';
+    list.innerHTML = '<div class="pulse-item">No posted pins found in the latest 10 pins.</div>';
     return;
   }
 
-  const virtual = getVirtualWindow(list, rows, 'history');
-  const itemsHtml = virtual.items
+  list.innerHTML = rows
     .map((item) => {
-      const status = item.status || 'preview';
+      const status = item.status || 'success';
       const title = escHtml(item.aiContent?.title || 'Untitled post');
       const username = escHtml(item.reelData?.username || 'unknown');
       const postedAt = item.postedAt || item.createdAt;
       const when = postedAt ? formatDateTime12h(postedAt) : 'Unknown date';
-      const badgeClass = status === 'success' ? 'badge-success' : status === 'error' ? 'badge-error' : 'badge-warn';
-      const badgeLabel = status === 'success' ? 'POSTED' : status === 'error' ? 'FAILED' : 'PREVIEW';
+      const badgeClass = POSTED_HISTORY_STATUSES.has(String(status).toLowerCase()) ? 'badge-success' : 'badge-warn';
+      const badgeLabel = 'POSTED';
       const pinUrl = item.pinterestPin?.url;
       const viewLink = pinUrl && pinUrl !== '#'
         ? `<a class="pill-btn" href="${escAttr(pinUrl)}" target="_blank" rel="noopener noreferrer">View Pin</a>`
@@ -1687,16 +1712,11 @@ function renderHistoryList() {
       `;
     })
     .join('');
-
-  const topSpacer = virtual.top > 0 ? `<div class="virtual-spacer" style="height:${virtual.top}px"></div>` : '';
-  const bottomSpacer = virtual.bottom > 0 ? `<div class="virtual-spacer" style="height:${virtual.bottom}px"></div>` : '';
-  list.innerHTML = `${topSpacer}${itemsHtml}${bottomSpacer}`;
-  bindVirtualScroll(list, 'history', renderHistoryList);
 }
 
 async function loadEngagements() {
   try {
-    const response = await apiRequest('/api/engagements');
+    const response = await apiRequest(getEngagementApiPath());
     state.engagements = Array.isArray(response.engagements) ? response.engagements : [];
     state.engagementSummary = response.summary || null;
     renderEngagements();
@@ -1819,12 +1839,12 @@ function renderEngagementAuditList() {
   }
 
   if (!rows.length) {
-    list.innerHTML = '<div class="pulse-item">No logs found in the last 24 hours.</div>';
+    list.innerHTML = `<div class="pulse-item">No logs found in the last ${ENGAGEMENT_LOG_HOURS} hours.</div>`;
     return;
   }
 
   list.innerHTML = rows
-    .slice(0, 100)
+    .slice(0, ENGAGEMENT_LOG_LIMIT)
     .map((entry) => {
       const when = entry.when ? formatDateTime12h(entry.when) : 'Unknown time';
       const whenAgo = formatTimeAgo(entry.when);
@@ -2401,9 +2421,6 @@ function renderAlertCenter(pinterestStatus = {}, systemStatus = {}) {
       actionLabel: 'Open History',
       action: () => {
         switchTab('history');
-        const statusFilter = byId('history-status-filter');
-        if (statusFilter) statusFilter.value = 'error';
-        renderHistoryList();
       },
     });
   }

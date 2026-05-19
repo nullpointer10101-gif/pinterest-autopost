@@ -9098,6 +9098,7 @@ body {
   .dashboard-card-workflow,
   .dashboard-card-cycle,
   .dashboard-card-history,
+  .dashboard-card-queue,
   .card-title-wrap > .muted-text,
   .dashboard-card-ig .pipeline-log-head,
   .dashboard-card-ig #ig-dashboard-logs {
@@ -9488,6 +9489,12 @@ body {
 
   .list {
     padding: 8px;
+  }
+
+  #panel-engagements .engagement-admin-actions,
+  #panel-engagements .engagement-raw-title,
+  #panel-engagements #engagement-logs {
+    display: none !important;
   }
 
   .list-item {

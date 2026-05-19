@@ -86,6 +86,10 @@ function toInt(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function getEngagementTime(entry = {}) {
+  return entry.engagedAt || entry.createdAt || entry.timestamp || entry.at || null;
+}
+
 function getPinterestEngagementTargets() {
   return {
     likeTarget: Math.max(0, toInt(process.env.AUTOMATION_ENGAGEMENT_LIKE_TARGET ?? process.env.AUTOMATION_ENGAGEMENT_LIKES_PER_HOUR, 5)),
@@ -156,7 +160,18 @@ async function buildPinterestEngagementSummary(engagements = []) {
 
 router.get('/history', async (req, res) => {
   try {
-    const history = await historyService.getAll();
+    const postedOnly = ['1', 'true', 'yes'].includes(String(req.query.postedOnly || '').toLowerCase());
+    const limit = Math.min(100, Math.max(0, Number.parseInt(req.query.limit, 10) || 0));
+    let history = await historyService.getAll();
+
+    if (postedOnly) {
+      history = history.filter((item) => ['success', 'completed', 'posted'].includes(String(item.status || '').toLowerCase()));
+    }
+
+    if (limit > 0) {
+      history = history.slice(0, limit);
+    }
+
     res.json({ success: true, history });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -261,7 +276,23 @@ router.get('/engagements', async (req, res) => {
   try {
     const engagements = await historyService.getEngagements();
     const summary = await buildPinterestEngagementSummary(engagements);
-    res.json({ success: true, engagements, summary });
+    const hours = Math.min(168, Math.max(0, toInt(req.query.hours, 0)));
+    const limit = Math.min(500, Math.max(0, toInt(req.query.limit, 0)));
+    const since = hours > 0 ? Date.now() - hours * 60 * 60 * 1000 : 0;
+    let visibleEngagements = engagements;
+
+    if (since > 0) {
+      visibleEngagements = visibleEngagements.filter((entry) => {
+        const time = new Date(getEngagementTime(entry) || 0).getTime();
+        return Number.isFinite(time) && time >= since;
+      });
+    }
+
+    if (limit > 0) {
+      visibleEngagements = visibleEngagements.slice(0, limit);
+    }
+
+    res.json({ success: true, engagements: visibleEngagements, summary });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -632,7 +632,7 @@
             <section id="panel-history" class="panel hidden">
                 <article class="card">
                     <div class="card-header-row">
-                        <h2><i data-lucide="history" class="heading-icon"></i>History</h2>
+                        <h2><i data-lucide="history" class="heading-icon"></i>Last 10 Posted Pins</h2>
                         <div class="button-row">
                             <button id="export-history-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="download" class="btn-icon"></i><span>Export JSON</span></button>
                             <button id="clear-history-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear History</span></button>
@@ -640,13 +640,7 @@
                     </div>
 
                     <div class="control-row">
-                        <input type="text" id="history-search" placeholder="Search history by title or username">
-                        <select id="history-status-filter">
-                            <option value="all">All statuses</option>
-                            <option value="success">Posted</option>
-                            <option value="error">Failed</option>
-                            <option value="preview">Preview</option>
-                        </select>
+                        <input type="text" id="history-search" placeholder="Search last 10 posted pins by title or username">
                     </div>
 
                     <div id="history-list" class="list"></div>
@@ -664,7 +658,7 @@
                         <input type="text" id="engagement-search" placeholder="Search Pinterest engagement logs">
                     </div>
 
-                    <div class="button-row inline-actions-row">
+                    <div class="button-row inline-actions-row engagement-admin-actions">
                         <button id="reset-engagement-guard-btn" class="btn btn-secondary compact-btn" type="button"><i data-lucide="shield-check" class="btn-icon"></i><span>Reset Guard</span></button>
                         <button id="clear-engagements-btn" class="btn btn-danger compact-btn" type="button"><i data-lucide="eraser" class="btn-icon"></i><span>Clear Logs</span></button>
                     </div>
@@ -672,7 +666,7 @@
                     <div id="engagement-summary" class="stats-mini-grid"></div>
                     <div id="engagement-readonly-list" class="list audit-list"></div>
 
-                    <div class="sub-title">Raw Booster Stream</div>
+                    <div class="sub-title engagement-raw-title">Raw Booster Stream</div>
                     <div id="engagement-logs" class="list"></div>
                 </article>
             </section>
@@ -742,7 +736,7 @@
             <button class="mobile-tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Home</span></button>
             <button class="mobile-tab-btn" data-tab="studio" type="button"><i data-lucide="clapperboard" class="tab-icon"></i><span>Studio</span></button>
             <button class="mobile-tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
-            <button class="mobile-tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
+            <button class="mobile-tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Logs</span></button>
             <button class="mobile-tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
         </nav>
 
