@@ -197,11 +197,9 @@ router.post('/channels', async (req, res) => {
     }
 
     const dispatch = await igRepostWorkflowService.triggerValidation(username);
+    let validationDispatched = dispatch.success;
     if (!dispatch.success) {
-      return res.status(500).json({
-        success: false,
-        error: `Channel added, but validation dispatch failed: ${dispatch.error}`,
-      });
+      console.warn(`[API] Channel @${username} added, but validation dispatch failed: ${dispatch.error}`);
     }
 
     await igRepostService.markDispatch({
@@ -233,9 +231,12 @@ router.post('/channels', async (req, res) => {
       username,
       channels,
       avatarSyncStarted,
-      message: avatarSyncStarted
-        ? `Channel @${username} added. Validation repost and profile picture sync have started.`
-        : `Channel @${username} added. Independent validation repost has started.`,
+      validationDispatched,
+      message: validationDispatched
+        ? (avatarSyncStarted
+            ? `Channel @${username} added. Validation repost and profile picture sync have started.`
+            : `Channel @${username} added. Independent validation repost has started.`)
+        : `Channel @${username} added to tracker. Note: GitHub dispatch was skipped (${dispatch.error || 'token missing'}). Validation will execute on the next scheduled hourly run.`,
     });
   } catch (err) {
     if (err.code === 'DUPLICATE_ACCOUNT') {
