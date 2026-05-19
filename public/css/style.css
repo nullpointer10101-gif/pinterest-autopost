@@ -9537,12 +9537,25 @@ body {
 }
 
 @media (max-width: 760px) {
+  html {
+    height: auto !important;
+    min-height: 100%;
+    overflow-y: auto !important;
+    touch-action: pan-y;
+  }
+
   body.mobile-performance-mode {
     --shadow-sm: none;
     --shadow-md: none;
     --shadow-lg: none;
     background: #0c0f14 !important;
-    overscroll-behavior-y: contain;
+    height: auto !important;
+    min-height: 100dvh;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
   }
 
   body.mobile-performance-mode *,
@@ -9560,7 +9573,6 @@ body {
     backdrop-filter: none !important;
     box-shadow: none !important;
     transform: translate3d(0, 0, 0);
-    contain: paint;
   }
 
   body.mobile-performance-mode .card,
@@ -9575,27 +9587,6 @@ body {
     background-image: none !important;
     box-shadow: none !important;
     filter: none !important;
-  }
-
-  body.mobile-performance-mode .dashboard-card-ig,
-  body.mobile-performance-mode .dashboard-card-queue,
-  body.mobile-performance-mode #panel-studio .card,
-  body.mobile-performance-mode #panel-channels .card,
-  body.mobile-performance-mode #panel-queue .card,
-  body.mobile-performance-mode #panel-history .card,
-  body.mobile-performance-mode .channel-card,
-  body.mobile-performance-mode .list-item {
-    content-visibility: auto;
-    contain-intrinsic-size: 140px;
-  }
-
-  body.mobile-performance-mode .dashboard-card-ig,
-  body.mobile-performance-mode .dashboard-card-queue,
-  body.mobile-performance-mode #panel-studio .card,
-  body.mobile-performance-mode #panel-channels .card,
-  body.mobile-performance-mode #panel-queue .card,
-  body.mobile-performance-mode #panel-history .card {
-    contain-intrinsic-size: 420px;
   }
 
   body.mobile-performance-mode .btn:hover,
