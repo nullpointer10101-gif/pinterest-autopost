@@ -12,6 +12,7 @@ const historyRoutes = require('./history');
 const automationRoutes = require('./automation');
 const autopostRoutes = require('./autopost');
 const igTrackerRoutes = require('./igTrackerApi');
+const studioRoutes = require('./studio');
 
 // Mount sub-routers - System first for priority
 router.use('/system', systemRoutes);
@@ -31,6 +32,7 @@ router.use('/', contentRoutes);
 router.use('/pinterest', pinterestRoutes);
 router.use('/', historyRoutes);
 router.use('/autopost', autopostRoutes);
+router.use('/studio', studioRoutes);
 router.use('/queue', queueRoutes);
 router.use('/automation', automationRoutes);
 router.use('/ig-tracker', igTrackerRoutes);

@@ -16,6 +16,8 @@
     "dotenv": "^16.3.1",
     "duck-duck-scrape": "^2.2.7",
     "express": "^4.18.2",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
     "form-data": "^4.0.0",
     "instagram-url-direct": "^2.0.7",
     "jsdom": "^29.1.1",

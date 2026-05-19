@@ -36,6 +36,9 @@ const state = {
     selectedIds: new Set(),
     draggingId: '',
   },
+  studio: {
+    lastEdit: null,
+  },
   alerts: [],
 };
 
@@ -46,6 +49,13 @@ const DEFAULT_REFRESH_THROTTLE_MS = 2500;
 const DRAFTS_STORAGE_KEY = 'pmc_drafts_v1';
 const VISUAL_MODE_STORAGE_KEY = 'pmc_visual_mode_v1';
 const PERFORMANCE_MODE_STORAGE_KEY = 'pmc_performance_mode_v1';
+const MOBILE_VIEWPORT_QUERY = '(max-width: 760px)';
+const MOBILE_WORKING_TABS = new Set(['dashboard', 'studio', 'channels', 'queue', 'history']);
+const MOBILE_TAB_FALLBACKS = {
+  pinterest: 'studio',
+  settings: 'dashboard',
+  engagements: 'dashboard',
+};
 const QUEUE_PRIORITY_ORDER = ['low', 'normal', 'high', 'urgent'];
 const VISUAL_MODES = {
   dark: {
@@ -84,6 +94,7 @@ const PINTEREST_LIMITS = {
 
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
+  mountStudioPoster();
   initVisualSystem();
   initDynamicHud();
   initKineticCards();
@@ -94,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setAutoRefresh(true);
   updateComposerMeta();
   hydrateIcons();
+  window.addEventListener('resize', ensureVisibleMobileTab, { passive: true });
   window.addEventListener('beforeunload', () => {
     setPreviewScrollLock(false);
   });
@@ -115,6 +127,7 @@ function bindEvents() {
   });
 
   on('extract-btn', 'click', handleExtract);
+  on('studio-auto-edit-btn', 'click', handleStudioAutoEdit);
   on('paste-reel-btn', 'click', pasteReelUrlFromClipboard);
   on('preview-audio-btn', 'click', togglePreviewAudio);
   on('preview-scroll-btn', 'click', togglePreviewScrollLock);
@@ -133,6 +146,7 @@ function bindEvents() {
   on('manual-refresh-btn', 'click', () => refreshAll({ force: true }));
   on('visual-mode-btn', 'click', handleVisualModeToggle);
   on('hero-open-channels-btn', 'click', () => switchTab('channels'));
+  on('hero-open-studio-btn', 'click', () => switchTab('studio'));
   on('hero-open-history-btn', 'click', () => switchTab('history'));
   on('hero-refresh-btn', 'click', () => refreshAll({ force: true }));
   on('link-session-btn', 'click', linkSessionCookie);
@@ -177,6 +191,10 @@ function bindEvents() {
 
   on('queue-search', 'input', renderQueueList);
   on('queue-status-filter', 'change', renderQueueList);
+  on('queue-select-all', 'change', handleQueueSelectAll);
+  on('queue-bulk-action', 'change', updateQueueBulkControls);
+  on('queue-bulk-apply-btn', 'click', applyQueueBulkAction);
+  on('queue-bulk-clear-btn', 'click', clearQueueSelection);
   on('history-search', 'input', renderHistoryList);
   on('history-status-filter', 'change', renderHistoryList);
   on('engagement-search', 'input', renderEngagementAuditList);
@@ -185,6 +203,9 @@ function bindEvents() {
   on('field-desc', 'input', updateComposerMeta);
   on('field-alt', 'input', updateComposerMeta);
   on('field-link', 'input', updateComposerMeta);
+  on('studio-intensity', 'input', (event) => {
+    setText('studio-intensity-value', event.target.value);
+  });
 
   on('reel-url', 'keydown', (event) => {
     if (event.key === 'Enter') handleExtract();
@@ -212,6 +233,13 @@ function on(id, event, handler) {
 
 function byId(id) {
   return document.getElementById(id);
+}
+
+function mountStudioPoster() {
+  const host = byId('studio-poster-host');
+  const card = byId('mission-builder-card');
+  if (!host || !card || card.parentElement === host) return;
+  host.appendChild(card);
 }
 
 function resolveVisualMode(mode) {
@@ -355,7 +383,27 @@ function handleVisualModeToggle() {
   applyVisualMode(nextMode, { persist: true, notify: true });
 }
 
+function isMobileViewport() {
+  if (typeof window === 'undefined') return false;
+  if (typeof window.matchMedia === 'function') {
+    return window.matchMedia(MOBILE_VIEWPORT_QUERY).matches;
+  }
+  return window.innerWidth <= 760;
+}
+
+function normalizeTabForViewport(tab) {
+  const requestedTab = tab || 'dashboard';
+  if (!isMobileViewport() || MOBILE_WORKING_TABS.has(requestedTab)) return requestedTab;
+  return MOBILE_TAB_FALLBACKS[requestedTab] || 'dashboard';
+}
+
+function ensureVisibleMobileTab() {
+  const safeTab = normalizeTabForViewport(state.currentTab);
+  if (safeTab !== state.currentTab) switchTab(safeTab);
+}
+
 function switchTab(tab) {
+  tab = normalizeTabForViewport(tab);
   state.currentTab = tab;
 
   document.querySelectorAll('.tab-btn').forEach((button) => {
@@ -829,6 +877,86 @@ async function handleExtract() {
   }
 }
 
+function getStudioOptions() {
+  return {
+    enabled: true,
+    profile: byId('studio-edit-profile')?.value || 'pro_fashion',
+    audioMode: byId('studio-audio-mode')?.value || 'original',
+    intensity: Number(byId('studio-intensity')?.value || 72),
+    addHook: byId('studio-add-hook')?.checked !== false,
+    addProductChips: byId('studio-add-products')?.checked !== false,
+    addOutro: byId('studio-add-outro')?.checked !== false,
+    addWatermark: byId('studio-add-watermark')?.checked !== false,
+    addAdvancedFx: byId('studio-add-advanced-fx')?.checked !== false,
+    source: 'studio',
+  };
+}
+
+function setStudioStatus(message, tone = '') {
+  const el = byId('studio-status');
+  if (!el) return;
+  el.className = 'studio-status';
+  if (tone) el.classList.add(tone);
+  el.innerHTML = message;
+}
+
+function renderStudioStatus(data = {}) {
+  const autoEdit = data.autoEdit || {};
+  const products = Array.isArray(data.affiliateLinks) ? data.affiliateLinks : [];
+  const effects = Array.isArray(autoEdit.effects) ? autoEdit.effects : [];
+  const productText = products.length
+    ? `${products.length} store product${products.length === 1 ? '' : 's'} attached`
+    : 'store links will be rebuilt during posting if needed';
+  const effectText = effects.length ? effects.slice(0, 5).join(', ') : 'edit recipe saved';
+  const statusTone = autoEdit.renderedPreview ? 'success' : 'warn';
+  const fallback = autoEdit.fallbackReason ? `<br>Fallback: ${escHtml(autoEdit.fallbackReason)}` : '';
+
+  setStudioStatus(
+    `<strong>${autoEdit.renderedPreview ? 'Edited preview ready.' : 'Draft ready with original preview.'}</strong><br>${escHtml(productText)}<br>Effects: ${escHtml(effectText)}${fallback}`,
+    statusTone
+  );
+}
+
+async function handleStudioAutoEdit() {
+  const input = byId('reel-url');
+  const btn = byId('studio-auto-edit-btn');
+  const url = String(input?.value || '').trim();
+
+  if (!url) {
+    showToast('Paste an Instagram reel URL first.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  const label = btn.querySelector('span');
+  const originalLabel = label?.textContent || 'Auto Edit Reel';
+  if (label) label.textContent = 'Editing...';
+  setStudioStatus('<strong>Rendering advanced edit...</strong><br>Extracting reel, generating copy, building store links, and applying grade, motion, grain, flashes, spotlight sweeps, and brand layers.', '');
+
+  try {
+    const response = await apiRequest('/api/studio/auto-edit', {
+      method: 'POST',
+      body: {
+        url,
+        options: getStudioOptions(),
+      },
+    });
+
+    const data = response.data || {};
+    state.studio.lastEdit = data;
+    state.lastExtracted = data;
+    showPreview(data);
+    renderStudioStatus(data);
+    showToast(response.message || 'Auto edit ready.', 'success');
+  } catch (error) {
+    setStudioStatus(`<strong>Auto edit failed.</strong><br>${escHtml(error.message || 'Unknown editor error')}`, 'warn');
+    showToast(error.message || 'Auto edit failed.', 'error');
+  } finally {
+    btn.disabled = false;
+    if (label) label.textContent = originalLabel;
+  }
+}
+
 
 
 function showPreview(payload) {
@@ -847,8 +975,10 @@ function showPreview(payload) {
   const reelData = payload.reelData || {};
   const aiContent = payload.aiContent || {};
   const isVideo = isVideoMedia(reelData);
-  const fallbackImage = reelData.thumbnailUrl || reelData.mediaUrl || 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=400';
-  const videoSource = reelData.mediaUrl || reelData.thumbnailUrl || '';
+  const previewVideoSource = reelData.editedMediaUrl || reelData.previewMediaUrl || reelData.mediaUrl || reelData.thumbnailUrl || '';
+  const previewImageSource = reelData.editedThumbnailUrl || reelData.previewThumbnailUrl || reelData.thumbnailUrl || previewVideoSource;
+  const fallbackImage = previewImageSource || 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=400';
+  const videoSource = previewVideoSource;
 
   resetPreviewMedia();
   state.preview.isVideo = isVideo;
@@ -902,7 +1032,7 @@ function showPreview(payload) {
 
   title.value = (aiContent.title || 'New pin mission').slice(0, 100);
   desc.value = (aiContent.description || '').slice(0, 800);
-  link.value = payload.destinationLink || payload.sourceUrl || '';
+  link.value = payload.destinationLink || '';
   alt.value = '';
   updateComposerMeta();
 
@@ -946,6 +1076,7 @@ async function handleQueue() {
   btn.textContent = 'Queueing...';
 
   try {
+    const isStudioPayload = postPayload.sourcePipeline === 'studio' && postPayload.autoEdit?.source === 'studio';
     const item = {
       title: postPayload.title,
       description: postPayload.description,
@@ -958,7 +1089,11 @@ async function handleQueue() {
       caption: postPayload.reelMeta.caption,
       thumbnailUrl: postPayload.reelMeta.thumbnailUrl || postPayload.mediaUrl,
       smartCover: true,
-      smartCoverSource: 'manual_url_queue',
+      smartCoverSource: isStudioPayload ? 'direct_reel_studio' : 'manual_url_queue',
+      sourcePipeline: isStudioPayload ? 'studio' : 'manual_queue',
+      autoEdit: isStudioPayload ? postPayload.autoEdit : null,
+      affiliateLinks: postPayload.affiliateLinks || [],
+      productInfo: postPayload.productInfo || null,
       aiContent: {
         title: postPayload.title,
         description: postPayload.description,
@@ -996,7 +1131,7 @@ function buildPostPayload() {
   const altText = String(byId('field-alt')?.value || '').trim();
   const reelData = state.lastExtracted.reelData || {};
   const aiContent = state.lastExtracted.aiContent || {};
-  const mediaUrl = reelData.mediaUrl || reelData.thumbnailUrl || '';
+  const mediaUrl = reelData.originalMediaUrl || reelData.rawMediaUrl || reelData.mediaUrl || reelData.thumbnailUrl || '';
   const normalizedDestination = normalizeDestinationLink(destinationLinkRaw);
   if (normalizedDestination.error) {
     showToast(normalizedDestination.error, 'error');
@@ -1004,8 +1139,8 @@ function buildPostPayload() {
   }
 
   const sourceUrl =
-    normalizedDestination.value ||
     state.lastExtracted.sourceUrl ||
+    reelData.sourceUrl ||
     String(byId('reel-url')?.value || '').trim();
 
   if (!title) {
@@ -1037,11 +1172,16 @@ function buildPostPayload() {
     mediaUrl,
     sourceUrl,
     destinationLink: normalizedDestination.value || '',
+    sourcePipeline: state.lastExtracted.sourcePipeline || (state.lastExtracted.autoEdit?.source === 'studio' ? 'studio' : 'manual'),
+    autoEdit: state.lastExtracted.autoEdit || null,
+    affiliateLinks: Array.isArray(state.lastExtracted.affiliateLinks) ? state.lastExtracted.affiliateLinks : [],
+    productInfo: state.lastExtracted.productInfo || null,
     reelMeta: {
       username: reelData.username || 'unknown',
       caption: reelData.caption || '',
-      thumbnailUrl: reelData.thumbnailUrl || mediaUrl,
+      thumbnailUrl: reelData.thumbnailUrl || reelData.editedThumbnailUrl || reelData.previewThumbnailUrl || mediaUrl,
       mediaType: reelData.mediaType || 'video',
+      shortcode: reelData.shortcode || '',
     },
   };
 }
@@ -1054,6 +1194,8 @@ function renderQueueList() {
 
   if (!rows.length) {
     list.innerHTML = '<div class="pulse-item">No queue items match your filters.</div>';
+    syncQueueSelectionControls();
+    updateQueueBulkControls();
     return;
   }
 
@@ -1068,6 +1210,8 @@ function renderQueueList() {
     const addedAt = item.addedAt ? formatDateTime12h(item.addedAt) : '';
     const dateText = addedAt ? `<div class="item-meta">Added ${escHtml(addedAt)}</div>` : '';
     const scheduleLabel = formatScheduledTime(item.scheduledAfter);
+    const selected = state.queuePlanner.selectedIds.has(item.id) ? 'checked' : '';
+    const scheduleValue = toLocalDateTimeInput(item.scheduledAfter);
     const actionBtns = status === 'pending' || status === 'failed'
       ? `
         <button class="pill-btn" onclick="handlePromoteQueueItem('${escAttr(item.id)}')">Post Now</button>
@@ -1076,7 +1220,9 @@ function renderQueueList() {
       : '';
 
     return `
-      <div class="list-item queue-row">
+      <div class="list-item queue-row" data-queue-id="${escAttr(item.id)}" draggable="true">
+        <div class="queue-drag-handle" aria-hidden="true">::</div>
+        <input class="queue-select" type="checkbox" data-queue-select="${escAttr(item.id)}" ${selected} aria-label="Select queue item">
         <div class="list-item-main">
           <img class="thumb-img" src="${escAttr(thumb)}" alt="Queue item">
           <div class="queue-main">
@@ -1092,11 +1238,21 @@ function renderQueueList() {
           </div>
         </div>
         <div class="item-actions queue-ops">
+          <select data-queue-priority="${escAttr(item.id)}" aria-label="Queue priority">
+            <option value="low" ${priority === 'low' ? 'selected' : ''}>Low</option>
+            <option value="normal" ${priority === 'normal' ? 'selected' : ''}>Normal</option>
+            <option value="high" ${priority === 'high' ? 'selected' : ''}>High</option>
+            <option value="urgent" ${priority === 'urgent' ? 'selected' : ''}>Urgent</option>
+          </select>
+          <input type="datetime-local" value="${escAttr(scheduleValue)}" data-queue-schedule="${escAttr(item.id)}" aria-label="Queue schedule">
           ${actionBtns}
         </div>
       </div>
     `;
   }).join('');
+  bindQueueRowEvents(list, true);
+  syncQueueSelectionControls();
+  updateQueueBulkControls();
   hydrateIcons();
 }
 

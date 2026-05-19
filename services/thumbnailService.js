@@ -24,6 +24,7 @@ const axios = require('axios');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
+const mediaTools = require('./mediaToolService');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const GEMINI_API_KEY  = process.env.GEMINI_API_KEY || process.env.AI_API_KEY || '';
@@ -38,7 +39,7 @@ const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
 const SELECTION_TIMEOUT_MS = 30_000;
 
 // ── ffmpeg Detection ──────────────────────────────────────────────────────────
-let FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
+let FFMPEG_PATH = mediaTools.resolveFfmpegPath();
 let ffmpegAvailable = null; // null = not yet checked
 
 async function checkFfmpeg() {

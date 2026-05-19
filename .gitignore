@@ -49,6 +49,7 @@ desktop.ini
 *.jpg
 *.jpeg
 *.gif
+public/generated/
 
 
 # Build artifacts

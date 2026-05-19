@@ -58,6 +58,7 @@
             <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
             <button class="tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
             <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
+            <button class="tab-btn" data-tab="studio" type="button"><i data-lucide="clapperboard" class="tab-icon"></i><span>Studio</span></button>
             <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
             <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Engagement</span></button>
             <button class="tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
@@ -93,6 +94,10 @@
                                 <i data-lucide="rss" class="btn-icon"></i>
                                 <span>Add Target</span>
                             </button>
+                            <button id="hero-open-studio-btn" class="btn btn-secondary hero-action mobile-priority-action" type="button">
+                                <i data-lucide="clapperboard" class="btn-icon"></i>
+                                <span>Studio</span>
+                            </button>
                             <button id="hero-refresh-btn" class="btn btn-secondary hero-action" type="button">
                                 <i data-lucide="refresh-cw" class="btn-icon"></i>
                                 <span>Sync Now</span>
@@ -116,11 +121,11 @@
                                 <span>Targets</span>
                                 <strong id="hero-channel-count">0</strong>
                             </div>
-                            <div class="orbit-signal">
+                            <div class="orbit-signal orbit-signal-cycle">
                                 <span>Next Wake</span>
                                 <strong id="hero-next-cycle">--:--</strong>
                             </div>
-                            <div class="orbit-signal">
+                            <div class="orbit-signal orbit-signal-skin">
                                 <span>Skin</span>
                                 <strong id="hero-mode-label" class="hero-mode-value">Flux</strong>
                             </div>
@@ -418,16 +423,42 @@
                         </select>
                     </div>
 
+                    <div class="queue-bulk-toolbar">
+                        <label class="switch-wrap queue-select-all-wrap" for="queue-select-all">
+                            <input id="queue-select-all" type="checkbox">
+                            <span>Select Visible</span>
+                        </label>
+                        <select id="queue-bulk-action">
+                            <option value="priority">Set Priority</option>
+                            <option value="schedule">Schedule</option>
+                            <option value="clear_schedule">Clear Schedule</option>
+                            <option value="remove">Remove</option>
+                        </select>
+                        <select id="queue-bulk-priority">
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="low">Low</option>
+                        </select>
+                        <input id="queue-bulk-schedule" type="datetime-local" disabled>
+                        <button id="queue-bulk-apply-btn" class="btn btn-secondary compact-btn" type="button">Apply Bulk</button>
+                        <button id="queue-bulk-clear-btn" class="btn btn-secondary compact-btn" type="button">Clear Selection (0)</button>
+                    </div>
+
                     <div id="queue-list" class="list"></div>
                 </article>
             </section>
 
+            <section id="panel-studio" class="panel hidden">
+                <div id="studio-poster-host" class="panel-grid panel-grid-main"></div>
+            </section>
+
             <section id="panel-pinterest" class="panel hidden">
                 <div class="panel-grid panel-grid-main">
-                    <article class="card">
+                    <article id="mission-builder-card" class="card">
                         <div class="card-title-wrap">
-                            <h2><i data-lucide="pen-square" class="heading-icon"></i>Pinterest Mission Builder</h2>
-                            <p class="muted-text">Extract reels, generate high-conversion copy, and launch posting operations.</p>
+                            <h2><i data-lucide="clapperboard" class="heading-icon"></i>Studio Reel Poster</h2>
+                            <p class="muted-text">Paste a reel, render an advanced backend edit, attach store links, then queue or post.</p>
                         </div>
 
                         <div class="field-wrap">
@@ -440,6 +471,76 @@
                                 </div>
                             </div>
                         </div>
+
+                        <section class="studio-editor-box" aria-label="Auto Editor Studio">
+                            <div class="studio-editor-head">
+                                <div>
+                                    <span class="studio-kicker">Auto Editor Studio</span>
+                                    <h3>Advanced reel edit before posting</h3>
+                                </div>
+                                <button id="studio-auto-edit-btn" class="btn btn-primary compact-btn" type="button">
+                                    <i data-lucide="wand-sparkles" class="btn-icon"></i>
+                                    <span>Auto Edit Reel</span>
+                                </button>
+                            </div>
+
+                            <div class="studio-option-grid">
+                                <div class="field-wrap">
+                                    <label for="studio-edit-profile">Edit Style</label>
+                                    <select id="studio-edit-profile">
+                                        <option value="pro_fashion">Pro Fashion Edit</option>
+                                        <option value="shop_the_look">Shop The Look</option>
+                                        <option value="outfit_breakdown">Outfit Breakdown</option>
+                                        <option value="viral_hook">Viral Hook</option>
+                                        <option value="luxury_minimal">Luxury Minimal</option>
+                                        <option value="budget_find">Budget Find</option>
+                                    </select>
+                                </div>
+                                <div class="field-wrap">
+                                    <label for="studio-audio-mode">Audio</label>
+                                    <select id="studio-audio-mode">
+                                        <option value="original">Keep Original</option>
+                                        <option value="mute">Mute</option>
+                                        <option value="beat">Generated Beat</option>
+                                        <option value="licensed">Licensed Audio File</option>
+                                    </select>
+                                </div>
+                                <div class="field-wrap">
+                                    <div class="field-inline-meta">
+                                        <label for="studio-intensity">Edit Intensity</label>
+                                        <div id="studio-intensity-value" class="input-meta">72</div>
+                                    </div>
+                                    <input id="studio-intensity" type="range" min="0" max="100" value="72">
+                                </div>
+                            </div>
+
+                            <div class="studio-toggle-grid">
+                                <label class="switch-wrap" for="studio-add-hook">
+                                    <input id="studio-add-hook" type="checkbox" checked>
+                                    <span>Hook Intro</span>
+                                </label>
+                                <label class="switch-wrap" for="studio-add-products">
+                                    <input id="studio-add-products" type="checkbox" checked>
+                                    <span>Product Chips</span>
+                                </label>
+                                <label class="switch-wrap" for="studio-add-outro">
+                                    <input id="studio-add-outro" type="checkbox" checked>
+                                    <span>CTA Outro</span>
+                                </label>
+                                <label class="switch-wrap" for="studio-add-watermark">
+                                    <input id="studio-add-watermark" type="checkbox" checked>
+                                    <span>Watermark</span>
+                                </label>
+                                <label class="switch-wrap" for="studio-add-advanced-fx">
+                                    <input id="studio-add-advanced-fx" type="checkbox" checked>
+                                    <span>Pro FX Stack</span>
+                                </label>
+                            </div>
+
+                            <div id="studio-status" class="studio-status">
+                                Paste a reel, then render a branded edit with color grade, motion, grain, flash cuts, and product links.
+                            </div>
+                        </section>
 
                         <section id="preview-section" class="preview-shell hidden">
                             <div class="preview-media-wrap">
@@ -653,11 +754,10 @@
 
         <nav id="mobile-tab-nav" class="mobile-tab-nav" aria-label="Mobile tab navigation">
             <button class="mobile-tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Home</span></button>
+            <button class="mobile-tab-btn" data-tab="studio" type="button"><i data-lucide="clapperboard" class="tab-icon"></i><span>Studio</span></button>
             <button class="mobile-tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
             <button class="mobile-tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
-            <button class="mobile-tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Create</span></button>
             <button class="mobile-tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
-            <button class="mobile-tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
         </nav>
 
     </div>

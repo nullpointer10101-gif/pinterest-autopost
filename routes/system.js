@@ -4,6 +4,16 @@ const historyService = require('../services/historyService');
 const queueService = require('../services/queueService');
 const { IS_PRODUCTION, IS_SERVERLESS, resolvePostingMode, puppeteerService } = require('./utils');
 
+function publicSessionStatus(session = {}) {
+  return {
+    hasSession: !!session.hasSession,
+    source: session.source || 'none',
+    updatedAt: session.updatedAt || null,
+    label: session.label || '',
+    masked: session.masked || '',
+  };
+}
+
 router.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -46,7 +56,7 @@ router.get('/status', async (req, res) => {
       },
       queue: queueStats,
       storage,
-      session,
+      session: publicSessionStatus(session),
       ai: {
         configured: !!(process.env.AI_API_KEY || process.env.OPENAI_API_KEY || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY),
         model: process.env.AI_MODEL || process.env.OPENAI_MODEL || process.env.QWEN_MODEL || process.env.DASHSCOPE_MODEL || null,

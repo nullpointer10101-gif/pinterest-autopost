@@ -36,7 +36,7 @@ app.use((err, req, res, next) => {
 });
 
 // No local queue processor — all posting goes through GitHub Actions bot
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL && require.main === module) {
   app.listen(PORT, () => {
     console.log(`\nReel to Pinterest Auto Poster running at http://localhost:${PORT}`);
     console.log(`Dashboard: http://localhost:${PORT}`);

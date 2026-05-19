@@ -47,6 +47,16 @@ function normalizeDestinationLink(input) {
 }
 
 // ─── Status — GitHub Bot mode info ────────────────────────────────────────────
+function publicSessionStatus(session = {}) {
+  return {
+    hasSession: !!session.hasSession,
+    source: session.source || 'none',
+    updatedAt: session.updatedAt || null,
+    label: session.label || '',
+    masked: session.masked || '',
+  };
+}
+
 router.get('/boards', async (req, res) => {
   // No API boards — the bot uses the default board on Pinterest
   res.json({ success: true, boards: [] });
@@ -77,7 +87,20 @@ router.get('/status', async (req, res) => {
 // ─── Post Now — GitHub Bot Only (No API, No Queue Wait) ───────────────────────
 router.post('/post', async (req, res) => {
   try {
-    const { title, description, altText, hashtags, mediaUrl, sourceUrl, reelMeta } = req.body;
+    const {
+      title,
+      description,
+      altText,
+      hashtags,
+      mediaUrl,
+      sourceUrl,
+      destinationLink,
+      reelMeta,
+      autoEdit,
+      affiliateLinks,
+      productInfo,
+      sourcePipeline,
+    } = req.body;
     if (!title || !mediaUrl) {
       return res.status(400).json({ success: false, error: 'title and mediaUrl are required' });
     }
@@ -88,7 +111,7 @@ router.post('/post', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Description exceeds 800-character limit' });
     }
 
-    const cleanLink = normalizeDestinationLink(sourceUrl);
+    const cleanLink = normalizeDestinationLink(destinationLink);
     const hashtagText = Array.isArray(hashtags) ? hashtags.join(' ') : '';
     const descWithTags = `${(description || '').trim()}${hashtagText ? `\n\n${hashtagText}` : ''}`.trim();
 
@@ -96,7 +119,10 @@ router.post('/post', async (req, res) => {
 
     // Extract shortcode from the original reel URL for dedup and look page
     const shortcodeMatch = (sourceUrl || '').match(/\/(reel|p|tv)\/([A-Za-z0-9_-]+)/);
-    const shortcode = shortcodeMatch ? shortcodeMatch[2] : null;
+    const shortcode = shortcodeMatch ? shortcodeMatch[2] : (reelMeta?.shortcode || null);
+    const isStudioMission =
+      String(sourcePipeline || '').toLowerCase() === 'studio' &&
+      String(autoEdit?.source || '').toLowerCase() === 'studio';
 
     // 🚀 INSTANT GitHub Bot — prepend to queue front + fire immediately
     console.log(`[Post Mission] 🚀 Instant GitHub Bot — queueing + firing NOW... shortcode=${shortcode || 'N/A'}`);
@@ -108,13 +134,18 @@ router.post('/post', async (req, res) => {
       description: descWithTags,
       altText: altText ? altText.trim() : '',
       mediaUrl,
-      sourceUrl: sourceUrl || cleanLink,   // keep original IG URL for shortcode dedup
+      sourceUrl: sourceUrl || '',   // keep original IG URL for shortcode dedup
       originalSourceUrl: sourceUrl || '',
+      destinationLink: cleanLink,
       username: reelMeta?.username || 'unknown',
       caption: reelMeta?.caption || '',
       thumbnailUrl: reelMeta?.thumbnailUrl || mediaUrl,
       smartCover: true,
-      smartCoverSource: 'manual_url_post_now',
+      smartCoverSource: isStudioMission ? 'direct_reel_studio' : 'manual_url_post_now',
+      sourcePipeline: isStudioMission ? 'studio' : 'manual_post_now',
+      autoEdit: isStudioMission ? autoEdit : null,
+      affiliateLinks: Array.isArray(affiliateLinks) ? affiliateLinks : [],
+      productInfo: productInfo || null,
       reelMeta,
       isInstant: true,
     }], true); // true = prepend to front of queue
@@ -155,7 +186,7 @@ router.post('/post', async (req, res) => {
 router.get('/session/status', async (req, res) => {
   try {
     const session = await historyService.getSessionCookie();
-    res.json({ success: true, session });
+    res.json({ success: true, session: publicSessionStatus(session) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -305,13 +305,23 @@ async function createPinWithBot(pinData) {
   // 1. Prepare media file(s)
   const tempDir = os.tmpdir();
   const mediaUrl = media_source.url;
-  const isImage = mediaUrl.match(/\.(jpeg|jpg|png|webp)(\?.*)?$/i) || mediaUrl.includes('dst-jpg');
+  const localMediaPath = String(media_source.localPath || '').trim();
+  const hasLocalMedia = localMediaPath && fs.existsSync(localMediaPath);
+  const mediaIdentity = hasLocalMedia ? localMediaPath : mediaUrl;
+  const isImage = mediaIdentity.match(/\.(jpeg|jpg|png|webp)(\?.*)?$/i) || mediaIdentity.includes('dst-jpg');
   const ext = isImage ? '.jpg' : '.mp4';
-  const mediaPath = path.join(tempDir, `pin_${Date.now()}${ext}`);
+  const mediaPath = hasLocalMedia ? localMediaPath : path.join(tempDir, `pin_${Date.now()}${ext}`);
+  const shouldCleanupMediaPath = hasLocalMedia
+    ? media_source.cleanupLocalPath !== false
+    : true;
 
-  console.log(`[Bot] Downloading media (${ext}) to temp storage...`);
-  await downloadVideo(mediaUrl, mediaPath);
-  console.log('[Bot] Media downloaded successfully.');
+  if (hasLocalMedia) {
+    console.log(`[Bot] Using local rendered media (${ext}) for upload: ${mediaPath}`);
+  } else {
+    console.log(`[Bot] Downloading media (${ext}) to temp storage...`);
+    await downloadVideo(mediaUrl, mediaPath);
+    console.log('[Bot] Media downloaded successfully.');
+  }
 
   let coverPath = null;
   let mediaUploadPath = mediaPath;
@@ -1407,7 +1417,7 @@ async function createPinWithBot(pinData) {
     // Cleanup temp files
     if (browser) await browser.close().catch(() => {});
     const cleanupTargets = Array.from(new Set([
-      mediaPath,
+      shouldCleanupMediaPath ? mediaPath : '',
       coverPath,
       ...smartCoverCleanupPaths,
     ].filter(Boolean)));

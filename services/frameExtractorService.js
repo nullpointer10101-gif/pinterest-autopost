@@ -11,22 +11,18 @@
 
 'use strict';
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const axios = require('axios');
+const mediaTools = require('./mediaToolService');
 
 /**
  * Check if ffmpeg is available on the system.
  */
 function isFfmpegAvailable() {
-  try {
-    execSync('ffmpeg -version', { stdio: 'ignore', timeout: 5000 });
-    return true;
-  } catch {
-    return false;
-  }
+  return mediaTools.isFfmpegAvailable();
 }
 
 /**
@@ -34,8 +30,9 @@ function isFfmpegAvailable() {
  */
 function getVideoDuration(videoFile) {
   try {
-    const output = execSync(
-      `ffprobe -v quiet -print_format json -show_streams "${videoFile}"`,
+    const output = execFileSync(
+      mediaTools.resolveFfprobePath(),
+      ['-v', 'quiet', '-print_format', 'json', '-show_streams', videoFile],
       { timeout: 10000, encoding: 'utf8' }
     );
     const info = JSON.parse(output);
@@ -118,8 +115,9 @@ async function extractFrameFromVideo(videoUrl) {
     let frameExtracted = false;
     for (const seekTime of seekTimes) {
       try {
-        execSync(
-          `ffmpeg -ss ${seekTime} -i "${videoFile}" -vframes 1 -q:v 2 -vf "scale=720:-1" "${frameFile}" -y`,
+        execFileSync(
+          mediaTools.resolveFfmpegPath(),
+          ['-ss', seekTime, '-i', videoFile, '-vframes', '1', '-q:v', '2', '-vf', 'scale=720:-1', frameFile, '-y'],
           { timeout: 20000, stdio: 'pipe' }
         );
         if (fs.existsSync(frameFile) && fs.statSync(frameFile).size > 1000) {

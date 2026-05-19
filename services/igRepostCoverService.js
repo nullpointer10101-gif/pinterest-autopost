@@ -5,11 +5,12 @@ const os = require('os');
 const path = require('path');
 const { execFile, execFileSync } = require('child_process');
 const { promisify } = require('util');
+const mediaTools = require('./mediaToolService');
 
 const execFileAsync = promisify(execFile);
 
-const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
-const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
+const FFMPEG = mediaTools.resolveFfmpegPath();
+const FFPROBE = mediaTools.resolveFfprobePath();
 const INTRO_SECONDS = clampNumber(Number.parseFloat(process.env.IG_REPOST_COVER_INTRO_SECONDS || '0.75'), 0.35, 1.5);
 const RAW_W = 96;
 const RAW_H = 160;

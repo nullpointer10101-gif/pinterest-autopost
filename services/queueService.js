@@ -2,6 +2,7 @@ const aiService = require('./aiService');
 const historyService = require('./historyService');
 const productCurationService = require('./productCurationService');
 const qualityGateService = require('./qualityGateService');
+const autoReelEditorService = require('./autoReelEditorService');
 
 let selectBoard = () => null; // safe default: no board forced
 try {
@@ -54,6 +55,23 @@ function isScheduledForFuture(item, referenceTime = Date.now()) {
   const ts = new Date(item.scheduledAfter).getTime();
   if (!Number.isFinite(ts)) return false;
   return ts > referenceTime;
+}
+
+function isStudioAutoEditItem(item = {}) {
+  return (
+    String(item.sourcePipeline || '').toLowerCase() === 'studio' &&
+    String(item.smartCoverSource || '').toLowerCase() === 'direct_reel_studio' &&
+    String(item.autoEdit?.source || '').toLowerCase() === 'studio'
+  );
+}
+
+function sanitizePipelineFields(item = {}) {
+  if (!item.autoEdit?.enabled || isStudioAutoEditItem(item)) return item;
+  return {
+    ...item,
+    autoEdit: null,
+    autoEditBlockedReason: 'Auto editor is restricted to Studio Reel Poster jobs.',
+  };
 }
 
 function getPostingMode() {
@@ -192,16 +210,21 @@ async function addToQueue(items, prepend = false) {
     return [];
   }
 
-  const newItems = filteredItems.map(item => ({
-    id: item.id || `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-    ...item,
-    // Ensure shortcode is always a top-level field for future dedup
-    shortcode: extractShortcode(item) || null,
-    priority: normalizePriority(item.priority),
-    scheduledAfter: normalizeScheduledAfter(item.scheduledAfter),
-    status: 'pending',
-    addedAt: now,
-  }));
+  const newItems = filteredItems.map((item) => {
+    const normalized = sanitizePipelineFields({
+      id: item.id || `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      ...item,
+    });
+    return {
+      ...normalized,
+      // Ensure shortcode is always a top-level field for future dedup
+      shortcode: extractShortcode(item) || null,
+      priority: normalizePriority(item.priority),
+      scheduledAfter: normalizeScheduledAfter(item.scheduledAfter),
+      status: 'pending',
+      addedAt: now,
+    };
+  });
 
   const updated = prepend ? [...newItems, ...queue] : [...queue, ...newItems];
   await saveQueue(updated);
@@ -419,8 +442,13 @@ async function processNextInQueue() {
   item.processingAt = new Date().toISOString();
   await saveQueue(freshQueue);
 
+  let autoEditResultForCleanup = null;
+
   try {
     const mediaUrl = item.mediaUrl;
+    let uploadMediaLocalPath = '';
+    let uploadMediaUrl = mediaUrl;
+    let autoEditResult = null;
 
     // ═══════════════════════════════════════════════════════════════════════
     // STEP 1: Extract a representative video frame ONCE.
@@ -468,17 +496,23 @@ async function processNextInQueue() {
     // ═══════════════════════════════════════════════════════════════════════
     // Start with any pre-existing affiliate link, or empty (NOT the IG source URL)
     let finalLink = item.destinationLink || item.link || '';
-    let affiliateLinks = [];
-    let mainProductName = null;
-    let outfitName = null;
-    let shoppingMission = null;
+    let affiliateLinks = Array.isArray(item.affiliateLinks) ? item.affiliateLinks.filter(Boolean) : [];
+    let mainProductName = item.mainProductName || item.productInfo?.name || null;
+    let outfitName = item.outfitName || item.productInfo?.name || null;
+    let shoppingMission = item.shoppingMission || item.productInfo?.shoppingMission || null;
     const appDomain = process.env.APP_BASE_URL || 'https://pinterest-autopost.vercel.app';
     
     // Always pre-build the storefront URL as our safe fallback (if we have a shortcode)
     const storefrontUrl = itemShortcode ? `${appDomain.replace(/\/$/, '')}/look/${itemShortcode}` : '';
     
-    // Only run AI pipeline if we don't already have a valid affiliate destination link
-    if (!item.destinationLink && itemShortcode && item.sourceUrl) {
+    // Only run AI pipeline if we don't already have prebuilt Studio links or a valid affiliate destination link.
+    if (affiliateLinks.length > 0 && storefrontUrl && !item.destinationLink) {
+      finalLink = storefrontUrl;
+      if (!description.includes(finalLink)) {
+        description = `${description}\n\nShop matching product finds here -> ${finalLink}`.substring(0, 800);
+      }
+      console.log(`[Queue] Studio storefront with prebuilt products: ${finalLink}`);
+    } else if (!item.destinationLink && affiliateLinks.length === 0 && itemShortcode && item.sourceUrl) {
       console.log(`[Queue] 🤖 AI identifying outfit for shortcode: ${itemShortcode}...`);
       const outfitData = await aiService.identifyOutfit({
         caption: item.caption || '',
@@ -537,6 +571,10 @@ async function processNextInQueue() {
       finalLink = storefrontUrl;
     }
 
+    if (affiliateLinks.length > 0 && finalLink && !description.includes(finalLink)) {
+      description = `${description}\n\nShop matching product finds here -> ${finalLink}`.substring(0, 800);
+    }
+
     if (item.destinationLink) {
       console.log(`[Queue] 🔗 Using pre-set affiliate link: ${item.destinationLink}`);
     } else if (affiliateLinks.length > 0) {
@@ -545,6 +583,49 @@ async function processNextInQueue() {
       console.log(`[Queue] 🔗 Using storefront fallback: ${finalLink}`);
     } else {
       console.log(`[Queue] ⚠️ No link available — posting without destination link.`);
+    }
+
+    if (isStudioAutoEditItem(item)) {
+      console.log(`[Queue] Rendering advanced auto-edit before upload (${item.autoEdit.profile || 'shop_the_look'})...`);
+      autoEditResult = await autoReelEditorService.renderAutoEditedReel({
+        inputUrl: mediaUrl,
+        title,
+        description,
+        shortcode: itemShortcode || item.shortcode || '',
+        products: affiliateLinks,
+        productInfo: affiliateLinks.length > 0 ? {
+          name: outfitName || mainProductName || 'Curated Look',
+          outfit: affiliateLinks,
+          shoppingMission,
+        } : item.productInfo,
+        options: item.autoEdit,
+        persist: false,
+      });
+      autoEditResultForCleanup = autoEditResult;
+
+      if (autoEditResult.rendered && autoEditResult.outputPath) {
+        uploadMediaLocalPath = autoEditResult.outputPath;
+        uploadMediaUrl = autoEditResult.mediaUrl || mediaUrl;
+        item.autoEditResult = {
+          rendered: true,
+          editId: autoEditResult.editId,
+          duration: autoEditResult.duration,
+          effects: autoEditResult.effects || [],
+        };
+        console.log(`[Queue] Auto-edit rendered for upload (${Math.round(autoEditResult.duration || 0)}s).`);
+      } else {
+        item.autoEditResult = {
+          rendered: false,
+          reason: autoEditResult.reason || 'unknown',
+        };
+        console.warn(`[Queue] Auto-edit unavailable, posting original media: ${autoEditResult.reason || 'unknown'}`);
+      }
+    } else if (item.autoEdit?.enabled) {
+      item.autoEditResult = {
+        rendered: false,
+        reason: 'blocked_non_studio_pipeline',
+      };
+      console.warn('[Queue] Auto-edit blocked because this item is not a Studio Reel Poster job.');
     }
 
     let result;
@@ -594,7 +675,7 @@ async function processNextInQueue() {
       boardName: boardForPost,
       productInfo: productInfoForGate,
       affiliateLinks,
-      hasFrame: !!videoFrame,
+      hasFrame: !!videoFrame || !!uploadMediaLocalPath,
       smartCover: item.smartCover === true,
       smartCoverSource: item.smartCoverSource || '',
     });
@@ -607,6 +688,8 @@ async function processNextInQueue() {
       item.qualityGate = qualityGate;
       item.heldAt = new Date().toISOString();
       item.link = finalLink;
+      if (autoEditResultForCleanup) autoReelEditorService.cleanupRenderResult(autoEditResultForCleanup);
+      autoEditResultForCleanup = null;
       return item;
     }
 
@@ -621,17 +704,21 @@ async function processNextInQueue() {
       boardName: boardForPost,
       shortcode: itemShortcode || item.shortcode || '',
       media_source: {
-        url: mediaUrl,
+        url: uploadMediaUrl,
+        localPath: uploadMediaLocalPath,
+        cleanupLocalPath: true,
         // URL-created reel missions opt into product-focused cover selection.
         thumbnailUrl: item.thumbnailUrl || '',
-        smartCover: item.smartCover === true,
-        smartCoverSource: item.smartCoverSource || '',
+        smartCover: uploadMediaLocalPath ? false : item.smartCover === true,
+        smartCoverSource: uploadMediaLocalPath ? 'auto_reel_editor' : item.smartCoverSource || '',
       },
     });
 
     if (result && result.success === false) {
       throw new Error(result.error || 'Browser bot reported failure without throwing an exception');
     }
+    if (autoEditResultForCleanup) autoReelEditorService.cleanupRenderResult(autoEditResultForCleanup);
+    autoEditResultForCleanup = null;
 
     item.status = 'completed';
     item.method = method;
@@ -702,6 +789,7 @@ async function processNextInQueue() {
       postedAt: new Date().toISOString(),
     });
   } finally {
+    if (autoEditResultForCleanup) autoReelEditorService.cleanupRenderResult(autoEditResultForCleanup);
     await saveQueue(freshQueue);
     isProcessing = false;
   }
