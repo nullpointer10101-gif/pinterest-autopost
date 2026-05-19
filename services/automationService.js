@@ -27,6 +27,13 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function defaultWorkflowConfig() {
+  return {
+    pinterestPosting: true,
+    pinterestEngagement: true,
+  };
+}
+
 function getDateKey(timeZone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -78,8 +85,19 @@ async function runHourlyAutomation(options = {}) {
   const commentChance = Math.min(1, Math.max(0.25, toFloat(process.env.AUTOMATION_COMMENT_PROBABILITY, 0.85)));
 
   const dateKey = getDateKey(timeZone);
-  const automation = await historyService.getAutomationState();
-  const config = await historyService.getWorkflowConfig();
+  let automation = {};
+  try {
+    automation = await historyService.getAutomationState();
+  } catch (err) {
+    console.warn('[Automation] Automation state read failed; continuing with in-memory defaults:', err.message);
+  }
+
+  let config = defaultWorkflowConfig();
+  try {
+    config = await historyService.getWorkflowConfig();
+  } catch (err) {
+    console.warn('[Automation] Workflow config read failed; continuing with defaults:', err.message);
+  }
 
   if (config.pinterestEngagement === false) {
     console.log('[Automation] Pinterest engagement is disabled in workflow config. Skipping bot session unless forced.');
@@ -243,11 +261,22 @@ async function runHourlyAutomation(options = {}) {
           niche: result?.niche || options.engagementNiche || 'all',
         };
         if (executedTotal > 0) {
-          const automationState = await historyService.getAutomationState();
-          await historyService.setAutomationState({
-            ...automationState,
-            lastEngagementRunAt: new Date().toISOString(),
-          });
+          try {
+            const automationState = await historyService.getAutomationState();
+            await historyService.setAutomationState({
+              ...automationState,
+              lastEngagementRunAt: new Date().toISOString(),
+            });
+          } catch (err) {
+            const warning = `Engagement completed, but final storage sync was delayed: ${err.message}`;
+            console.warn(`[Automation] ${warning}`);
+            engagement = {
+              ...engagement,
+              partial: true,
+              storageWarning: warning,
+              message: `${engagement.message} Storage sync will retry on the next run.`,
+            };
+          }
         }
       } catch (err) {
         engagement = {
@@ -279,7 +308,25 @@ async function runHourlyAutomation(options = {}) {
     }
   }
 
-  const queueStats = await queueService.getQueueStats();
+  let queueStats = null;
+  try {
+    queueStats = await queueService.getQueueStats();
+  } catch (err) {
+    console.warn('[Automation] Queue stats read failed; returning safe fallback stats:', err.message);
+    const storageInfo = historyService.getStorageInfo();
+    queueStats = {
+      total: 0,
+      pending: 0,
+      scheduled: 0,
+      ready: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+      held: 0,
+      storageMode: storageInfo.mode === 'upstash' ? 'cloud' : 'unknown',
+      storageWarning: err.message,
+    };
+  }
   const engagementFailedRequired = requireEngagementSuccess
     && engagementCount > 0
     && (!engagement.success || Number(engagement.executed || 0) <= 0);

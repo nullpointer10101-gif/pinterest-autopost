@@ -24,6 +24,10 @@ const { IS_SERVERLESS, UPSTASH_URL, UPSTASH_TOKEN, USE_UPSTASH } = persistencePo
 
 const LOCAL_STATE_FILE = persistencePolicy.getStateFilePath('state.json');
 const APP_STATE_KEY    = process.env.APP_STATE_KEY || 'pinterest_autopost_state_v1';
+const UPSTASH_TIMEOUT_MS = Math.max(1000, Number.parseInt(process.env.UPSTASH_REQUEST_TIMEOUT_MS || '8000', 10));
+const UPSTASH_MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.UPSTASH_MAX_ATTEMPTS || '3', 10));
+const UPSTASH_RETRY_BASE_MS = Math.max(100, Number.parseInt(process.env.UPSTASH_RETRY_BASE_MS || '350', 10));
+const STORAGE_MEMORY_CACHE_TTL_MS = Math.max(15000, Number.parseInt(process.env.STORAGE_MEMORY_CACHE_TTL_MS || '120000', 10));
 
 if (persistencePolicy.isLocalStateEnabled()) {
   try { persistencePolicy.ensureParentDir(LOCAL_STATE_FILE); } catch {}
@@ -31,11 +35,36 @@ if (persistencePolicy.isLocalStateEnabled()) {
 
 // ── Upstash REST helper ───────────────────────────────────────────────────────
 
-async function runUpstashCommand(command) {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
+function normalizeUpstashError(err) {
+  if (err?.name === 'AbortError') return new Error('Upstash request timed out');
+  return err;
+}
+
+function isRetryableUpstashError(err) {
+  const message = String(err?.message || '').toLowerCase();
+  return err?.name === 'AbortError'
+    || message.includes('timed out')
+    || message.includes('timeout')
+    || message.includes('network')
+    || message.includes('fetch failed')
+    || message.includes('socket')
+    || message.includes('econnreset')
+    || message.includes('429')
+    || message.includes('500')
+    || message.includes('502')
+    || message.includes('503')
+    || message.includes('504');
+}
+
+async function sendUpstashCommand(command) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), UPSTASH_TIMEOUT_MS);
+
+  try {
     const res = await fetch(UPSTASH_URL, {
       method: 'POST',
       headers: {
@@ -45,16 +74,43 @@ async function runUpstashCommand(command) {
       body: JSON.stringify(command),
       signal: controller.signal
     });
-    
-    clearTimeout(timeoutId);
 
-    const data = await res.json();
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+
+    if (!res.ok) {
+      throw new Error(`Upstash HTTP ${res.status}${data?.error ? `: ${data.error}` : ''}`);
+    }
+
     if (data?.error) throw new Error(`Upstash error: ${data.error}`);
     return data?.result ?? null;
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('Upstash request timed out');
-    throw err;
+    throw normalizeUpstashError(err);
+  } finally {
+    clearTimeout(timeoutId);
   }
+}
+
+async function runUpstashCommand(command) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= UPSTASH_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await sendUpstashCommand(command);
+    } catch (err) {
+      lastError = err;
+      if (attempt >= UPSTASH_MAX_ATTEMPTS || !isRetryableUpstashError(err)) break;
+      const waitMs = UPSTASH_RETRY_BASE_MS * attempt + Math.floor(Math.random() * 150);
+      console.warn(`[Storage] Upstash transient failure (${err.message}); retrying ${attempt}/${UPSTASH_MAX_ATTEMPTS - 1} in ${waitMs}ms.`);
+      await sleep(waitMs);
+    }
+  }
+
+  throw lastError;
 }
 
 // ── Local file helpers ────────────────────────────────────────────────────────
@@ -97,6 +153,11 @@ function isValidState(val) {
 let _memoryCache = null;
 let _memoryCacheTime = 0;
 
+function refreshMemoryCache(state) {
+  _memoryCache = JSON.parse(JSON.stringify(state));
+  _memoryCacheTime = Date.now();
+}
+
 /**
  * loadState(defaultState)
  * Loads state from Upstash (preferred) or local file backup.
@@ -104,7 +165,7 @@ let _memoryCacheTime = 0;
  */
 async function loadState(defaultState = {}) {
   const now = Date.now();
-  if (_memoryCache && (now - _memoryCacheTime < 15000)) {
+  if (_memoryCache && (now - _memoryCacheTime < STORAGE_MEMORY_CACHE_TTL_MS)) {
     // Prevent double Upstash timeout penalties within the same Vercel request
     return JSON.parse(JSON.stringify(_memoryCache));
   }
@@ -194,6 +255,8 @@ async function saveState(state) {
     console.warn('[Storage] saveState called with non-object state — ignoring to prevent data loss.');
     return;
   }
+
+  refreshMemoryCache(state);
 
   if (USE_UPSTASH) {
     try {

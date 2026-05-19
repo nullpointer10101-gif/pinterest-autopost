@@ -143,8 +143,16 @@ async function autoLinkSessionFromLocalBrowser(options = {}) {
 }
 
 async function getActiveSessionCookie() {
-  const fromState = await historyService.getSessionCookie();
-  return fromState?.cookie || process.env.PINTEREST_SESSION_COOKIE || '';
+  const envCookie = process.env.PINTEREST_SESSION_COOKIE || '';
+  if (envCookie) return envCookie;
+
+  try {
+    const fromState = await historyService.getSessionCookie();
+    return fromState?.cookie || envCookie;
+  } catch (err) {
+    console.warn('[Session] Stored session read failed; using env session if available:', err.message);
+    return envCookie;
+  }
 }
 
 function toInt(value, fallback) {
@@ -1506,6 +1514,15 @@ function prepareEngagementAutomationState(automationState = {}, timeZone = 'Asia
   return { changed, nextState };
 }
 
+async function runEngagementStorageWrite(label, action) {
+  try {
+    return await action();
+  } catch (err) {
+    console.warn(`[Bot] ${label} delayed by storage error: ${err.message}`);
+    return null;
+  }
+}
+
 function pickRandomItem(items, fallback = '') {
   if (!Array.isArray(items) || items.length === 0) return fallback;
   return items[randomInt(0, items.length - 1)];
@@ -1844,10 +1861,19 @@ async function runAutoEngagerSafe(options = {}) {
   const targetNiche = normalizePinterestEngagementNiche(options.niche || process.env.AUTOMATION_ENGAGEMENT_NICHE || 'mens_outfits');
   const searchQueries = getMensEngagementQueries(targetNiche);
 
-  let automationState = await historyService.getAutomationState();
+  let automationState = {};
+  try {
+    automationState = await historyService.getAutomationState();
+  } catch (err) {
+    console.warn('[Bot] Automation state read failed; continuing with in-memory engagement state:', err.message);
+  }
+
   const preparedState = prepareEngagementAutomationState(automationState, timeZone);
   if (preparedState.changed) {
-    automationState = await historyService.setAutomationState(preparedState.nextState);
+    automationState = await runEngagementStorageWrite(
+      'Initial engagement state sync',
+      () => historyService.setAutomationState(preparedState.nextState)
+    ) || preparedState.nextState;
   } else {
     automationState = preparedState.nextState;
   }
@@ -1959,13 +1985,17 @@ async function runAutoEngagerSafe(options = {}) {
       const response = await page.goto(randomPin, { waitUntil: 'domcontentloaded', timeout: 45000 });
       if (response && response.status() === 429) {
         console.log('[Bot] HTTP 429 Too Many Requests detected. Triggering 2-hour circuit breaker.');
-        automationState = await historyService.setAutomationState({
+        const breakerState = {
           ...automationState,
           likesToday,
           commentsToday,
           engagedUrls,
           circuitBreaker: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-        });
+        };
+        automationState = await runEngagementStorageWrite(
+          '429 circuit breaker write',
+          () => historyService.setAutomationState(breakerState)
+        ) || breakerState;
         break;
       }
 
@@ -1977,13 +2007,17 @@ async function runAutoEngagerSafe(options = {}) {
       const currentUrl = await page.url();
       if (currentUrl.includes('login')) {
         console.log('[Bot] Redirected to login. Session cookie expired. Triggering circuit breaker.');
-        automationState = await historyService.setAutomationState({
+        const breakerState = {
           ...automationState,
           likesToday,
           commentsToday,
           engagedUrls,
           circuitBreaker: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        });
+        };
+        automationState = await runEngagementStorageWrite(
+          'Login circuit breaker write',
+          () => historyService.setAutomationState(breakerState)
+        ) || breakerState;
         break;
       }
 
@@ -2053,7 +2087,7 @@ async function runAutoEngagerSafe(options = {}) {
             ? 'Liked Pin'
             : 'Commented on Pin';
 
-        await historyService.addEngagement({
+        await runEngagementStorageWrite('Engagement log write', () => historyService.addEngagement({
           url: normalizedPin,
           action: actionTaken,
           comment: commented ? generatedComment : '',
@@ -2066,14 +2100,14 @@ async function runAutoEngagerSafe(options = {}) {
           workflow: context.workflow,
           actor: context.actor,
           engagedAt: new Date().toISOString(),
-        });
+        }));
 
         engagedUrls = [...engagedUrls, normalizedPin]
           .map(normalizePinUrl)
           .filter(Boolean)
           .slice(-600);
 
-        automationState = await historyService.setAutomationState({
+        const progressState = {
           ...automationState,
           likesToday,
           commentsToday,
@@ -2081,7 +2115,11 @@ async function runAutoEngagerSafe(options = {}) {
           engagedUrls,
           engagementDateKey: getEngagementDateKey(timeZone),
           circuitBreaker: null,
-        });
+        };
+        automationState = await runEngagementStorageWrite(
+          'Engagement progress write',
+          () => historyService.setAutomationState(progressState)
+        ) || progressState;
       }
 
       await sleep(randomInt(3000, 7000) * loadMultiplier);
