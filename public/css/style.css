@@ -1631,12 +1631,6 @@ body[data-visual-mode="light"] .badge-warn {
   color: var(--good);
 }
 
-.draft-strip {
-  margin-top: 8px;
-  border-top: 1px solid var(--line-weak);
-  padding-top: 12px;
-}
-
 .stats-mini-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -7275,22 +7269,6 @@ body[data-visual-mode="light"] .segment-btn.active {
   width: 100%;
 }
 
-.autosave-bar {
-  border: 1px dashed var(--line);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.autosave-actions {
-  display: inline-flex;
-  gap: 8px;
-}
-
 .action-dock {
   position: fixed;
   left: 50%;
@@ -7507,10 +7485,6 @@ body.performance-mode .btn:hover {
     margin-top: 3vh;
   }
 
-  .autosave-bar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 }
 
 /* Previous shell foundation */
@@ -8044,16 +8018,6 @@ body[data-visual-mode="light"] .tab-btn.active {
 
 .btn-secondary {
   background: rgba(255, 255, 255, 0.035);
-}
-
-.autosave-bar {
-  background:
-    linear-gradient(135deg, rgba(40, 224, 185, 0.1), rgba(255, 176, 0, 0.07)),
-    rgba(255, 255, 255, 0.02);
-}
-
-.autosave-bar strong {
-  color: var(--text-strong);
 }
 
 .action-dock {
@@ -8746,8 +8710,7 @@ body {
 .hero-metrics-grid,
 .stats-grid,
 .action-dock,
-.command-palette,
-.autosave-bar {
+.command-palette {
   display: none !important;
 }
 

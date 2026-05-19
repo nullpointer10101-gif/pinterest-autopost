@@ -7,7 +7,6 @@ const state = {
   engagements: [],
   engagementSummary: null,
   lastExtracted: null,
-  drafts: [],
   refreshTimer: null,
   clockTimer: null,
   channelAvatarRequests: {},
@@ -46,7 +45,6 @@ const REFRESH_INTERVAL_MS = 30000;
 const PERFORMANCE_REFRESH_INTERVAL_MS = 60000;
 const PERFORMANCE_REFRESH_THROTTLE_MS = 8000;
 const DEFAULT_REFRESH_THROTTLE_MS = 2500;
-const DRAFTS_STORAGE_KEY = 'pmc_drafts_v1';
 const VISUAL_MODE_STORAGE_KEY = 'pmc_visual_mode_v1';
 const PERFORMANCE_MODE_STORAGE_KEY = 'pmc_performance_mode_v1';
 const MOBILE_VIEWPORT_QUERY = '(max-width: 760px)';
@@ -98,7 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initVisualSystem();
   initDynamicHud();
   initKineticCards();
-  loadDrafts();
   switchTab('dashboard');
   startClock();
   refreshAll({ force: true });
@@ -912,7 +909,7 @@ function renderStudioStatus(data = {}) {
   const fallback = autoEdit.fallbackReason ? `<br>Fallback: ${escHtml(autoEdit.fallbackReason)}` : '';
 
   setStudioStatus(
-    `<strong>${autoEdit.renderedPreview ? 'Edited preview ready.' : 'Draft ready with original preview.'}</strong><br>${escHtml(productText)}<br>Effects: ${escHtml(effectText)}${fallback}`,
+    `<strong>${autoEdit.renderedPreview ? 'Edited preview ready.' : 'Preview ready with original media.'}</strong><br>${escHtml(productText)}<br>Effects: ${escHtml(effectText)}${fallback}`,
     statusTone
   );
 }
@@ -2172,120 +2169,6 @@ async function unlinkApiConnection() {
   } catch (error) {
     showToast(error.message || 'Could not unlink API token.', 'error');
   }
-}
-
-function saveDraftFromName() {
-  const draftName = String(byId('draft-name')?.value || '').trim();
-  if (!draftName) {
-    showToast('Enter a draft name first.', 'error');
-    return;
-  }
-  saveDraft(draftName);
-  byId('draft-name').value = '';
-}
-
-function saveDraftFromPreview() {
-  const draftName = String(byId('draft-name')?.value || '').trim() || `Draft ${state.drafts.length + 1}`;
-  saveDraft(draftName);
-  byId('draft-name').value = '';
-}
-
-function saveDraft(name) {
-  const title = String(byId('field-title')?.value || '').trim();
-  const description = String(byId('field-desc')?.value || '').trim();
-  const destinationLink = String(byId('field-link')?.value || '').trim();
-  const altText = String(byId('field-alt')?.value || '').trim();
-
-  if (!title && !description && !destinationLink) {
-    showToast('Draft needs title, description, or destination link.', 'error');
-    return;
-  }
-
-  const draft = {
-    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    name,
-    title,
-    description,
-    destinationLink,
-    altText,
-    createdAt: new Date().toISOString(),
-  };
-
-  state.drafts.unshift(draft);
-  state.drafts = state.drafts.slice(0, 30);
-  persistDrafts();
-  renderDrafts();
-  showToast('Draft saved.', 'success');
-}
-
-function loadDrafts() {
-  try {
-    const raw = localStorage.getItem(DRAFTS_STORAGE_KEY);
-    state.drafts = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(state.drafts)) state.drafts = [];
-  } catch {
-    state.drafts = [];
-  }
-  renderDrafts();
-}
-
-function persistDrafts() {
-  localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(state.drafts));
-}
-
-function renderDrafts() {
-  const list = byId('draft-list');
-  if (!list) return;
-
-  if (!state.drafts.length) {
-    list.innerHTML = '<div class="pulse-item">No drafts saved yet.</div>';
-    return;
-  }
-
-  list.innerHTML = state.drafts
-    .map((draft) => {
-      const date = new Date(draft.createdAt).toLocaleDateString();
-      return `
-        <div class="list-item">
-          <div class="list-item-main">
-            <div>
-              <div class="item-title">${escHtml(draft.name || 'Draft')}</div>
-              <div class="item-meta">${escHtml(date)}</div>
-            </div>
-          </div>
-          <div class="item-actions">
-            <button class="pill-btn" type="button" data-draft-apply="${escAttr(draft.id)}">Apply</button>
-            <button class="pill-btn" type="button" data-draft-delete="${escAttr(draft.id)}">Delete</button>
-          </div>
-        </div>
-      `;
-    })
-    .join('');
-
-  list.querySelectorAll('[data-draft-apply]').forEach((button) => {
-    button.addEventListener('click', () => applyDraft(button.dataset.draftApply));
-  });
-  list.querySelectorAll('[data-draft-delete]').forEach((button) => {
-    button.addEventListener('click', () => deleteDraft(button.dataset.draftDelete));
-  });
-}
-
-function applyDraft(id) {
-  const draft = state.drafts.find((item) => item.id === id);
-  if (!draft) return;
-
-  byId('field-title').value = draft.title || '';
-  byId('field-desc').value = draft.description || '';
-  byId('field-link').value = draft.destinationLink || '';
-  byId('field-alt').value = draft.altText || '';
-  updateComposerMeta();
-  showToast('Draft applied to preview fields.', 'success');
-}
-
-function deleteDraft(id) {
-  state.drafts = state.drafts.filter((draft) => draft.id !== id);
-  persistDrafts();
-  renderDrafts();
 }
 
 async function pasteReelUrlFromClipboard() {
