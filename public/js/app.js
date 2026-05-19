@@ -94,6 +94,8 @@ document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   mountStudioPoster();
   initVisualSystem();
+  initPerformanceMode();
+  syncViewportPerformance();
   initDynamicHud();
   initKineticCards();
   switchTab('dashboard');
@@ -102,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setAutoRefresh(true);
   updateComposerMeta();
   hydrateIcons();
-  window.addEventListener('resize', ensureVisibleMobileTab, { passive: true });
+  window.addEventListener('resize', handleViewportResize, { passive: true });
   window.addEventListener('beforeunload', () => {
     setPreviewScrollLock(false);
   });
@@ -394,6 +396,24 @@ function normalizeTabForViewport(tab) {
   return MOBILE_TAB_FALLBACKS[requestedTab] || 'dashboard';
 }
 
+function syncViewportPerformance() {
+  if (!document.body) return;
+  const mobile = isMobileViewport();
+  document.body.classList.toggle('mobile-performance-mode', mobile);
+
+  if (mobile && state.ui.tickerTimer) {
+    clearInterval(state.ui.tickerTimer);
+    state.ui.tickerTimer = null;
+  } else if (!mobile && !state.ui.tickerTimer) {
+    initDynamicHud();
+  }
+}
+
+function handleViewportResize() {
+  syncViewportPerformance();
+  ensureVisibleMobileTab();
+}
+
 function ensureVisibleMobileTab() {
   const safeTab = normalizeTabForViewport(state.currentTab);
   if (safeTab !== state.currentTab) switchTab(safeTab);
@@ -478,7 +498,9 @@ function setAutoRefresh(enabled) {
   }
 
   if (!enabled) return;
-  const intervalMs = state.performance.enabled ? PERFORMANCE_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
+  const intervalMs = state.performance.enabled || isMobileViewport()
+    ? PERFORMANCE_REFRESH_INTERVAL_MS
+    : REFRESH_INTERVAL_MS;
   state.refreshTimer = setInterval(() => {
     // Use the public refresh hook so future modules can extend safely.
     if (typeof window.refreshAll === 'function') window.refreshAll();
@@ -489,7 +511,9 @@ function setAutoRefresh(enabled) {
 async function refreshAll(options = {}) {
   const force = options === true || options.force === true;
   const now = Date.now();
-  const minGap = state.performance.enabled ? PERFORMANCE_REFRESH_THROTTLE_MS : DEFAULT_REFRESH_THROTTLE_MS;
+  const minGap = state.performance.enabled || isMobileViewport()
+    ? PERFORMANCE_REFRESH_THROTTLE_MS
+    : DEFAULT_REFRESH_THROTTLE_MS;
   if (!force && state.performance.lastRefreshAt && (now - state.performance.lastRefreshAt) < minGap) {
     return;
   }
@@ -543,10 +567,13 @@ async function refreshOverview() {
   updateConnectionBar(pinterestResp || {}, systemStatus || {});
   updateHealthDashboard(pinterestResp || {}, systemStatus || {});
   updateIgPipelineUI();
-  renderAlertCenter(pinterestResp || {}, systemStatus || {});
-  updateOpsRibbon(pinterestResp || {}, systemStatus || {});
   renderMiniQueue();
-  renderDashboardHistory();
+
+  if (!isMobileViewport()) {
+    renderAlertCenter(pinterestResp || {}, systemStatus || {});
+    updateOpsRibbon(pinterestResp || {}, systemStatus || {});
+    renderDashboardHistory();
+  }
 
   // Always re-render current tab lists with fresh data
   if (state.currentTab === 'history') renderHistoryList();
@@ -594,12 +621,17 @@ function getSuccessRatePercent() {
 
 function initDynamicHud() {
   if (state.ui.tickerTimer) clearInterval(state.ui.tickerTimer);
+  state.ui.tickerTimer = null;
+  if (isMobileViewport()) return;
+
   state.ui.tickerTimer = setInterval(() => {
     rotateOpsTicker();
   }, 4600);
 }
 
 function initKineticCards() {
+  if (isMobileViewport()) return;
+
   const cards = Array.from(document.querySelectorAll('[data-kinetic-card]'));
   cards.forEach((card) => {
     card.addEventListener('pointermove', (event) => {
@@ -783,6 +815,7 @@ function updateIgPipelineUI(status = state.igStatus) {
   const lastRun = scheduler.lastRunCompletedAt || scheduler.lastRunStartedAt || scheduler.lastDispatchAt;
   setText('ig-dashboard-last-run', lastRun ? `Last activity ${formatTimeAgo(lastRun)}` : 'No runs yet');
   applyIgPipelineHealth(status);
+  if (isMobileViewport()) return;
 
   const list = byId('ig-dashboard-logs');
   if (!list) return;
@@ -937,7 +970,7 @@ async function handleStudioAutoEdit() {
         url,
         options: getStudioOptions(),
       },
-    });
+    }, { passive: true });
 
     const data = response.data || {};
     state.studio.lastEdit = data;
@@ -1034,7 +1067,7 @@ function showPreview(payload) {
   updateComposerMeta();
 
   section.classList.remove('hidden');
-  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  section.scrollIntoView({ behavior: isMobileViewport() ? 'auto' : 'smooth', block: 'start' });
 }
 
 async function handlePostNow() {
@@ -1273,7 +1306,7 @@ function getFilteredQueueRows() {
 }
 
 function getVirtualWindow(listEl, rows, key) {
-  if (!state.performance.enabled || rows.length <= 40) {
+  if ((!state.performance.enabled && !isMobileViewport()) || rows.length <= 40) {
     return { items: rows, top: 0, bottom: 0 };
   }
 
@@ -1296,7 +1329,7 @@ function bindVirtualScroll(listEl, key, renderer) {
   listEl.setAttribute(attr, '1');
   let ticking = false;
   listEl.addEventListener('scroll', () => {
-    if (!state.performance.enabled) return;
+    if (!state.performance.enabled && !isMobileViewport()) return;
     if (ticking) return;
     ticking = true;
     window.requestAnimationFrame(() => {

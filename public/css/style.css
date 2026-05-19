@@ -9535,3 +9535,85 @@ body {
     color: var(--text-strong);
   }
 }
+
+@media (max-width: 760px) {
+  body.mobile-performance-mode {
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+    background: #0c0f14 !important;
+    overscroll-behavior-y: contain;
+  }
+
+  body.mobile-performance-mode *,
+  body.mobile-performance-mode *::before,
+  body.mobile-performance-mode *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+
+  body.mobile-performance-mode .topbar,
+  body.mobile-performance-mode .mobile-tab-nav {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    transform: translate3d(0, 0, 0);
+    contain: paint;
+  }
+
+  body.mobile-performance-mode .card,
+  body.mobile-performance-mode .list,
+  body.mobile-performance-mode .list-item,
+  body.mobile-performance-mode .pipeline-metric,
+  body.mobile-performance-mode .orbit-deck,
+  body.mobile-performance-mode .orbit-signal,
+  body.mobile-performance-mode .channel-card,
+  body.mobile-performance-mode .studio-editor-box,
+  body.mobile-performance-mode .preview-shell {
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  body.mobile-performance-mode .dashboard-card-ig,
+  body.mobile-performance-mode .dashboard-card-queue,
+  body.mobile-performance-mode #panel-studio .card,
+  body.mobile-performance-mode #panel-channels .card,
+  body.mobile-performance-mode #panel-queue .card,
+  body.mobile-performance-mode #panel-history .card,
+  body.mobile-performance-mode .channel-card,
+  body.mobile-performance-mode .list-item {
+    content-visibility: auto;
+    contain-intrinsic-size: 140px;
+  }
+
+  body.mobile-performance-mode .dashboard-card-ig,
+  body.mobile-performance-mode .dashboard-card-queue,
+  body.mobile-performance-mode #panel-studio .card,
+  body.mobile-performance-mode #panel-channels .card,
+  body.mobile-performance-mode #panel-queue .card,
+  body.mobile-performance-mode #panel-history .card {
+    contain-intrinsic-size: 420px;
+  }
+
+  body.mobile-performance-mode .btn:hover,
+  body.mobile-performance-mode .pill-btn:hover,
+  body.mobile-performance-mode .mobile-tab-btn:hover {
+    transform: none !important;
+  }
+
+  body.mobile-performance-mode .btn-primary {
+    background: var(--accent) !important;
+    border-color: rgba(49, 199, 179, 0.58) !important;
+  }
+
+  body.mobile-performance-mode .mobile-tab-btn.active {
+    background: rgba(49, 199, 179, 0.16) !important;
+  }
+
+  body.mobile-performance-mode .pulse-item {
+    background: rgba(255, 255, 255, 0.035) !important;
+  }
+}
