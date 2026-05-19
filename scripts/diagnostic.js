@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('dotenv').config();
 const queueService = require('../services/queueService');
 const historyService = require('../services/historyService');
 const igTrackerService = require('../services/igTrackerService');
@@ -29,7 +30,7 @@ async function runTest() {
 
     // 4. GitHub Connectivity
     console.log('[4/5] Checking GitHub Dispatch Config...');
-    const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN;
+    const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GH_PAT;
     if (token) {
       console.log(`   ✅ Token found (${token.slice(0, 4)}...${token.slice(-4)})`);
     } else {
