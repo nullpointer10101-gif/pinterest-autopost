@@ -1644,7 +1644,7 @@ async function clickLikeOnPin(page) {
     return true;
   }
 
-  return page.evaluate(() => {
+  const clicked = await page.evaluate(() => {
     const isVisible = (element) => {
       const rect = element.getBoundingClientRect();
       return rect.width > 8 && rect.height > 8 && rect.bottom > 0 && rect.right > 0;
@@ -1662,6 +1662,11 @@ async function clickLikeOnPin(page) {
     target.click();
     return true;
   });
+
+  if (!clicked) {
+    console.warn('[Bot] Like button not found or not clickable.');
+  }
+  return clicked;
 }
 
 async function submitCommentOnPin(page, commentText, loadMultiplier = 1) {
@@ -1696,7 +1701,10 @@ async function submitCommentOnPin(page, commentText, loadMultiplier = 1) {
     });
   }
 
-  if (!opened) return false;
+  if (!opened) {
+    console.warn('[Bot] Failed to open comment drawer (button not found or not clickable).');
+    return false;
+  }
 
   await sleep(1500 * loadMultiplier);
 
@@ -1717,7 +1725,10 @@ async function submitCommentOnPin(page, commentText, loadMultiplier = 1) {
     commentBox = await page.$(selector);
     if (commentBox) break;
   }
-  if (!commentBox) return false;
+  if (!commentBox) {
+    console.warn('[Bot] Comment textbox selector not found on page.');
+    return false;
+  }
 
   await commentBox.click();
   await sleep(randomInt(1000, 2000));
@@ -1760,6 +1771,7 @@ async function submitCommentOnPin(page, commentText, loadMultiplier = 1) {
     return true;
   }
 
+  console.warn('[Bot] Comment submit button not found or disabled.');
   return false;
 }
 
@@ -1851,6 +1863,35 @@ function scorePin(pinData, matchCount) {
   if (!pinData.desc || pinData.desc.trim().length === 0) score -= 15;
   return score;
 }
+async function checkPinterestLoggedIn(page) {
+  try {
+    await page.goto('https://www.pinterest.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await sleep(2000);
+    const loggedIn = await page.evaluate(() => {
+      // Logged in indicators:
+      const hasProfileButton = !!document.querySelector('[data-test-id="header-profile-button"], a[href*="/me/"], a[href*="/settings/"]');
+      const hasHomeFeed = !!document.querySelector('[data-test-id="homefeed-feed"], [data-test-id="grid"]');
+      
+      // Logged out indicators:
+      const hasLoginForm = !!document.querySelector('form[name="registerForm"], form[name="login"], [data-test-id="simple-signup-form"]');
+      const hasLoginButton = !!document.querySelector('button[data-test-id="login-button"], button[data-test-id="signup-button"]');
+      
+      if (hasProfileButton || hasHomeFeed) return true;
+      if (hasLoginForm || hasLoginButton) return false;
+      
+      // Fallback: check if page body contains login prompts
+      const bodyText = document.body.innerText || '';
+      if (bodyText.includes('Log in') && bodyText.includes('Sign up') && !bodyText.includes('Home')) {
+        return false;
+      }
+      return true; // Default to true if unclear
+    });
+    return loggedIn;
+  } catch (err) {
+    console.warn('[Bot] Login check failed, assuming true:', err.message);
+    return true; // Default to true on navigation error
+  }
+}
 
 async function runAutoEngagerSafe(options = {}) {
   const sessionCookie = await getActiveSessionCookie();
@@ -1928,6 +1969,25 @@ async function runAutoEngagerSafe(options = {}) {
     });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
     await page.setCookie({ name: '_pinterest_sess', value: sessionCookie, domain: '.pinterest.com', path: '/', secure: true, httpOnly: true });
+
+    console.log('[Bot] Verifying Pinterest session...');
+    const isLoggedIn = await checkPinterestLoggedIn(page);
+    if (!isLoggedIn) {
+      console.error('[Bot] ❌ Pinterest session verification failed. Session cookie is invalid or expired. Triggering 24h circuit breaker.');
+      const breakerState = {
+        ...automationState,
+        likesToday,
+        commentsToday,
+        engagedUrls,
+        circuitBreaker: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      };
+      await runEngagementStorageWrite(
+        'Login validation circuit breaker write',
+        () => historyService.setAutomationState(breakerState)
+      );
+      throw new Error('Pinterest session verification failed: cookie is invalid or expired.');
+    }
+    console.log('[Bot] ✅ Pinterest session verified (logged in).');
 
     const maxCycles = Math.max(36, targets.totalTarget * 10);
     const seenThisSession = new Set((Array.isArray(engagedUrls) ? engagedUrls : []).map(normalizePinUrl).filter(Boolean));

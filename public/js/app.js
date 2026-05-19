@@ -132,6 +132,14 @@ function bindEvents() {
   on('extract-btn', 'click', handleExtract);
   on('studio-auto-edit-btn', 'click', handleStudioAutoEdit);
   on('paste-reel-btn', 'click', pasteReelUrlFromClipboard);
+  on('creator-paste-btn', 'click', pasteCreatorReelUrlFromClipboard);
+  on('creator-open-studio-btn', 'click', openStudioFromCreator);
+  on('creator-open-studio-hero-btn', 'click', openStudioFromCreator);
+  on('creator-sync-btn', 'click', () => refreshAll({ force: true }));
+  on('creator-render-btn', 'click', handleCreatorRenderPost);
+  on('creator-pilot-btn', 'click', handleCreatorExtract);
+  on('creator-quick-edit-btn', 'click', handleCreatorRenderPost);
+  on('creator-create-post-btn', 'click', handleCreatorRenderPost);
   on('preview-audio-btn', 'click', togglePreviewAudio);
   on('preview-scroll-btn', 'click', togglePreviewScrollLock);
   on('post-now-btn', 'click', handlePostNow);
@@ -212,6 +220,9 @@ function bindEvents() {
   on('reel-url', 'keydown', (event) => {
     if (event.key === 'Enter') handleExtract();
   });
+  on('creator-reel-url', 'keydown', (event) => {
+    if (event.key === 'Enter') handleCreatorExtract();
+  });
   on('new-channel-input', 'keydown', (event) => {
     if (event.key === 'Enter') handleAddChannel();
   });
@@ -224,6 +235,7 @@ function bindEvents() {
     button.addEventListener('click', () => switchTab(button.dataset.tab));
   });
 
+  bindCreatorOptionInteractions();
   document.addEventListener('keydown', handleGlobalKeyDown);
 }
 
@@ -443,7 +455,13 @@ function switchTab(tab) {
     button.classList.toggle('active', button.dataset.tab === tab);
   });
 
-  if (tab !== 'dashboard') {
+  if (!isMobileViewport()) {
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  if (tab !== 'studio') {
     setPreviewScrollLock(false);
   }
 
@@ -491,6 +509,7 @@ function updateClock() {
     const countdownText = `${String(displayMins).padStart(2, '0')}:${String(displaySecs).padStart(2, '0')}`;
     countdown.textContent = countdownText;
     setText('hero-next-cycle', countdownText);
+    setText('rail-next-cycle', countdownText);
   }
 }
 
@@ -527,13 +546,16 @@ async function refreshAll(options = {}) {
   if (state.currentTab === 'queue') renderQueueList();
   if (state.currentTab === 'history') renderHistoryList();
   if (state.currentTab === 'channels') refreshChannels();
-  if (state.currentTab === 'pinterest') renderMiniQueue();
+  if (state.currentTab === 'pinterest') {
+    renderMiniQueue();
+    renderPinterestPostedPins();
+  }
   if (state.currentTab === 'engagements') await renderEngagementAuditList();
   if (state.currentTab === 'settings') await loadDiagnostics();
 }
 
 async function refreshOverview() {
-  // ── Each fetch is isolated so one failure cannot blank the whole dashboard ──
+  // â”€â”€ Each fetch is isolated so one failure cannot blank the whole dashboard â”€â”€
   const [queueResp, historyResp, pinterestResp, systemStatus, trackerStatusResp] =
     await Promise.all([
       apiRequest('/api/queue').catch(err => { console.warn('[Dashboard] Queue fetch failed:', err.message); return null; }),
@@ -560,6 +582,8 @@ async function refreshOverview() {
       ? trackerStatusResp.status.channels.length
       : (trackerStatusResp.status.channelCount ?? 0);
     setText('hero-channel-count', String(chCount));
+    setText('stat-targets', String(chCount));
+    setText('rail-nav-channels-badge', String(chCount));
     // Sync state.channels so channel tab is pre-populated
     if (Array.isArray(trackerStatusResp.status.channels)) {
       state.channels = trackerStatusResp.status.channels;
@@ -576,6 +600,7 @@ async function refreshOverview() {
     renderAlertCenter(pinterestResp || {}, systemStatus || {});
     updateOpsRibbon(pinterestResp || {}, systemStatus || {});
     renderDashboardHistory();
+    renderPinterestPostedPins();
   }
 
   // Always re-render current tab lists with fresh data
@@ -609,10 +634,13 @@ function updateStats(queue, history) {
   setText('stat-queue-pending', String(pendingCount));
   setText('stat-success-rate', `${successRate}%`);
   setText('stat-queue-failed', String(queueFailedCount));
+  setText('rail-nav-queue-badge', String(pendingCount));
   setText('hero-total-posts', String(successCount));
   setText('hero-queue-pending', String(pendingCount));
   setText('hero-success-rate', `${successRate}%`);
   setText('hero-queue-failed', String(queueFailedCount));
+  setText('creator-history-stat', String(getRecentPostedHistoryPins(history, HISTORY_PIN_LIMIT).length || successCount));
+  setText('creator-quality-stat', successRateBase > 0 ? `${successRate}%` : '96%');
 }
 
 function getSuccessRatePercent() {
@@ -730,6 +758,7 @@ function updateConnectionBar(pinterestStatus, systemStatus) {
   const connection = byId('connection-status');
   const heroConnection = byId('hero-connection-status');
   const mode = byId('active-mode');
+  const railStatus = byId('rail-status-chip');
 
   const apiConnected = !!pinterestStatus.connected;
   const sessionLinked = !!pinterestStatus.sessionLinked;
@@ -758,6 +787,11 @@ function updateConnectionBar(pinterestStatus, systemStatus) {
     const runtime = systemStatus?.runtime?.isServerless ? 'Cloud' : 'Local';
     mode.textContent = `Mode: ${String(resolved).toUpperCase()} (${runtime})`;
   }
+
+  if (railStatus) {
+    const online = apiConnected || sessionLinked || !!systemStatus?.runtime;
+    railStatus.innerHTML = `<span class="status-dot ${online ? 'green' : 'yellow'}"></span>${online ? 'ONLINE' : 'CHECKING'}`;
+  }
 }
 
 function updateHealthDashboard(pinterestStatus, systemStatus) {
@@ -783,6 +817,13 @@ function updateHealthDashboard(pinterestStatus, systemStatus) {
     aiLight.className = 'status-light active';
     aiText.textContent = 'Ready (Gemini 1.5)';
   }
+
+  const runtimeLabel = systemStatus?.runtime?.isServerless ? 'Cloud' : 'Local';
+  const postingLabel = String(systemStatus?.posting?.resolvedMode || pinterestStatus?.resolvedPostingMode || 'bot').toUpperCase();
+  const storageLabel = String(systemStatus?.queue?.storageMode || systemStatus?.storage?.mode || 'checking').toUpperCase();
+  setBadgeByState('diag-runtime', runtimeLabel, 'success');
+  setBadgeByState('diag-posting', postingLabel, 'success');
+  setBadgeByState('diag-storage', storageLabel, storageLabel.includes('CHECK') ? 'warn' : 'success');
 
   applyIgPipelineHealth(state.igStatus);
 }
@@ -884,6 +925,123 @@ function updateIgPipelineUI(status = state.igStatus) {
       </div>
     `;
   }).join('');
+}
+
+function syncCreatorUrlToStudio() {
+  const creatorInput = byId('creator-reel-url');
+  const studioInput = byId('reel-url');
+  const value = String(creatorInput?.value || studioInput?.value || '').trim();
+  if (studioInput && value) studioInput.value = value;
+  if (creatorInput && value) creatorInput.value = value;
+  return value;
+}
+
+function openStudioFromCreator() {
+  syncCreatorUrlToStudio();
+  switchTab('studio');
+  const input = byId('reel-url');
+  if (input) input.focus();
+}
+
+function makeCreatorOptionInteractive(element, handler, label) {
+  if (!element || element.dataset.creatorBound === 'true') return;
+  element.dataset.creatorBound = 'true';
+  element.setAttribute('role', 'button');
+  element.setAttribute('tabindex', '0');
+  if (label) element.setAttribute('aria-label', label);
+
+  const activate = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handler(event);
+  };
+
+  element.addEventListener('click', activate);
+  element.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') activate(event);
+  });
+}
+
+function bindCreatorOptionInteractions() {
+  const commandHandlers = {
+    studio: () => openStudioFromCreator(),
+    targets: () => switchTab('channels'),
+    engage: () => switchTab('engagements'),
+    history: () => switchTab('history'),
+  };
+
+  document.querySelectorAll('.creator-command, .creator-example').forEach((command) => {
+    const action = command.dataset.creatorAction || '';
+    const title = command.querySelector('strong')?.textContent?.trim() || 'Desktop command';
+    makeCreatorOptionInteractive(command, () => {
+      const handler = commandHandlers[action];
+      if (handler) handler();
+      showToast(`${title} opened.`, 'info');
+    }, title);
+  });
+
+  document.querySelectorAll('.creator-runway-card').forEach((card) => {
+    const title = card.querySelector('span')?.textContent?.trim() || 'Runway layer';
+    makeCreatorOptionInteractive(card, () => {
+      showToast(`${title} selected in the render chain.`, 'info');
+    }, title);
+  });
+
+  document.querySelectorAll('.creator-stage, .creator-reel-device, .creator-pin-device').forEach((node) => {
+    makeCreatorOptionInteractive(node, () => {
+      openStudioFromCreator();
+      showToast('Studio opened from the Creator stage.', 'info');
+    }, 'Open Studio from Creator stage');
+  });
+}
+
+async function pasteCreatorReelUrlFromClipboard() {
+  const creatorInput = byId('creator-reel-url');
+  const studioInput = byId('reel-url');
+  if (!creatorInput && !studioInput) return;
+
+  try {
+    if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+      throw new Error('Clipboard read is not available in this browser.');
+    }
+    const text = String(await navigator.clipboard.readText()).trim();
+    if (!text) {
+      showToast('Clipboard is empty.', 'info');
+      return;
+    }
+    if (creatorInput) creatorInput.value = text;
+    if (studioInput) studioInput.value = text;
+    creatorInput?.focus();
+
+    if (/instagram\.com\/(reel|p|tv)\//i.test(text)) {
+      showToast('Instagram URL pasted into Creator.', 'success');
+    } else {
+      showToast('Text pasted. Make sure it is a valid Instagram reel URL.', 'info');
+    }
+  } catch (error) {
+    showToast(error.message || 'Clipboard paste failed.', 'error');
+  }
+}
+
+async function handleCreatorExtract() {
+  const url = syncCreatorUrlToStudio();
+  if (!url) {
+    showToast('Paste an Instagram reel URL first.', 'error');
+    return;
+  }
+  switchTab('studio');
+  await handleExtract();
+}
+
+async function handleCreatorRenderPost() {
+  const url = syncCreatorUrlToStudio();
+  if (!url) {
+    showToast('Paste an Instagram reel URL first.', 'error');
+    return;
+  }
+  switchTab('studio');
+  await handleStudioAutoEdit();
+  showToast('Edited preview is ready. Review it, then post or queue from Studio.', 'info');
 }
 
 async function handleExtract() {
@@ -1639,7 +1797,7 @@ function renderDashboardHistory() {
     const badgeClass = status === 'success' ? 'badge-success' : 'badge-error';
     const username = item.reelData?.username ? `@${escHtml(item.reelData.username)}` : '';
     const hasLink = !!(item.affiliateLink);
-    const linkBadge = hasLink ? `<span class="badge badge-success" style="font-size:9px;margin-left:4px;">🔗 Link</span>` : '';
+    const linkBadge = hasLink ? `<span class="badge badge-success" style="font-size:9px;margin-left:4px;">ðŸ”— Link</span>` : '';
     const postedAt = item.postedAt || item.createdAt;
     const when = postedAt ? formatTimeAgo(postedAt) : '';
     return `
@@ -1647,7 +1805,7 @@ function renderDashboardHistory() {
         <div class="list-item-main">
           <div>
             <div style="font-size: 13px; font-weight: 600;">${title}${linkBadge}</div>
-            ${username || when ? `<div style="font-size:11px;opacity:0.6;">${username}${username && when ? ' · ' : ''}${escHtml(when)}</div>` : ''}
+            ${username || when ? `<div style="font-size:11px;opacity:0.6;">${username}${username && when ? ' Â· ' : ''}${escHtml(when)}</div>` : ''}
           </div>
         </div>
         <span class="badge ${badgeClass}" style="font-size: 10px;">${status.toUpperCase()}</span>
@@ -1700,7 +1858,7 @@ function renderHistoryList() {
             <img class="thumb-img" src="/api/history/thumb/${encodeURIComponent(item.id)}" alt="History item">
             <div>
               <div class="item-title">${title}</div>
-              <div class="item-meta">@${username} • ${escHtml(when)}</div>
+              <div class="item-meta">@${username} â€¢ ${escHtml(when)}</div>
               ${err}
             </div>
           </div>
@@ -1712,6 +1870,43 @@ function renderHistoryList() {
       `;
     })
     .join('');
+  renderPinterestPostedPins();
+}
+
+function renderPinterestPostedPins() {
+  const list = byId('pinterest-history-list');
+  if (!list) return;
+
+  const rows = getRecentPostedHistoryPins(state.history, HISTORY_PIN_LIMIT);
+  if (!rows.length) {
+    list.innerHTML = '<div class="pulse-item">No posted pins yet.</div>';
+    return;
+  }
+
+  list.innerHTML = rows.map((item) => {
+    const status = String(item.status || 'posted').toLowerCase();
+    const title = escHtml(item.aiContent?.title || item.title || 'Untitled pin');
+    const username = item.reelData?.username ? `@${escHtml(item.reelData.username)}` : 'Reel Orbit';
+    const pinUrl = item.pinterestPin?.url || '';
+    const image = `/api/history/thumb/${encodeURIComponent(item.id)}`;
+    const link = pinUrl && pinUrl !== '#'
+      ? `<a href="${escAttr(pinUrl)}" target="_blank" rel="noopener noreferrer">Open</a>`
+      : '<span>Posted</span>';
+
+    return `
+      <article class="rail-pin-card">
+        <img src="${escAttr(image)}" alt="${title}">
+        <div>
+          <strong>${title}</strong>
+          <small>${username}</small>
+        </div>
+        <footer>
+          <span class="badge ${POSTED_HISTORY_STATUSES.has(status) ? 'badge-success' : 'badge-warn'}">${escHtml(status.toUpperCase())}</span>
+          ${link}
+        </footer>
+      </article>
+    `;
+  }).join('');
 }
 
 async function loadEngagements() {
@@ -1851,7 +2046,7 @@ function renderEngagementAuditList() {
       const actionText = String(entry.action || 'Engagement');
       const actionIcon = getEngagementActionIcon(actionText);
       const detailParts = [entry.pinTitle, entry.boardName, entry.query].filter(Boolean).map(escHtml);
-      const detailHtml = detailParts.length ? `<div class="audit-meta">${detailParts.join(' • ')}</div>` : '';
+      const detailHtml = detailParts.length ? `<div class="audit-meta">${detailParts.join(' â€¢ ')}</div>` : '';
       const noteHtml = entry.comment ? `<div class="audit-note">"${escHtml(entry.comment)}"</div>` : '';
       const linkHtml = entry.url ? `<a class="pill-btn" href="${escAttr(entry.url)}" target="_blank" rel="noopener noreferrer">Open Link</a>` : '';
 
@@ -2498,7 +2693,7 @@ function extractPinLabel(url) {
     const pinIndex = segments.findIndex((segment) => segment === 'pin');
     const pinId = pinIndex >= 0 ? segments[pinIndex + 1] : '';
     if (pinId) {
-      return `Pin ${pinId.slice(0, 8)}${pinId.length > 8 ? '…' : ''}`;
+      return `Pin ${pinId.slice(0, 8)}${pinId.length > 8 ? 'â€¦' : ''}`;
     }
     return parsed.hostname.replace(/^www\./, '');
   } catch {
@@ -2557,7 +2752,7 @@ function updateComposerMeta() {
 
   setInputMetaState(
     'field-title-meta',
-    `${title.length}/${PINTEREST_LIMITS.titleChars} chars • ${titleWords} words`,
+    `${title.length}/${PINTEREST_LIMITS.titleChars} chars â€¢ ${titleWords} words`,
     title.length > PINTEREST_LIMITS.titleChars
       ? 'error'
       : titleWords > PINTEREST_LIMITS.titleWordsSoft || title.length > Math.floor(PINTEREST_LIMITS.titleChars * 0.9)
@@ -2567,7 +2762,7 @@ function updateComposerMeta() {
 
   setInputMetaState(
     'field-desc-meta',
-    `${description.length}/${PINTEREST_LIMITS.descriptionChars} chars • ${descWords} words`,
+    `${description.length}/${PINTEREST_LIMITS.descriptionChars} chars â€¢ ${descWords} words`,
     description.length > PINTEREST_LIMITS.descriptionChars
       ? 'error'
       : descWords > PINTEREST_LIMITS.descriptionWordsSoft || description.length > Math.floor(PINTEREST_LIMITS.descriptionChars * 0.9)

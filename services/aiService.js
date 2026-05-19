@@ -78,6 +78,25 @@ const primaryClient = createClient(primaryConfig);
 const secondaryClient = createClient(secondaryConfig);
 const tertiaryClient = createClient(tertiaryConfig);
 
+function safeJsonParse(text) {
+  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      const candidate = cleaned.substring(start, end + 1);
+      try {
+        return JSON.parse(candidate);
+      } catch (innerErr) {
+        throw new Error(`Failed to parse JSON. Original content: ${text}. Error: ${innerErr.message}`);
+      }
+    }
+    throw err;
+  }
+}
+
 // ─── Dedicated Task Routers ───────────────────────────────────────────────────
 
 /**
@@ -259,8 +278,7 @@ Rules:
     try {
       const response = await tryAICompletion(options, imageData);
       const raw = response.choices[0].message.content.trim();
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-      const parsed = JSON.parse(cleaned);
+      const parsed = safeJsonParse(raw);
 
       return {
         title: (parsed.title || '').substring(0, 100),
@@ -414,18 +432,63 @@ async function getImageForAI(mediaUrl, thumbnailUrl, cachedImageData = null) {
 
 function heuristicIdentifyProduct(caption) {
   const cleaned = cleanCaption(caption);
-  const productKeywords = ['sneakers', 'shirt', 'jeans', 'pants', 'watch', 'jacket', 'tshirt', 't-shirt', 'hoodie', 'shorts', 'kurta', 'saree', 'shoes', 'sandals', 'phone', 'gadget', 'perfume', 'bag', 'cap', 'hat'];
+  const productKeywords = [
+    'sneakers', 'shirt', 'jeans', 'pants', 'watch', 'jacket', 'tshirt', 't-shirt', 
+    'hoodie', 'shorts', 'kurta', 'saree', 'shoes', 'sandals', 'phone', 'gadget', 
+    'perfume', 'bag', 'cap', 'hat', 'sliders', 'slides', 'slippers', 'slipper',
+    'flip flop', 'clog', 'clogs', 'footwear', 'belt', 'wallet'
+  ];
   const lower = cleaned.toLowerCase();
   const hasKeyword = productKeywords.some(k => lower.includes(k));
 
-  if (!hasKeyword && cleaned.length < 10) return { found: false };
+  if (!hasKeyword) return { found: false };
 
-  // Take the most informative line (longest non-hashtag line)
-  const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 5);
-  let productName = (lines[0] || cleaned).substring(0, 80);
-  productName = productName.replace(/#\w+/g, '').replace(/[^\w\s]/gi, '').trim();
+  // Filter out common Instagram CTA lines
+  const lines = cleaned.split('\n')
+    .map(l => l.trim())
+    .filter(l => {
+      if (l.length <= 5) return false;
+      const lowerLine = l.toLowerCase();
+      // Ignore lines that are typical CTAs
+      if (lowerLine.includes('comment') && (lowerLine.includes('send') || lowerLine.includes('link') || lowerLine.includes('get'))) return false;
+      if (lowerLine.includes('link in bio') || lowerLine.includes('dm me') || lowerLine.includes('follow for')) return false;
+      return true;
+    });
+
+  let productName = '';
+  // Try to find a line containing one of our keywords
+  const keywordLine = lines.find(l => productKeywords.some(k => l.toLowerCase().includes(k)));
+  if (keywordLine) {
+    productName = keywordLine;
+  } else if (lines.length > 0) {
+    productName = lines[0];
+  } else {
+    // If all lines were filtered out, check if any hashtag has the keyword or brand
+    const hashtags = (cleaned.match(/#\w+/g) || []).map(tag => tag.slice(1));
+    const brandKeywords = ['redtape', 'woodland', 'zara', 'hnm', 'nike', 'adidas', 'puma'];
+    const usefulTags = hashtags.filter(tag => {
+      const tLower = tag.toLowerCase();
+      return productKeywords.some(k => tLower.includes(k)) || brandKeywords.some(b => tLower.includes(b));
+    });
+    if (usefulTags.length > 0) {
+      productName = usefulTags.join(' ');
+    } else {
+      return { found: false };
+    }
+  }
+
+  productName = productName.replace(/#\w+/g, '').replace(/[^\w\s]/gi, '').replace(/\s+/g, ' ').trim();
+  // Capitalize words
+  productName = productName
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
 
   if (productName.length < 3) return { found: false };
+
+  // Detect product type category
+  const flipkartSearchService = require('./flipkartSearchService');
+  const productType = flipkartSearchService.detectProductType(productName) || 'other';
 
   return {
     found: true,
@@ -433,7 +496,7 @@ function heuristicIdentifyProduct(caption) {
     exactMatchQuery: productName,
     similarMatchQuery: productName.split(' ').slice(0, 4).join(' '),
     broadMatchQuery: productName.split(' ').slice(0, 2).join(' '),
-    category: 'other'
+    category: productType
   };
 }
 
@@ -487,9 +550,7 @@ Return ONLY the JSON object.`;
   
   const response = await tryAICompletion(options, resolvedImage);
   const raw = response.choices[0].message.content.trim();
-  // Strip markdown code fences if present
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  const parsed = JSON.parse(cleaned);
+  const parsed = safeJsonParse(raw);
 
   // If AI says not found, but we have strong keywords, use heuristic anyway
   if (parsed.found !== true) {
@@ -567,8 +628,7 @@ Return ONLY valid JSON.`;
   try {
     const response = await tryAICompletion(options, resolvedImageOutfit);
     const raw = response.choices[0].message.content.trim();
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-    const parsed = JSON.parse(cleaned);
+    const parsed = safeJsonParse(raw);
     
     if (parsed.found === true && parsed.items && parsed.items.length > 0) {
       return parsed;

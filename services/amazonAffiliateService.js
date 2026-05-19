@@ -63,10 +63,32 @@ function getMarketplaceHost() {
   return raw || 'www.amazon.in';
 }
 
-function fetchWithTimeout(url, init = {}, timeoutMs = 20000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+async function fetchWithTimeout(url, init = {}, timeoutMs = 20000, retries = 2) {
+  let attempt = 1;
+  while (true) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(timer);
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
+
+      const isTransient = err.name === 'AbortError' ||
+                          err.message.includes('fetch failed') ||
+                          err.message.includes('timeout') ||
+                          (err.cause && (err.cause.code === 'UND_ERR_SOCKET' || err.cause.name === 'ConnectTimeoutError'));
+
+      if (isTransient && attempt <= retries) {
+        console.warn(`[Network] fetch failed for ${url} (attempt ${attempt}/${retries}). Retrying in ${attempt}s... Error: ${err.message}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        attempt++;
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 function isConfigured() {

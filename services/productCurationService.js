@@ -8,10 +8,32 @@ function cleanQuery(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function fetchWithTimeout(url, init = {}, timeoutMs = 9000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+async function fetchWithTimeout(url, init = {}, timeoutMs = 20000, retries = 2) {
+  let attempt = 1;
+  while (true) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(timer);
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
+
+      const isTransient = err.name === 'AbortError' ||
+                          err.message.includes('fetch failed') ||
+                          err.message.includes('timeout') ||
+                          (err.cause && (err.cause.code === 'UND_ERR_SOCKET' || err.cause.name === 'ConnectTimeoutError'));
+
+      if (isTransient && attempt <= retries) {
+        console.warn(`[Network] fetch failed for ${url} (attempt ${attempt}/${retries}). Retrying in ${attempt}s... Error: ${err.message}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        attempt++;
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 function isSafeHttpUrl(value = '') {
@@ -45,7 +67,7 @@ async function isReachableUrl(url, logPrefix = '[Product Curation]') {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; PinterestAutopostProductCheck/1.0)',
       },
-    }, 8000);
+    }, 12000);
     if (res.status >= 200 && res.status < 400) return true;
     if ([403, 405, 429].includes(res.status)) return true;
   } catch (err) {
@@ -404,7 +426,7 @@ async function findProductImage(name, url, logPrefix = '[Product Curation]', sea
       method: 'POST',
       headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
       body: JSON.stringify({ q: `${query} ${providerHint}`, gl: 'in', hl: 'en', num: 8 }),
-    }, 9000);
+    }, 15000);
 
     if (!res.ok) return null;
     const data = await res.json();

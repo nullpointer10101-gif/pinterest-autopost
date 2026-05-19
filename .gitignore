@@ -50,6 +50,9 @@ desktop.ini
 *.jpeg
 *.gif
 public/generated/
+!public/assets/
+!public/assets/creator-opening/
+!public/assets/creator-opening/*.jpg
 
 
 # Build artifacts

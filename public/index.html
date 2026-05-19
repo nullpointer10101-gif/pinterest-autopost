@@ -1,10 +1,13 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0b0614">
     <title>Reel Orbit</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
 </head>
@@ -19,6 +22,34 @@
     </div>
 
     <div class="app-shell">
+        <header class="desktop-creator-topbar railway-topbar" aria-label="Desktop navigation">
+            <div class="rail-topbar-left">
+                <span class="rail-logo-dot" aria-hidden="true"></span>
+                <span class="rail-product-name">Reel Orbit</span>
+                <span class="rail-separator">/</span>
+                <button class="rail-project-switch" type="button">
+                    <span>Autopost</span>
+                    <i data-lucide="chevron-down" class="mini-icon"></i>
+                </button>
+            </div>
+
+            <div class="rail-topbar-center">
+                <span id="rail-status-chip" class="rail-status-chip"><span class="status-dot green"></span>ONLINE</span>
+            </div>
+
+            <div class="rail-topbar-right">
+                <label class="rail-toggle-label">
+                    <span>Auto Refresh</span>
+                    <span class="rail-toggle" aria-hidden="true"><span></span></span>
+                </label>
+                <button id="creator-sync-btn" class="desktop-creator-action rail-refresh-button" type="button">
+                    <i data-lucide="refresh-cw" class="btn-icon"></i>
+                    <span>Refresh</span>
+                </button>
+                <div class="rail-avatar" aria-label="Reel Orbit account">RO</div>
+            </div>
+        </header>
+
         <header class="topbar">
             <div class="brand-wrap">
                 <p class="brand-tag">Flux Deck</p>
@@ -55,14 +86,18 @@
         </header>
 
         <nav class="tab-nav" aria-label="Main tabs">
-            <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="layout-dashboard" class="tab-icon"></i><span>Dashboard</span></button>
-            <button class="tab-btn" data-tab="channels" type="button"><i data-lucide="rss" class="tab-icon"></i><span>Channels</span></button>
-            <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="layers" class="tab-icon"></i><span>Queue</span></button>
-            <button class="tab-btn" data-tab="studio" type="button"><i data-lucide="clapperboard" class="tab-icon"></i><span>Studio</span></button>
-            <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="camera" class="tab-icon"></i><span>Pinterest</span></button>
-            <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="activity" class="tab-icon"></i><span>Engagement</span></button>
+            <button class="tab-btn active" data-tab="dashboard" type="button"><i data-lucide="grid-3x3" class="tab-icon"></i><span>Dashboard</span></button>
+            <button class="tab-btn" data-tab="channels" type="button"><i data-lucide="instagram" class="tab-icon"></i><span>Channels</span><span id="rail-nav-channels-badge" class="rail-nav-badge">0</span></button>
+            <button class="tab-btn" data-tab="queue" type="button"><i data-lucide="layers-3" class="tab-icon"></i><span>Queue</span><span id="rail-nav-queue-badge" class="rail-nav-badge">0</span></button>
+            <button class="tab-btn" data-tab="studio" type="button"><i data-lucide="video" class="tab-icon"></i><span>Studio</span></button>
+            <button class="tab-btn" data-tab="pinterest" type="button"><i data-lucide="send" class="tab-icon"></i><span>Pinterest</span></button>
+            <button class="tab-btn" data-tab="engagements" type="button"><i data-lucide="heart" class="tab-icon"></i><span>Engagement</span></button>
             <button class="tab-btn" data-tab="history" type="button"><i data-lucide="history" class="tab-icon"></i><span>History</span></button>
-            <button class="tab-btn" data-tab="settings" type="button"><i data-lucide="sliders-horizontal" class="tab-icon"></i><span>Settings</span></button>
+            <button class="tab-btn" data-tab="settings" type="button"><i data-lucide="settings" class="tab-icon"></i><span>Settings</span></button>
+            <div class="rail-sidebar-footer" aria-hidden="true">
+                <div><span><span class="status-dot green"></span>Live Core</span><strong>Autonomous</strong></div>
+                <div><span>Next Wake</span><strong id="rail-next-cycle">--:--</strong></div>
+            </div>
         </nav>
 
         <main>
@@ -80,6 +115,121 @@
             </section>
 
             <section id="panel-dashboard" class="panel panel-dashboard">
+                <section class="desktop-creator-home" aria-label="Reel Orbit desktop opening">
+                    <div class="creator-gallery-wall" aria-hidden="true">
+                        <div class="creator-gallery-column creator-gallery-column-a">
+                            <img src="/assets/creator-opening/creator-tile-01.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-02.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-03.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-04.jpg" alt="">
+                        </div>
+                        <div class="creator-gallery-column creator-gallery-column-b">
+                            <img src="/assets/creator-opening/creator-tile-05.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-06.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-07.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-08.jpg" alt="">
+                        </div>
+                        <div class="creator-gallery-column creator-gallery-column-c">
+                            <img src="/assets/creator-opening/creator-tile-03.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-07.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-01.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-05.jpg" alt="">
+                        </div>
+                        <div class="creator-gallery-column creator-gallery-column-d">
+                            <img src="/assets/creator-opening/creator-tile-08.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-04.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-06.jpg" alt="">
+                            <img src="/assets/creator-opening/creator-tile-02.jpg" alt="">
+                        </div>
+                    </div>
+
+                    <section class="creator-opening-hero">
+                        <div class="creator-hero-content">
+                            <div class="creator-kicker-row">
+                                <span>AI Reel to Pin Studio</span>
+                                <span>Product links</span>
+                                <span>Auto posting</span>
+                            </div>
+
+                            <h1>Create viral Pinterest pins from Instagram reels.</h1>
+                            <p>Paste a reel URL and generate an edited Pinterest-ready post with cover, title, description, storefront links, and safe posting controls.</p>
+
+                            <div class="creator-prompt-shell">
+                                <div class="creator-prompt-icon"><i data-lucide="sparkles" class="btn-icon"></i></div>
+                                <input id="creator-reel-url" type="text" placeholder="Paste an Instagram reel URL to start creating..." autocomplete="off">
+                                <button id="creator-paste-btn" class="creator-prompt-tool" type="button" title="Paste reel URL"><i data-lucide="clipboard" class="btn-icon"></i></button>
+                                <button id="creator-pilot-btn" class="creator-prompt-submit" type="button">Generate</button>
+                            </div>
+
+                            <div class="creator-hero-actions">
+                                <button id="creator-quick-edit-btn" class="creator-hero-primary" type="button">Auto edit reel</button>
+                                <button id="creator-open-studio-hero-btn" class="creator-hero-secondary" type="button">Open Studio</button>
+                                <button id="creator-create-post-btn" class="creator-hero-secondary" type="button">Create Edited Pin</button>
+                            </div>
+
+                            <div class="creator-stat-strip">
+                                <article><strong id="creator-history-stat">0</strong><span>Recent pins</span></article>
+                                <article><strong id="creator-quality-stat">96%</strong><span>Quality gate</span></article>
+                                <article><strong>5</strong><span>Search cap</span></article>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="creator-opening-dock" aria-label="Quick workflows">
+                        <button class="creator-example" data-creator-action="studio" type="button">
+                            <span>01</span><strong>Reel editor</strong><small>Cut, cover, brand, caption.</small>
+                        </button>
+                        <button class="creator-example" data-creator-action="targets" type="button">
+                            <span>02</span><strong>Target channels</strong><small>Scan source accounts.</small>
+                        </button>
+                        <button class="creator-example" data-creator-action="engage" type="button">
+                            <span>03</span><strong>Engagement log</strong><small>Last 24h actions.</small>
+                        </button>
+                        <button class="creator-example" data-creator-action="history" type="button">
+                            <span>04</span><strong>Recent pins</strong><small>Last 10 posts.</small>
+                        </button>
+                    </section>
+                </section>
+
+                <header class="rail-page-head rail-desktop-only">
+                    <div>
+                        <h1>Dashboard</h1>
+                        <p>Live automation health and mission overview</p>
+                    </div>
+                    <div class="rail-page-actions">
+                        <button id="rail-open-studio-btn" class="btn btn-secondary compact-btn" type="button" onclick="switchTab('studio')">Studio <span aria-hidden="true">-&gt;</span></button>
+                        <button class="btn btn-secondary compact-btn" type="button" onclick="refreshAll({ force: true })">Sync Now</button>
+                        <button class="btn btn-secondary compact-btn" type="button" onclick="switchTab('history')">Receipts</button>
+                    </div>
+                </header>
+
+                <section class="rail-stats-grid rail-desktop-only" aria-label="Automation stats">
+                    <article class="rail-stat-card">
+                        <i data-lucide="instagram" class="rail-stat-icon"></i>
+                        <span>Targets</span>
+                        <strong id="stat-targets">0</strong>
+                        <small>Watching channels</small>
+                    </article>
+                    <article class="rail-stat-card">
+                        <i data-lucide="send" class="rail-stat-icon"></i>
+                        <span>Published</span>
+                        <strong id="stat-total-posts">0</strong>
+                        <small>Last 10 receipts tracked</small>
+                    </article>
+                    <article class="rail-stat-card">
+                        <i data-lucide="layers-3" class="rail-stat-icon"></i>
+                        <span>Pending</span>
+                        <strong id="stat-queue-pending">0</strong>
+                        <small>Queued or processing</small>
+                    </article>
+                    <article class="rail-stat-card">
+                        <i data-lucide="activity" class="rail-stat-icon"></i>
+                        <span>Success Rate</span>
+                        <strong id="stat-success-rate" class="rail-stat-good">0%</strong>
+                        <small>Published vs failed</small>
+                    </article>
+                </section>
+
                 <section class="orbit-deck">
                     <div class="orbit-brief">
                         <div class="hero-pill-row">
@@ -202,49 +352,15 @@
                 <section class="dashboard-grid">
                     <article class="card dashboard-card dashboard-card-workflow">
                         <div class="card-title-wrap">
-                            <h2><i data-lucide="workflow" class="heading-icon"></i>Workflow Control Center</h2>
-                            <p class="muted-text">Controls for active Pinterest automations plus read-only IG repost health.</p>
+                            <h2><i data-lucide="stethoscope" class="heading-icon"></i>System Status</h2>
                         </div>
 
-                        <div class="workflow-grid">
-                            <div class="workflow-item">
-                                <div class="workflow-info">
-                                    <i data-lucide="camera" class="workflow-icon"></i>
-                                    <div>
-                                        <div class="workflow-name">Pinterest Posting</div>
-                                        <div class="workflow-desc">Manual pin builder and queue engine</div>
-                                    </div>
-                                </div>
-                                <label class="master-switch">
-                                    <input type="checkbox" id="wf-pinterest-posting" checked>
-                                    <span class="master-slider"></span>
-                                </label>
-                            </div>
-
-                            <div class="workflow-item">
-                                <div class="workflow-info">
-                                    <i data-lucide="thumbs-up" class="workflow-icon"></i>
-                                    <div>
-                                        <div class="workflow-name">Pinterest Engagement</div>
-                                        <div class="workflow-desc">Men's outfit likes and comments</div>
-                                    </div>
-                                </div>
-                                <label class="master-switch">
-                                    <input type="checkbox" id="wf-pinterest-engagement" checked>
-                                    <span class="master-slider"></span>
-                                </label>
-                            </div>
-
-                            <div class="workflow-item workflow-item-readonly">
-                                <div class="workflow-info">
-                                    <i data-lucide="zap" class="workflow-icon"></i>
-                                    <div>
-                                        <div class="workflow-name">Independent IG Repost</div>
-                                        <div class="workflow-desc">Own scheduler, queue, duplicate guard</div>
-                                    </div>
-                                </div>
-                                <span id="ig-workflow-badge" class="badge">Checking...</span>
-                            </div>
+                        <div class="diag-list">
+                            <div class="diag-item"><span>Runtime</span><span id="diag-runtime" class="badge">Checking...</span></div>
+                            <div class="diag-item"><span>Posting</span><span id="diag-posting" class="badge">Checking...</span></div>
+                            <div class="diag-item"><span>Storage</span><span id="diag-storage" class="badge">Checking...</span></div>
+                            <div class="diag-item"><span>AI Engine</span><span class="rail-status-text"><span id="light-ai" class="status-light active"></span><span id="status-text-ai">Ready</span></span></div>
+                            <div class="diag-item"><span>IG Repost</span><span id="ig-workflow-badge" class="badge">Checking...</span></div>
                         </div>
                     </article>
 
@@ -337,13 +453,6 @@
                                 <div>
                                     <div class="stat-label">IG Repost Pipeline</div>
                                     <div id="status-text-ig" class="input-meta">Checking...</div>
-                                </div>
-                            </div>
-                            <div class="health-item">
-                                <div id="light-ai" class="status-light"></div>
-                                <div>
-                                    <div class="stat-label">AI Engine</div>
-                                    <div id="status-text-ai" class="input-meta">Ready</div>
                                 </div>
                             </div>
                         </div>
@@ -625,8 +734,48 @@
                                 <div class="pulse-item">Checking queue...</div>
                             </div>
                         </article>
+
+                        <article class="card pinterest-setup-card">
+                            <div class="card-title-wrap">
+                                <div class="heading-row">
+                                    <h2><i data-lucide="shield-check" class="heading-icon"></i>Pinterest Setup</h2>
+                                    <span id="settings-badge-pin" class="badge">Checking...</span>
+                                </div>
+                                <p class="muted-text">Status, OAuth, and session cookie controls for the posting bot.</p>
+                            </div>
+
+                            <div class="field-wrap">
+                                <label>Method 1: Official API</label>
+                                <a href="/api/pinterest" class="btn btn-primary settings-link">
+                                    <i data-lucide="shield-check" class="btn-icon"></i>
+                                    <span>Link via OAuth</span>
+                                </a>
+                            </div>
+
+                            <div class="field-wrap section-divider">
+                                <label for="session-cookie">Method 2: Session Cookie</label>
+                                <div class="inline-field">
+                                    <input type="password" id="session-cookie" placeholder="_pinterest_sess value">
+                                    <button id="link-session-btn" class="btn btn-secondary" type="button">Link</button>
+                                    <button id="unlink-session-btn" class="btn btn-danger hidden" type="button">Unlink</button>
+                                </div>
+                            </div>
+                        </article>
                     </aside>
                 </div>
+
+                <article class="card pinterest-history-panel">
+                    <div class="card-header-row">
+                        <h2><i data-lucide="history" class="heading-icon"></i>Last 10 Posted Pins</h2>
+                        <div class="button-row">
+                            <button class="btn btn-secondary compact-btn" type="button" onclick="exportHistoryJson()"><i data-lucide="download" class="btn-icon"></i><span>Export JSON</span></button>
+                            <button class="btn btn-secondary compact-btn" type="button" onclick="clearHistory()"><i data-lucide="trash-2" class="btn-icon"></i><span>Clear History</span></button>
+                        </div>
+                    </div>
+                    <div id="pinterest-history-list" class="rail-pin-grid">
+                        <div class="pulse-item">Loading posted pins...</div>
+                    </div>
+                </article>
             </section>
 
             <section id="panel-history" class="panel hidden">
@@ -675,33 +824,6 @@
                 <div class="panel-grid panel-grid-secondary">
                     <article class="card">
                         <div class="card-title-wrap">
-                            <div class="heading-row">
-                                <h2><i data-lucide="camera" class="heading-icon"></i>Pinterest Setup</h2>
-                                <span id="settings-badge-pin" class="badge">Checking...</span>
-                            </div>
-                            <p class="muted-text">Connect your Pinterest account through OAuth or session cookie mode.</p>
-                        </div>
-
-                        <div class="field-wrap">
-                            <label>Method 1: Official API</label>
-                            <a href="/api/pinterest" class="btn btn-primary settings-link">
-                                <i data-lucide="shield-check" class="btn-icon"></i>
-                                <span>Link via OAuth</span>
-                            </a>
-                        </div>
-
-                        <div class="field-wrap section-divider">
-                            <label for="session-cookie">Method 2: Session Cookie</label>
-                            <div class="inline-field">
-                                <input type="password" id="session-cookie" placeholder="_pinterest_sess value">
-                                <button id="link-session-btn" class="btn btn-secondary" type="button">Link</button>
-                                <button id="unlink-session-btn" class="btn btn-danger hidden" type="button">Unlink</button>
-                            </div>
-                        </div>
-                    </article>
-
-                    <article class="card">
-                        <div class="card-title-wrap">
                             <h2><i data-lucide="instagram" class="heading-icon"></i>Extraction Engine</h2>
                             <p class="muted-text">Optional Instagram cookie for high-frequency or restricted reel extraction.</p>
                         </div>
@@ -718,14 +840,39 @@
 
                     <article class="card">
                         <div class="card-title-wrap">
-                            <h2><i data-lucide="stethoscope" class="heading-icon"></i>System Status</h2>
-                            <p class="muted-text">Runtime diagnostics and environment health.</p>
+                            <h2><i data-lucide="refresh-cw" class="heading-icon"></i>Auto Refresh Interval</h2>
+                            <p class="muted-text">Keep the dashboard synced while the automation runner works.</p>
                         </div>
 
                         <div class="diag-list">
-                            <div class="diag-item"><span>Runtime</span><span id="diag-runtime" class="badge">Checking...</span></div>
-                            <div class="diag-item"><span>Posting</span><span id="diag-posting" class="badge">Checking...</span></div>
-                            <div class="diag-item"><span>Storage</span><span id="diag-storage" class="badge">Checking...</span></div>
+                            <div class="diag-item"><span>Auto Refresh</span><span class="badge badge-success">Enabled</span></div>
+                            <div class="diag-item"><span>Default Interval</span><span class="badge">30s</span></div>
+                            <div class="diag-item"><span>Mobile Interval</span><span class="badge">60s</span></div>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="palette" class="heading-icon"></i>Interface Theme</h2>
+                            <p class="muted-text">Desktop is locked to the Reel Orbit Railway skin.</p>
+                        </div>
+
+                        <div class="rail-skin-row">
+                            <button class="rail-skin-option active" type="button">Flux</button>
+                            <button class="rail-skin-option" type="button">Light</button>
+                        </div>
+                    </article>
+
+                    <article class="card danger-zone-card">
+                        <div class="card-title-wrap">
+                            <h2><i data-lucide="triangle-alert" class="heading-icon"></i>Danger Zone</h2>
+                            <p class="muted-text">High-impact reset actions for the current workspace.</p>
+                        </div>
+
+                        <div class="button-row">
+                            <button class="btn btn-danger compact-btn" type="button" onclick="clearQueue()">Clear All Queue</button>
+                            <button class="btn btn-danger compact-btn" type="button" onclick="clearEngagements()">Reset All Logs</button>
+                            <button class="btn btn-danger compact-btn" type="button" onclick="unlinkSessionCookie()">Unlink All Accounts</button>
                         </div>
                     </article>
                 </div>

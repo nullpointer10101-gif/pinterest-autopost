@@ -178,7 +178,7 @@ const PRODUCT_TYPE_RULES = [
     key: 'shoes',
     label: 'Shoes',
     queryTerm: 'men shoes',
-    terms: ['shoe', 'shoes', 'sneaker', 'sneakers', 'loafer', 'loafers', 'boots', 'sandals', 'sliders'],
+    terms: ['shoe', 'shoes', 'sneaker', 'sneakers', 'loafer', 'loafers', 'boots', 'sandals', 'sliders', 'slipper', 'slippers', 'flip flop', 'flip flops', 'slides', 'slide', 'clog', 'clogs'],
   },
   {
     key: 'belt',
@@ -284,7 +284,15 @@ function isProductTypeMatch(targetText, candidateText, expectedType = null) {
 }
 
 function extractVisualSignals(text) {
-  const normalized = normalizeText(text);
+  let normalized = normalizeText(text);
+  // Prevent brand names that contain color/style words from triggering false-positive filters
+  normalized = normalized
+    .replace(/\bred tape\b/g, 'brand_redtape')
+    .replace(/\bblackberrys\b/g, 'brand_blackberrys')
+    .replace(/\bolive\b/g, 'brand_olive')
+    .replace(/\bgrey\b/g, 'brand_grey')
+    .replace(/\bbrown\b/g, 'brand_brown');
+
   const colors = COLOR_TERMS.filter((term) => hasTerm(normalized, term));
   const styles = STYLE_TERMS.filter((term) => hasTerm(normalized, term));
   return {

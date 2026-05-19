@@ -65,13 +65,32 @@ async function withSearchCache(key, loader) {
   return value.map((item) => ({ ...item }));
 }
 
-function fetchWithTimeout(url, init = {}, timeoutMs = 10000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+async function fetchWithTimeout(url, init = {}, timeoutMs = 25000, retries = 2) {
+  let attempt = 1;
+  while (true) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(timer);
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
 
-  return fetch(url, { ...init, signal: controller.signal }).finally(() =>
-    clearTimeout(timer)
-  );
+      const isTransient = err.name === 'AbortError' ||
+                          err.message.includes('fetch failed') ||
+                          err.message.includes('timeout') ||
+                          (err.cause && (err.cause.code === 'UND_ERR_SOCKET' || err.cause.name === 'ConnectTimeoutError'));
+
+      if (isTransient && attempt <= retries) {
+        console.warn(`[Network] fetch failed for ${url} (attempt ${attempt}/${retries}). Retrying in ${attempt}s... Error: ${err.message}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        attempt++;
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 async function searchGoogleCSE(query, domain, options = {}) {
@@ -90,7 +109,7 @@ async function searchGoogleCSE(query, domain, options = {}) {
   });
 
   const url = `https://www.googleapis.com/customsearch/v1?${params}`;
-  const res = await fetchWithTimeout(url, { method: 'GET' }, 10000);
+  const res = await fetchWithTimeout(url, { method: 'GET' }, 25000);
 
   if (res.status === 429) throw new Error('Google CSE: daily quota exceeded (100/day)');
   if (!res.ok) {
@@ -124,7 +143,7 @@ async function searchSerper(query, domain, options = {}) {
         num,
       }),
     },
-    10000
+    25000
   );
 
   if (res.status === 401) throw new Error('Serper: invalid API key');
