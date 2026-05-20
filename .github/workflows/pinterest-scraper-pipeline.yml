@@ -1,27 +1,45 @@
-name: Pinterest Scraper Pipeline
+name: Pinterest Repost Pipeline
 
 on:
   schedule:
-    # Run every hour to pop 2 pins from the queue
+    # ── Publisher: runs every hour and posts up to 6 pins ──────────────────
     - cron: '0 * * * *'
+    # ── Ingestor: runs once a week (Sunday midnight UTC) to refill the queue ─
+    - cron: '0 0 * * 0'
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'Mode to run: "publish" (post pins) or "sync" (refill queue)'
+        required: true
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - sync
       username:
-        description: 'Target Pinterest Username (leave blank to run all)'
+        description: 'Target Pinterest Username to scrape (sync mode only, leave blank for all)'
         required: false
         default: ''
 
 jobs:
-  run-scraper:
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 1: PUBLISHER — Runs every hour, pops 6 pins from the queue and posts them
+  # ────────────────────────────────────────────────────────────────────────────
+  publisher:
+    name: "Hourly Publisher (6 pins/hr)"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    # Run this job on the hourly cron OR on manual dispatch in "publish" mode
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'publish')
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -29,16 +47,59 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Pinterest Pipeline
+      - name: Run Pinterest Publisher (pop 6 pins from queue)
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_TARGET_BOARD: ${{ secrets.PINTEREST_TARGET_BOARD }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+        run: node scripts/run-pinterest-pipeline.js
+
+      - name: Commit Updated State (queue + reposted log)
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add data/pinterest_queue.json data/pinterest_reposted.json || true
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: auto-update Pinterest queue and repost log [skip ci]"
+          git push
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 2: INGESTOR — Runs once a week to refill the queue from target accounts
+  # ────────────────────────────────────────────────────────────────────────────
+  ingestor:
+    name: "Weekly Ingestor (fill queue from target accounts)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Run this job on the weekly cron OR on manual dispatch in "sync" mode
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 0 * * 0') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'sync')
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Queue Ingestor (scrape up to 2000 pins)
         env:
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           PINTEREST_TARGET_USERNAME: ${{ github.event.inputs.username }}
           BASE_URL: ${{ secrets.BASE_URL }}
-        run: node scripts/run-pinterest-pipeline.js
+        run: node scripts/sync-pinterest-queue.js
 
-      - name: Commit and Push Updated Data
+      - name: Commit Filled Queue to Repository
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add data/pinterest_pins.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update: Scraped new Pinterest pins" && git push)
+          git add data/pinterest_queue.json data/pinterest_pins.json || true
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: refill Pinterest queue from target accounts [skip ci]"
+          git push

@@ -7,9 +7,18 @@ node_modules/
 .env.production
 .env.vercel*
 
-# Local database (ephemeral — persisted via Vercel KV or /tmp in production)
+# Local database and private user data (never commit)
 data/db.json
-data/*.json
+data/state.json
+data/leads.json
+data/ig-tracker-state.json
+
+# Pinterest automation state files ARE tracked in git
+# (needed for GitHub Actions to persist queue and repost log across runs)
+# data/pinterest_queue.json      ← tracked
+# data/pinterest_reposted.json   ← tracked
+# data/pinterest_accounts.json   ← tracked
+# data/pinterest_pins.json       ← tracked
 
 # Logs
 *.log

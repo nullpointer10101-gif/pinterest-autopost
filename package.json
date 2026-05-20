@@ -8,7 +8,10 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "automation:hourly": "node scripts/run-hourly-automation.js",
-    "automation:ig-repost": "node scripts/run-ig-repost-pipeline.js"
+    "automation:ig-repost": "node scripts/run-ig-repost-pipeline.js",
+    "pinterest:publish": "node scripts/run-pinterest-pipeline.js",
+    "pinterest:sync": "node scripts/sync-pinterest-queue.js",
+    "pinterest:status": "node scripts/check-pinterest-status.js"
   },
   "dependencies": {
     "axios": "^1.6.2",
