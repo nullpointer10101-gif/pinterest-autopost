@@ -5,7 +5,7 @@ const OWNER = 'nullpointer10101-gif';
 
 function getHeaders() {
   // Keep token support aligned across every GitHub workflow dispatcher.
-  const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const token = process.env.GH_PAT_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GH_PAT;
   if (!token) return null;
   return {
     Authorization: `Bearer ${token}`,
