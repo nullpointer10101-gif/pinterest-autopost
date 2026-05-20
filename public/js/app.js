@@ -3293,3 +3293,40 @@ function updateWorkflowUI(config) {
     }
   }
 }
+
+
+// Desktop UI Toggle Logic
+const savedDesktopUi = localStorage.getItem('desktop_ui_mode');
+if (savedDesktopUi === 'creator') {
+    document.body.setAttribute('data-desktop-ui', 'creator');
+}
+
+const railwayToggleBtn = document.getElementById('ui-toggle-btn');
+if (railwayToggleBtn) {
+    railwayToggleBtn.addEventListener('click', () => {
+        document.body.setAttribute('data-desktop-ui', 'creator');
+        localStorage.setItem('desktop_ui_mode', 'creator');
+    });
+}
+
+const creatorToggleBtn = document.getElementById('creator-ui-toggle-btn');
+if (creatorToggleBtn) {
+    creatorToggleBtn.addEventListener('click', () => {
+        document.body.removeAttribute('data-desktop-ui');
+        localStorage.removeItem('desktop_ui_mode');
+    });
+}
+
+// Bind Creator tabs to switchTab
+document.querySelectorAll('.desktop-creator-tab').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const tab = e.currentTarget.getAttribute('data-tab');
+        if (tab) {
+            if (typeof switchTab === 'function') switchTab(tab);
+            
+            // Update active state in Creator UI topbar
+            document.querySelectorAll('.desktop-creator-tab').forEach(b => b.classList.remove('active'));
+            e.currentTarget.classList.add('active');
+        }
+    });
+});

@@ -178,7 +178,13 @@ const PRODUCT_TYPE_RULES = [
     key: 'shoes',
     label: 'Shoes',
     queryTerm: 'men shoes',
-    terms: ['shoe', 'shoes', 'sneaker', 'sneakers', 'loafer', 'loafers', 'boots', 'sandals', 'sliders', 'slipper', 'slippers', 'flip flop', 'flip flops', 'slides', 'slide', 'clog', 'clogs'],
+    terms: [
+      'shoe', 'shoes', 'sneaker', 'sneakers', 'loafer', 'loafers', 'boots', 'sandals',
+      'sliders', 'slipper', 'slippers', 'flip flop', 'flip flops', 'slides', 'slide',
+      'clog', 'clogs', 'footwear', 'chelsea', 'derby', 'oxford', 'brogue', 'brogues',
+      'moccasin', 'moccasins', 'chukka', 'chukkas', 'trainer', 'trainers', 'heel',
+      'heels', 'flat', 'flats', 'keds', 'crocs', 'converse'
+    ],
   },
   {
     key: 'belt',

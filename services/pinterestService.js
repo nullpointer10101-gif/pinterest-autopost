@@ -116,7 +116,7 @@ async function getBoards() {
 }
 
 // ─── Create Pin ──────────────────────────────────────────────────────────────
-async function createPin({ title, description, altText = '', hashtags = [], mediaUrl, link }) {
+async function createPin({ title, description, altText = '', hashtags = [], mediaUrl, imageUrls = [], link, boardId }) {
   const token = await getToken();
   // Hard-enforce Pinterest character limits (defence-in-depth)
   const safeTitle = String(title || '').substring(0, 100);
@@ -138,12 +138,28 @@ async function createPin({ title, description, altText = '', hashtags = [], medi
     title: safeTitle,
     description: safeDescription,
     alt_text: safeAltText || undefined,
-    media_source: {
-      source_type: (mediaUrl || '').toLowerCase().includes('.mp4') ? 'video_url' : 'image_url',
-      url: mediaUrl,
-    },
+    board_id: boardId || undefined,
     link: link || undefined,
   };
+
+  // Carousel Pin vs Standard Pin
+  if (imageUrls && imageUrls.length > 1) {
+    payload.media_source = {
+      source_type: 'multiple_image_urls',
+      items: imageUrls.slice(0, 5).map(url => ({
+        url: url,
+        title: safeTitle,
+        description: safeDescription,
+        link: link || undefined
+      }))
+    };
+  } else {
+    const finalMedia = imageUrls[0] || mediaUrl;
+    payload.media_source = {
+      source_type: (finalMedia || '').toLowerCase().includes('.mp4') ? 'video_url' : 'image_url',
+      url: finalMedia,
+    };
+  }
 
   console.log('[Pinterest] Creating pin payload:', JSON.stringify({ ...payload, media_source: { source_type: payload.media_source.source_type, url: '...' } }));
 

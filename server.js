@@ -23,6 +23,12 @@ app.use('/look', lookRoutes);
 app.use('/store', storeRoutes);
 app.use('/shop', storeRoutes);
 
+// Pinterest Lead Capture Bridge & Admin
+const bridgeRoutes = require('./routes/bridge');
+const adminRoutes = require('./routes/admin');
+app.use('/bridge', bridgeRoutes);
+app.use('/admin', adminRoutes);
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

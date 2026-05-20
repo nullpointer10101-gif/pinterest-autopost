@@ -304,10 +304,30 @@ function roleQueriesForMission(mission, roleKey) {
 }
 
 function candidateMatchesMission(productTitle, mission, roleKey) {
+  const lowerTitle = String(productTitle || '').toLowerCase();
+  const utilityPatterns = [
+    'zipper for', 'zippers for', 'zipper pack', 'zippers pack', 'zipper pull',
+    'button for', 'buttons for', 'button pack', 'buttons pack', 'button kit',
+    'clothes hanger', 'shoe hanger', 'shoe rack', 'shoe cleaner', 'shoe horn',
+    'protection spray', 'sewing kit', 'repair kit', 'shoe tree', 'shoe trees',
+    'shoelaces', 'shoe lace', 'shoe laces'
+  ];
+  const matchedUtility = utilityPatterns.find((pattern) => lowerTitle.includes(pattern));
+  if (matchedUtility) {
+    return { accepted: false, score: 0, reason: `suspected utility/accessory item containing "${matchedUtility}"` };
+  }
+
   const candidateTypes = flipkartSearchService.detectAllProductTypes(productTitle);
+  
+  if (mission.productType) {
+    const hasExpectedType = candidateTypes.includes(mission.productType);
+    if (!hasExpectedType) {
+      return { accepted: false, score: 0, reason: `type mismatch or unknown type (expected ${mission.productType}, candidate has ${candidateTypes.join(', ') || 'unknown'})` };
+    }
+  }
+
   const hasWrongType = candidateTypes.some((type) => type !== mission.productType);
-  const hasExpectedType = candidateTypes.includes(mission.productType);
-  if (hasWrongType || (candidateTypes.length > 0 && !hasExpectedType)) {
+  if (hasWrongType) {
     return { accepted: false, score: 0, reason: `type mismatch (${candidateTypes.join(', ') || 'unknown'} != ${mission.productType})` };
   }
 
@@ -798,6 +818,123 @@ async function buildProductHunterShelf(products, {
   };
 }
 
+async function fillShelfFallback(completedLinks, expectedType, productTypeLabel, limit, logPrefix, queryText) {
+  if (completedLinks.length >= limit) return completedLinks;
+  if (!expectedType) return completedLinks;
+
+  console.log(`${logPrefix} Shelf has only ${completedLinks.length}/${limit} items. Triggering niche/category fallback search for "${productTypeLabel}"...`);
+
+  const typeQueryTerm = flipkartSearchService.getProductTypeQueryTerm(expectedType);
+  if (!typeQueryTerm) return completedLinks;
+
+  // Try to extract brand hint if present
+  let brandHint = '';
+  const brands = ['red tape', 'woodland', 'zara', 'hnm', 'nike', 'adidas', 'puma', 'roadster', 'hrx', 'h&m'];
+  const lowerQuery = String(queryText || '').toLowerCase();
+  for (const brand of brands) {
+    if (lowerQuery.includes(brand)) {
+      brandHint = brand;
+      break;
+    }
+  }
+
+  const fallbackQueries = [];
+  if (brandHint) {
+    fallbackQueries.push(`${brandHint} ${typeQueryTerm}`);
+    fallbackQueries.push(`best ${brandHint} ${typeQueryTerm}`);
+  }
+  fallbackQueries.push(`trending ${typeQueryTerm}`);
+  fallbackQueries.push(typeQueryTerm);
+
+  const seenUrls = new Set(completedLinks.map(l => l.url).filter(Boolean));
+
+  for (const q of fallbackQueries) {
+    if (completedLinks.length >= limit) break;
+    console.log(`${logPrefix} Niche Fallback Search: "${q}"`);
+    
+    // Search Flipkart
+    let foundFlipkart = [];
+    try {
+      foundFlipkart = await flipkartSearchService.searchFlipkart(q);
+    } catch (e) {
+      console.warn(`${logPrefix} Flipkart fallback search failed:`, e.message);
+    }
+
+    const validFlipkart = [];
+    for (const p of foundFlipkart || []) {
+      const pTitle = p.title || '';
+      // Ensure strict type match
+      const isMatch = flipkartSearchService.isProductTypeMatch(q, pTitle, expectedType);
+      if (!isMatch) continue;
+
+      const normUrl = p.url;
+      if (!normUrl || seenUrls.has(normUrl)) continue;
+      
+      validFlipkart.push({
+        ...p,
+        source: 'flipkart_product',
+      });
+    }
+
+    // Search Amazon
+    let foundAmazon = [];
+    try {
+      foundAmazon = await amazonAffiliateService.searchAmazonProducts(q, { limit: 6, logPrefix });
+    } catch (e) {
+      console.warn(`${logPrefix} Amazon fallback search failed:`, e.message);
+    }
+
+    const validAmazon = [];
+    for (const p of foundAmazon || []) {
+      const pTitle = p.title || p.name || '';
+      // Ensure strict type match
+      const isMatch = flipkartSearchService.isProductTypeMatch(q, pTitle, expectedType);
+      if (!isMatch) continue;
+
+      const normUrl = p.url;
+      if (!normUrl || seenUrls.has(normUrl)) continue;
+      
+      validAmazon.push({
+        ...p,
+        source: 'amazon_product',
+      });
+    }
+
+    // Interleave/combine results
+    const combined = [];
+    const maxLen = Math.max(validFlipkart.length, validAmazon.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (validFlipkart[i]) combined.push(validFlipkart[i]);
+      if (validAmazon[i]) combined.push(validAmazon[i]);
+    }
+
+    // Convert to affiliate links
+    const rawLinks = await buildAffiliateShelf(combined, {
+      typeLabel: productTypeLabel,
+      logPrefix,
+    });
+
+    const validated = await enrichAndValidateLinks(rawLinks, {
+      expectedType,
+      logPrefix,
+      limit: limit - completedLinks.length,
+    });
+
+    for (const v of validated) {
+      if (completedLinks.length >= limit) break;
+      if (seenUrls.has(v.url)) continue;
+      seenUrls.add(v.url);
+      completedLinks.push({
+        ...v,
+        role: 'Niche Alternative',
+        roleBadge: 'Similar',
+      });
+    }
+  }
+
+  return completedLinks;
+}
+
 async function buildSameTypeShelfFromQuery(query, {
   limit = 4,
   logPrefix = '[Product Curation]',
@@ -850,7 +987,8 @@ async function buildSameTypeShelfFromQuery(query, {
     limit,
     logPrefix,
   });
-  const completedLinks = hunterResult.affiliateLinks || [];
+  let completedLinks = hunterResult.affiliateLinks || [];
+  completedLinks = await fillShelfFallback(completedLinks, expectedType, productTypeLabel, limit, logPrefix, clean);
 
   return {
     affiliateLinks: completedLinks,
@@ -940,7 +1078,8 @@ async function buildSameTypeShelfFromProductData(productData, {
     limit,
     logPrefix,
   });
-  const completedLinks = hunterResult.affiliateLinks || [];
+  let completedLinks = hunterResult.affiliateLinks || [];
+  completedLinks = await fillShelfFallback(completedLinks, expectedType, productTypeLabel, limit, logPrefix, productName);
 
   return {
     affiliateLinks: completedLinks,

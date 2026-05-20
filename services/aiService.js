@@ -104,14 +104,15 @@ function safeJsonParse(text) {
  * Route: GitHub Models (gpt-4o-mini) → Groq text-only fallback
  */
 async function tryVisionCompletion(options, imageData) {
+  const systemMsg = options.messages.find(m => m.role === 'system')?.content || '';
+  const userMsg = options.messages.find(m => m.role === 'user')?.content || '';
+  let userText = Array.isArray(userMsg)
+    ? (userMsg.find(p => p.type === 'text')?.text || '')
+    : userMsg;
+
+  // 1. Try GitHub Models (gpt-4o-mini)
   if (imageData && githubVisionClient) {
     try {
-      const systemMsg = options.messages.find(m => m.role === 'system')?.content || '';
-      const userMsg = options.messages.find(m => m.role === 'user')?.content || '';
-      let userText = Array.isArray(userMsg)
-        ? (userMsg.find(p => p.type === 'text')?.text || '')
-        : userMsg;
-
       console.log('[AI] Using GitHub Models (gpt-4o-mini) for vision analysis...');
       const res = await githubVisionClient.chat.completions.create({
         model: githubVisionConfig.model,
@@ -128,9 +129,56 @@ async function tryVisionCompletion(options, imageData) {
       console.log('[AI] ✅ GitHub Vision analysis successful!');
       return res;
     } catch (visionErr) {
-      console.warn(`[AI] GitHub Vision failed (${visionErr.message}). Falling back to text-only...`);
+      console.warn(`[AI] GitHub Vision failed (${visionErr.message}). Trying Gemini...`);
     }
   }
+
+  // 2. Try Gemini Primary (gemini-2.0-flash)
+  if (imageData && secondaryClient && secondaryConfig?.isGemini) {
+    try {
+      console.log('[AI] Using Gemini Primary (gemini-2.0-flash) for vision analysis...');
+      const res = await secondaryClient.chat.completions.create({
+        model: secondaryConfig.model,
+        messages: [
+          { role: 'system', content: systemMsg },
+          { role: 'user', content: [
+            { type: 'text', text: userText },
+            { type: 'image_url', image_url: { url: `data:${imageData.mimeType || 'image/jpeg'};base64,${imageData.base64}` } }
+          ]}
+        ],
+        temperature: options.temperature || 0.5,
+        max_tokens: options.max_tokens || 400
+      });
+      console.log('[AI] ✅ Gemini Primary Vision analysis successful!');
+      return res;
+    } catch (visionErr) {
+      console.warn(`[AI] Gemini Primary Vision failed (${visionErr.message}). Trying Gemini fallback...`);
+    }
+  }
+
+  // 3. Try Gemini Fallback
+  if (imageData && tertiaryClient && tertiaryConfig?.isGemini) {
+    try {
+      console.log('[AI] Using Gemini Fallback (gemini-2.0-flash) for vision analysis...');
+      const res = await tertiaryClient.chat.completions.create({
+        model: tertiaryConfig.model,
+        messages: [
+          { role: 'system', content: systemMsg },
+          { role: 'user', content: [
+            { type: 'text', text: userText },
+            { type: 'image_url', image_url: { url: `data:${imageData.mimeType || 'image/jpeg'};base64,${imageData.base64}` } }
+          ]}
+        ],
+        temperature: options.temperature || 0.5,
+        max_tokens: options.max_tokens || 400
+      });
+      console.log('[AI] ✅ Gemini Fallback Vision analysis successful!');
+      return res;
+    } catch (visionErr) {
+      console.warn(`[AI] Gemini Fallback Vision failed (${visionErr.message}).`);
+    }
+  }
+
   // Vision failed or no image — route to text pipeline
   return tryTextCompletion(options);
 }

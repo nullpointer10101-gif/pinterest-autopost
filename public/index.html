@@ -33,6 +33,14 @@
                 </button>
             </div>
 
+            
+            <div class="desktop-creator-tabs">
+                <button class="desktop-creator-tab tab-btn active" data-tab="dashboard">Dashboard</button>
+                <button class="desktop-creator-tab tab-btn" data-tab="queue">Queue</button>
+                <button class="desktop-creator-tab tab-btn" data-tab="studio">Studio</button>
+                <button class="desktop-creator-tab tab-btn" data-tab="history">History</button>
+                <button class="desktop-creator-tab tab-btn" data-tab="channels">Targets</button>
+            </div>
             <div class="rail-topbar-center">
                 <span id="rail-status-chip" class="rail-status-chip"><span class="status-dot green"></span>ONLINE</span>
             </div>
@@ -42,6 +50,10 @@
                     <span>Auto Refresh</span>
                     <span class="rail-toggle" aria-hidden="true"><span></span></span>
                 </label>
+                <button id="creator-ui-toggle-btn" class="desktop-creator-action" type="button" title="Toggle Laptop UI">
+                    <i data-lucide="layout-dashboard" class="btn-icon"></i>
+                    <span>Railway UI</span>
+                </button>
                 <button id="creator-sync-btn" class="desktop-creator-action rail-refresh-button" type="button">
                     <i data-lucide="refresh-cw" class="btn-icon"></i>
                     <span>Refresh</span>
@@ -80,6 +92,10 @@
                 <button id="visual-mode-btn" class="btn btn-secondary compact-btn visual-mode-btn" type="button" title="Cycle visual modes">
                     <i data-lucide="moon-star" class="btn-icon"></i>
                     <span id="visual-mode-label">Flux</span>
+                </button>
+                <button id="ui-toggle-btn" class="btn btn-secondary compact-btn" type="button" title="Toggle Laptop UI">
+                    <i data-lucide="monitor" class="btn-icon"></i>
+                    <span>Laptop UI</span>
                 </button>
                 <div id="live-time" class="clock">00:00</div>
             </div>
