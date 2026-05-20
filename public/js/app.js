@@ -3295,38 +3295,53 @@ function updateWorkflowUI(config) {
 }
 
 
-// Desktop UI Toggle Logic
-const savedDesktopUi = localStorage.getItem('desktop_ui_mode');
-if (savedDesktopUi === 'creator') {
+// Desktop UI Toggle Logic — runs after DOM is ready (DOMContentLoaded already fired above)
+(function initDesktopUiToggle() {
+  // Safety: if for any reason we end up in creator mode with no content visible,
+  // clear it and default back to Railway UI.
+  let savedDesktopUi = '';
+  try {
+    savedDesktopUi = localStorage.getItem('desktop_ui_mode') || '';
+  } catch (e) {
+    savedDesktopUi = '';
+  }
+
+  // Only apply creator mode if explicitly saved; default is Railway (no attribute)
+  if (savedDesktopUi === 'creator') {
     document.body.setAttribute('data-desktop-ui', 'creator');
-}
+  }
+  // If not 'creator', ensure the attribute is removed (prevents stuck state)
+  else {
+    document.body.removeAttribute('data-desktop-ui');
+  }
 
-const railwayToggleBtn = document.getElementById('ui-toggle-btn');
-if (railwayToggleBtn) {
+  // "Laptop UI" button → switches TO creator mode
+  const railwayToggleBtn = document.getElementById('ui-toggle-btn');
+  if (railwayToggleBtn) {
     railwayToggleBtn.addEventListener('click', () => {
-        document.body.setAttribute('data-desktop-ui', 'creator');
-        localStorage.setItem('desktop_ui_mode', 'creator');
+      document.body.setAttribute('data-desktop-ui', 'creator');
+      try { localStorage.setItem('desktop_ui_mode', 'creator'); } catch(e) {}
     });
-}
+  }
 
-const creatorToggleBtn = document.getElementById('creator-ui-toggle-btn');
-if (creatorToggleBtn) {
+  // "Railway UI" button → switches BACK to Railway mode (default)
+  const creatorToggleBtn = document.getElementById('creator-ui-toggle-btn');
+  if (creatorToggleBtn) {
     creatorToggleBtn.addEventListener('click', () => {
-        document.body.removeAttribute('data-desktop-ui');
-        localStorage.removeItem('desktop_ui_mode');
+      document.body.removeAttribute('data-desktop-ui');
+      try { localStorage.removeItem('desktop_ui_mode'); } catch(e) {}
     });
-}
+  }
 
-// Bind Creator tabs to switchTab
-document.querySelectorAll('.desktop-creator-tab').forEach(btn => {
+  // Bind Creator tabs to switchTab
+  document.querySelectorAll('.desktop-creator-tab').forEach(btn => {
     btn.addEventListener('click', (e) => {
-        const tab = e.currentTarget.getAttribute('data-tab');
-        if (tab) {
-            if (typeof switchTab === 'function') switchTab(tab);
-            
-            // Update active state in Creator UI topbar
-            document.querySelectorAll('.desktop-creator-tab').forEach(b => b.classList.remove('active'));
-            e.currentTarget.classList.add('active');
-        }
+      const tab = e.currentTarget.getAttribute('data-tab');
+      if (tab) {
+        if (typeof switchTab === 'function') switchTab(tab);
+        document.querySelectorAll('.desktop-creator-tab').forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+      }
     });
-});
+  });
+})();

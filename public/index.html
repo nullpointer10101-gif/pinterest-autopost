@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -10,6 +10,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="shortcut icon" href="https://www.pinterest.com/favicon.ico" type="image/x-icon">
+    <script>
+      // Safety reset: clear any stuck 'creator' UI mode so the page never loads black.
+      try { localStorage.removeItem('desktop_ui_mode'); } catch(e) {}
+    </script>
 </head>
 <body>
     <div class="scene-layer" aria-hidden="true">
