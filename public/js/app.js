@@ -3026,14 +3026,14 @@ function normalizeUsernameValue(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function normalizeInstagramTargetInput(value) {
+function normalizeTargetInput(value) {
   let clean = String(value || '').trim().toLowerCase();
   if (!clean) return '';
 
   try {
     const parsed = /^https?:\/\//i.test(clean)
       ? new URL(clean)
-      : clean.includes('instagram.com/')
+      : clean.includes('instagram.com/') || clean.includes('pinterest.')
         ? new URL(clean.startsWith('www.') ? `https://${clean}` : clean)
         : null;
 
@@ -3042,18 +3042,18 @@ function normalizeInstagramTargetInput(value) {
       clean = segment;
     }
   } catch {
-    const match = clean.match(/instagram\.com\/([a-z0-9._]+)/i);
+    const match = clean.match(/(?:instagram\.com|pinterest\.[a-z.]+)\/([a-z0-9._-]+)/i);
     if (match) clean = match[1];
   }
 
   clean = clean.replace(/^@/, '').split('/')[0].split('?')[0].trim();
-  const reservedPaths = new Set(['p', 'reel', 'tv', 'stories', 'explore', 'accounts', 'direct']);
+  const reservedPaths = new Set(['p', 'reel', 'tv', 'stories', 'explore', 'accounts', 'direct', 'pin', 'board']);
   if (!clean || reservedPaths.has(clean)) return '';
-  return /^[a-z0-9._]+$/.test(clean) ? clean : '';
+  return /^[a-z0-9._-]+$/.test(clean) ? clean : '';
 }
 
 function getChannelUsername(channel) {
-  return normalizeInstagramTargetInput(typeof channel === 'string' ? channel : channel?.username || '');
+  return normalizeTargetInput(typeof channel === 'string' ? channel : channel?.username || '');
 }
 
 async function refreshChannels() {
@@ -3109,14 +3109,14 @@ function renderChannelsList() {
           ${avatarHtml}
           <div class="channel-card-copy">
             <div class="item-title channel-username">@${escHtml(username)}</div>
-            <div class="item-meta">Instagram target channel - ${escHtml(statusLabel)}</div>
+            <div class="item-meta">Target channel - ${escHtml(statusLabel)}</div>
             <div class="item-meta">${escHtml(metaLine)}</div>
             ${errorLine}
           </div>
         </div>
         <div class="channel-card-actions">
           <span class="badge ${escAttr(statusTone.badgeClass)}">${escHtml(statusLabel)}</span>
-          <a href="https://www.instagram.com/${escAttr(username)}" target="_blank" rel="noopener noreferrer" class="pill-btn">View Profile</a>
+          <a href="https://www.${state.currentChannelMode === 'pin' ? 'pinterest' : 'instagram'}.com/${escAttr(username)}" target="_blank" rel="noopener noreferrer" class="pill-btn">View Profile</a>
           <button class="btn btn-danger compact-btn" onclick="handleRemoveChannel('${escAttr(username)}')">
             <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
           </button>
@@ -3238,7 +3238,7 @@ async function handleAddChannel() {
   const input = byId('new-channel-input');
   const btn = byId('add-channel-btn');
   const rawInput = String(input?.value || '').trim();
-  const normalizedInput = normalizeInstagramTargetInput(rawInput);
+  const normalizedInput = normalizeTargetInput(rawInput);
 
   if (!rawInput) {
     showToast('Please enter a username or Instagram URL.', 'error');
