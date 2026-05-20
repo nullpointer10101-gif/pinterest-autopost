@@ -181,6 +181,12 @@ function bindEvents() {
           ? 'Add Pinterest sources for automated scraping.' 
           : 'Add Instagram sources for automated reel-to-pin missions.';
       }
+      const input = byId('new-channel-input');
+      if (input) {
+        input.placeholder = state.currentChannelMode === 'pin'
+          ? '@username or https://www.pinterest.com/profile'
+          : '@username or https://www.instagram.com/profile';
+      }
       refreshChannels();
     });
   });
@@ -3202,6 +3208,11 @@ async function refreshChannelAvatar(username, options = {}) {
   state.channelAvatarRequests[requestKey] = Date.now();
   if (avatarEl) avatarEl.dataset.avatarState = 'loading';
 
+  if (state.currentChannelMode === 'pin') {
+    if (avatarEl) avatarEl.dataset.avatarState = 'missing';
+    return false;
+  }
+
   try {
     const query = new URLSearchParams({ username: cleanUsername });
     if (force) query.set('refresh', '1');
@@ -3241,13 +3252,15 @@ async function handleAddChannel() {
   const rawInput = String(input?.value || '').trim();
   const normalizedInput = normalizeTargetInput(rawInput);
 
+  const isPinMode = state.currentChannelMode === 'pin';
+
   if (!rawInput) {
-    showToast('Please enter a username or Instagram URL.', 'error');
+    showToast(`Please enter a username or ${isPinMode ? 'Pinterest' : 'Instagram'} URL.`, 'error');
     return;
   }
 
   if (!normalizedInput) {
-    showToast('Please enter a valid Instagram profile username or profile link.', 'error');
+    showToast(`Please enter a valid ${isPinMode ? 'Pinterest' : 'Instagram'} profile username or profile link.`, 'error');
     return;
   }
 
