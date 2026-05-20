@@ -10969,11 +10969,11 @@ body {
     overflow: visible;
   }
 
-  .panel-dashboard > :not(.desktop-creator-home) {
+  body[data-desktop-ui="creator"] .panel-dashboard > :not(.desktop-creator-home) {
     display: none !important;
   }
 
-  .panel-dashboard > .desktop-creator-home {
+  body[data-desktop-ui="creator"] .panel-dashboard > .desktop-creator-home {
     display: grid !important;
   }
 
@@ -11680,11 +11680,11 @@ body {
     min-height: calc(100vh - 76px);
   }
 
-  .panel-dashboard > :not(.desktop-creator-home) {
+  body[data-desktop-ui="creator"] .panel-dashboard > :not(.desktop-creator-home) {
     display: none !important;
   }
 
-  .panel-dashboard > .desktop-creator-home {
+  body[data-desktop-ui="creator"] .panel-dashboard > .desktop-creator-home {
     display: flex !important;
   }
 
