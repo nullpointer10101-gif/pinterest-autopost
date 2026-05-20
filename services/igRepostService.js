@@ -97,7 +97,12 @@ function backoffMs(attempt) {
   return minutes * 60 * 1000;
 }
 
+let directIgBlocked = false;
+
 async function fetchPinnedShortcodes(username) {
+  if (directIgBlocked) {
+    return { known: false, shortcodes: new Set() };
+  }
   if (IG_SESSION_COOKIE && IG_CSRF) {
     try {
       const profileRes = await axios.get(
@@ -120,6 +125,11 @@ async function fetchPinnedShortcodes(username) {
       }
     } catch (err) {
       console.warn(`[IG-Repost] Session pinned lookup failed for @${username}:`, err.message);
+      if (err.response?.status === 429 || err.message.includes('429')) {
+        console.warn('[IG-Repost] Instagram direct API is rate-limiting us (429). Short-circuiting future direct lookups for this run.');
+        directIgBlocked = true;
+        return { known: false, shortcodes: new Set() };
+      }
     }
   }
 
@@ -150,6 +160,10 @@ async function fetchPinnedShortcodes(username) {
     return { known: true, shortcodes: new Set(pinned) };
   } catch (err) {
     console.warn(`[IG-Repost] Public pinned lookup failed for @${username}:`, err.message);
+    if (err.response?.status === 429 || err.message.includes('429')) {
+      console.warn('[IG-Repost] Instagram public direct API is rate-limiting us (429). Short-circuiting future direct lookups for this run.');
+      directIgBlocked = true;
+    }
     return { known: false, shortcodes: new Set() };
   }
 }
@@ -332,7 +346,7 @@ async function scanAccount(username, options = {}) {
   });
 
   const reels = await igTrackerService.fetchLatestReels(normalized);
-  if (!Array.isArray(reels) || reels.length === 0) {
+  if (!Array.isArray(reels) || (reels.length === 0 && !reels.success)) {
     const reason = 'No reels fetched from Instagram';
     if (validation) {
       await stateService.markAccountFailed(normalized, reason, { keepPending: false, stage: 'scan' });
@@ -342,6 +356,24 @@ async function scanAccount(username, options = {}) {
       });
     }
     return { username: normalized, queued: 0, skipped: 0, scanned: 0, error: reason };
+  }
+
+  if (reels.length === 0) {
+    const logMsg = `No video reels found for @${normalized} (fetched ${reels.fetchedTotal || 0} total posts, filtered ${reels.filteredImages || 0} images).`;
+    await stateService.appendLog('info', 'scan.no_reels', logMsg, {
+      username: normalized,
+      fetchedTotal: reels.fetchedTotal,
+      filteredImages: reels.filteredImages,
+    });
+    return {
+      username: normalized,
+      scanned: 0,
+      queued: 0,
+      skipped: reels.filteredImages || 0,
+      added: [],
+      queueSkips: [],
+      warning: '',
+    };
   }
 
   const discoveredProfilePicUrl = reels
@@ -594,6 +626,7 @@ async function processQueue(options = {}) {
 }
 
 async function runPipeline(options = {}) {
+  directIgBlocked = false;
   const mode = String(options.mode || 'scan').trim().toLowerCase();
   const username = options.username ? stateService.normalizeUsername(options.username) : null;
   const runId = options.runId || `igrepost_${Date.now()}`;

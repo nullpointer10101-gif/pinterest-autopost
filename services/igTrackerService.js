@@ -252,6 +252,7 @@ async function fetchViaSessionApi(username) {
         mediaType: isVideo ? 'video' : 'image',
         isPinned: false,
         pinnedStateKnown: true,
+        timestamp: item.taken_at || item.timestamp || null,
       };
     }).filter(r => r.shortcode && r.thumbnailUrl);
   } catch (err) {
@@ -375,6 +376,8 @@ async function fetchViaPuppeteer(username) {
         const edges = user?.edge_owner_to_timeline_media?.edges || [];
         const results = edges.slice(0, 5).map(e => {
           const node = e.node;
+          const isPinned = node.is_pinned === true || node.pinned === true || (Array.isArray(node.pinned_for_users) && node.pinned_for_users.length > 0);
+          const pinnedStateKnown = typeof node.is_pinned === 'boolean' || typeof node.pinned === 'boolean' || typeof node.taken_at_timestamp === 'number';
           return {
             shortcode: node.shortcode, username,
             url: `https://www.instagram.com/reel/${node.shortcode}/`,
@@ -382,8 +385,9 @@ async function fetchViaPuppeteer(username) {
             thumbnailUrl: node.thumbnail_src || node.display_url,
             caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
             mediaType: node.is_video ? 'video' : 'image',
-            isPinned: node.is_pinned === true,
-            pinnedStateKnown: typeof node.is_pinned === 'boolean',
+            isPinned,
+            pinnedStateKnown,
+            timestamp: node.taken_at_timestamp || null,
           };
         }).filter(r => r.shortcode && r.mediaUrl);
         if (results.length > 0) return results;
@@ -424,6 +428,8 @@ async function fetchViaUnofficialApi(username) {
       const node = e.node;
       const isVideo = node.is_video === true;
       const shortcode = node.shortcode;
+      const isPinned = node.is_pinned === true || node.pinned === true || (Array.isArray(node.pinned_for_users) && node.pinned_for_users.length > 0);
+      const pinnedStateKnown = typeof node.is_pinned === 'boolean' || typeof node.pinned === 'boolean' || typeof node.taken_at_timestamp === 'number';
       return {
         shortcode,
         url: `https://www.instagram.com/reel/${shortcode}/`,
@@ -433,8 +439,9 @@ async function fetchViaUnofficialApi(username) {
         username,
         profilePicUrl,
         mediaType: isVideo ? 'video' : 'image',
-        isPinned: node.is_pinned === true,
-        pinnedStateKnown: typeof node.is_pinned === 'boolean',
+        isPinned,
+        pinnedStateKnown,
+        timestamp: node.taken_at_timestamp || null,
       };
     }).filter(r => r.shortcode && r.mediaUrl);
   } catch (err) {
@@ -627,6 +634,7 @@ async function fetchViaRapidAPI(username) {
         mediaType: isVideo ? 'video' : 'image',
         isPinned: item.is_pinned === true || item.isPinned === true,
         pinnedStateKnown: typeof item.is_pinned === 'boolean' || typeof item.isPinned === 'boolean',
+        timestamp: item.taken_at || item.timestamp || item.taken_at_timestamp || null,
       };
     }).filter(r => r.shortcode && r.mediaUrl);
   } catch (err) {
@@ -686,6 +694,8 @@ async function fetchViaApify(username) {
           item.owner?.profile_pic_url,
           item.profilePicUrl
         );
+        const isPinned = item.isPinned === true || item.pinned === true || item.is_pinned === true;
+        const pinnedStateKnown = typeof item.isPinned === 'boolean' || typeof item.pinned === 'boolean' || typeof item.is_pinned === 'boolean';
         return {
           shortcode: item.shortCode,
           url: item.url || `https://www.instagram.com/reel/${item.shortCode}/`,
@@ -695,8 +705,9 @@ async function fetchViaApify(username) {
           username,
           profilePicUrl: postProfilePicUrl,
           mediaType: isVideo ? 'video' : 'image',
-          isPinned: item.isPinned === true,
-          pinnedStateKnown: typeof item.isPinned === 'boolean',
+          isPinned,
+          pinnedStateKnown,
+          timestamp: item.timestamp || item.pubDate || item.datetime || null,
         };
       }).filter(r => r.shortcode && r.mediaUrl);
     } catch (err) {
@@ -711,26 +722,68 @@ async function fetchViaApify(username) {
  * Fetch latest reels for a given username.
  * Priority: Apify → RapidAPI → Session API → Puppeteer stealth → Unofficial API → Picuki
  */
+function detectPinnedReels(reels) {
+  if (!Array.isArray(reels) || reels.length <= 1) return reels;
+
+  const parsed = reels.map(r => {
+    let time = null;
+    if (r.timestamp) {
+      time = typeof r.timestamp === 'number' ? r.timestamp * 1000 : new Date(r.timestamp).getTime();
+    } else if (r.takenAt) {
+      time = typeof r.takenAt === 'number' ? r.takenAt * 1000 : new Date(r.takenAt).getTime();
+    }
+    return { time };
+  });
+
+  for (let i = 0; i < reels.length; i++) {
+    const reel = reels[i];
+    if (reel.isPinned === true) continue;
+
+    const timeI = parsed[i].time;
+    if (timeI && !Number.isNaN(timeI)) {
+      for (let j = i + 1; j < reels.length; j++) {
+        const timeJ = parsed[j].time;
+        if (timeJ && !Number.isNaN(timeJ) && timeJ > timeI) {
+          reel.isPinned = true;
+          reel.pinnedStateKnown = true;
+          console.log(`[IG-Tracker] Detected pinned post ${reel.shortcode} for @${reel.username || 'unknown'} via chronological violation (index ${i} time: ${new Date(timeI).toISOString()} < index ${j} time: ${new Date(timeJ).toISOString()})`);
+          break;
+        }
+      }
+    }
+    
+    if (timeI && !Number.isNaN(timeI) && reel.isPinned !== true) {
+      reel.isPinned = false;
+      reel.pinnedStateKnown = true;
+    }
+  }
+
+  return reels;
+}
+
 async function fetchLatestReels(username) {
   console.log(`[IG-Tracker] Fetching reels for @${username}...`);
 
   let finalReels = [];
+  let success = false;
 
   // Method 0: Apify (Most reliable, won't flag account)
   if (hasApifyToken()) {
     const reels = await fetchViaApify(username);
-    if (reels.length > 0) {
+    if (reels && reels.length > 0) {
       console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Apify for @${username}`);
       finalReels = reels;
+      success = true;
     }
   }
 
   // Method 1: RapidAPI
   if (finalReels.length === 0 && RAPIDAPI_KEY) {
     let reels = await fetchViaRapidAPI(username);
-    if (reels.length > 0) {
+    if (reels && reels.length > 0) {
       console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via RapidAPI for @${username}`);
       finalReels = reels;
+      success = true;
     }
   }
 
@@ -738,42 +791,54 @@ async function fetchLatestReels(username) {
   if (finalReels.length === 0 && IG_SESSION_COOKIE && !hasApifyToken() && !RAPIDAPI_KEY) {
     console.log(`[IG-Tracker] ⚠️ WARNING: Using personal session cookie. This may trigger Instagram anti-bot systems.`);
     const reels = await fetchViaSessionApi(username);
-    if (reels.length > 0) {
+    if (reels && reels.length > 0) {
       console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Session API for @${username}`);
       finalReels = reels;
+      success = true;
     }
   }
 
   // Method 3: Puppeteer stealth (no login needed, but fails on serverless)
   if (finalReels.length === 0) {
     let reels = await fetchViaPuppeteer(username);
-    if (reels.length > 0) {
+    if (reels && reels.length > 0) {
       console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Puppeteer for @${username}`);
       finalReels = reels;
+      success = true;
     }
   }
 
   // Method 4: Instagram unofficial API
   if (finalReels.length === 0) {
     let reels = await fetchViaUnofficialApi(username);
-    if (reels.length > 0) {
+    if (reels && reels.length > 0) {
       console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via unofficial API for @${username}`);
       finalReels = reels;
+      success = true;
     }
   }
 
   // Method 5: Picuki mirror
   if (finalReels.length === 0) {
     let reels = await fetchViaPicuki(username);
-    if (reels.length > 0) {
+    if (reels && reels.length > 0) {
       console.log(`[IG-Tracker] ✅ Got ${reels.length} reels via Picuki for @${username}`);
       finalReels = reels;
+      success = true;
     }
   }
 
   if (finalReels.length === 0) {
     console.warn(`[IG-Tracker] ⚠️ Could not fetch reels for @${username}. All methods failed.`);
-    return [];
+    const emptyResult = [];
+    emptyResult.success = false;
+    return emptyResult;
+  }
+
+  try {
+    detectPinnedReels(finalReels);
+  } catch (err) {
+    console.warn(`[IG-Tracker] Chronological pinned detection failed for @${username}:`, err.message);
   }
 
   // Filter out any image posts, keeping only videos/reels as requested by user
@@ -782,6 +847,10 @@ async function fetchLatestReels(username) {
     console.log(`[IG-Tracker] Filtered out ${finalReels.length - videoOnlyReels.length} image posts for @${username}`);
   }
   
+  videoOnlyReels.success = success;
+  videoOnlyReels.fetchedTotal = finalReels.length;
+  videoOnlyReels.filteredImages = finalReels.length - videoOnlyReels.length;
+
   return videoOnlyReels;
 }
 
