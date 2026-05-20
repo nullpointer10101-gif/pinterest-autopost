@@ -10077,9 +10077,8 @@ body {
     color: var(--rail-green) !important;
   }
 
-  .panel-dashboard > .desktop-creator-home,
-  .panel-dashboard > .orbit-deck,
-  .panel-dashboard > .flow-board {
+  body[data-desktop-ui="creator"] .panel-dashboard > .orbit-deck,
+  body[data-desktop-ui="creator"] .panel-dashboard > .flow-board {
     display: none !important;
   }
 
@@ -10805,10 +10804,10 @@ body {
     animation: creatorOrbitSweep 34s linear infinite;
   }
 
-  .scene-layer,
-  .app-shell > .topbar,
-  .app-shell > .tab-nav,
-  .ops-ribbon {
+  body[data-desktop-ui="creator"] .scene-layer,
+  body[data-desktop-ui="creator"] .app-shell > .topbar,
+  body[data-desktop-ui="creator"] .app-shell > .tab-nav,
+  body[data-desktop-ui="creator"] .ops-ribbon {
     display: none !important;
   }
 
