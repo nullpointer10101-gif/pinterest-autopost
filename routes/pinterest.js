@@ -243,6 +243,86 @@ router.post('/unlink', async (req, res) => {
 const pinterestTargetService = require('../services/pinterestTargetService');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
+
+// ─── Resolve Pinterest short URLs (pin.it, etc.) ──────────────────────────────
+function followRedirects(url, maxRedirects = 8) {
+  return new Promise((resolve, reject) => {
+    let redirects = 0;
+
+    function doRequest(currentUrl) {
+      const lib = currentUrl.startsWith('https') ? https : http;
+      const req = lib.get(currentUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        },
+        timeout: 8000,
+      }, (res) => {
+        const location = res.headers['location'];
+        if ([301, 302, 303, 307, 308].includes(res.statusCode) && location) {
+          if (++redirects > maxRedirects) return reject(new Error('Too many redirects'));
+          const next = location.startsWith('http') ? location : new URL(location, currentUrl).toString();
+          res.resume(); // drain response
+          return doRequest(next);
+        }
+        resolve(currentUrl);
+      });
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+    }
+
+    doRequest(url);
+  });
+}
+
+function extractPinterestUsername(url) {
+  try {
+    const parsed = new URL(url);
+    // Must be a pinterest domain
+    if (!parsed.hostname.includes('pinterest.')) return null;
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const username = segments[0] || '';
+    // Filter out non-profile paths
+    const reserved = new Set(['pin', 'board', 'search', 'explore', 'ideas', 'settings', 'today', 'login', 'signup']);
+    if (!username || reserved.has(username.toLowerCase())) return null;
+    if (!/^[a-z0-9._-]+$/i.test(username)) return null;
+    return username.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+router.get('/resolve-url', async (req, res) => {
+  try {
+    const rawUrl = String(req.query.url || '').trim();
+    if (!rawUrl) {
+      return res.status(400).json({ success: false, error: 'url query param is required' });
+    }
+
+    // Only bother resolving if it looks like a short/invite URL
+    const isPinIt = /^https?:\/\/pin\.it\//i.test(rawUrl);
+    const isPinterestWithQuery = /^https?:\/\/[a-z.]*pinterest\.[a-z.]+\/[^?]+\?/i.test(rawUrl);
+
+    let finalUrl = rawUrl;
+    if (isPinIt || isPinterestWithQuery) {
+      finalUrl = await followRedirects(rawUrl);
+    }
+
+    const username = extractPinterestUsername(finalUrl);
+    if (!username) {
+      return res.status(422).json({
+        success: false,
+        error: 'Could not extract a Pinterest username from this URL. Please paste the profile URL directly (e.g. https://pinterest.com/username) or just the username.',
+        resolvedUrl: finalUrl,
+      });
+    }
+
+    res.json({ success: true, username, resolvedUrl: finalUrl });
+  } catch (err) {
+    res.status(500).json({ success: false, error: `Failed to resolve URL: ${err.message}` });
+  }
+});
 
 // ─── Target Channels Management ───────────────────────────────────────────────
 router.get('/channels', async (req, res) => {

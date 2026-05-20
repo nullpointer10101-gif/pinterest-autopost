@@ -3250,13 +3250,38 @@ async function handleAddChannel() {
   const input = byId('new-channel-input');
   const btn = byId('add-channel-btn');
   const rawInput = String(input?.value || '').trim();
-  const normalizedInput = normalizeTargetInput(rawInput);
+  let normalizedInput = normalizeTargetInput(rawInput);
 
   const isPinMode = state.currentChannelMode === 'pin';
 
   if (!rawInput) {
     showToast(`Please enter a username or ${isPinMode ? 'Pinterest' : 'Instagram'} URL.`, 'error');
     return;
+  }
+
+  // Intercept pin.it or invite links
+  if (isPinMode && (/^https?:\/\/pin\.it\//i.test(rawInput) || /^https?:\/\/[a-z.]*pinterest\.[a-z.]+\/[^?]+\?/i.test(rawInput))) {
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i data-lucide="loader-2" class="btn-icon animate-spin"></i><span>Resolving URL...</span>';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    
+    try {
+      const resolveRes = await apiRequest(`/api/pinterest/resolve-url?url=${encodeURIComponent(rawInput)}`);
+      if (resolveRes.username) {
+        normalizedInput = resolveRes.username;
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to resolve Pinterest URL.', 'error');
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      return;
+    }
+    
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+    if (typeof lucide !== 'undefined') lucide.createIcons();
   }
 
   if (!normalizedInput) {
