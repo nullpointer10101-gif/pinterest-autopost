@@ -60,6 +60,20 @@ async function removeChannel(username) {
   let channels = readData();
   channels = channels.filter((c) => c.username.toLowerCase() !== cleanUsername);
   writeData(channels);
+
+  // Remove queued pins associated with this account
+  try {
+    const queueFile = path.join(__dirname, '..', 'data', 'pinterest_queue.json');
+    if (fs.existsSync(queueFile)) {
+      const queueData = JSON.parse(fs.readFileSync(queueFile, 'utf8'));
+      const filteredQueue = queueData.filter(pin => (pin.sourceAccount || '').toLowerCase() !== cleanUsername);
+      fs.writeFileSync(queueFile, JSON.stringify(filteredQueue, null, 2), 'utf8');
+      console.log(`[PinterestTargetService] Removed queued pins for @${cleanUsername}`);
+    }
+  } catch (err) {
+    console.error('[PinterestTargetService] Error removing queued pins:', err);
+  }
+
   return channels;
 }
 
