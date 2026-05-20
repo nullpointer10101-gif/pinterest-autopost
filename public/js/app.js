@@ -1,5 +1,7 @@
 const state = {
   currentTab: 'dashboard',
+  currentChannelMode: 'ig',
+  currentLogMode: 'ig',
   queue: [],
   history: [],
   channels: [],
@@ -166,6 +168,39 @@ function bindEvents() {
   on('add-channel-btn', 'click', handleAddChannel);
   on('run-ig-scan-btn', 'click', runIgScanNow);
   on('channels-scan-now-btn', 'click', runIgScanNow);
+
+  const channelToggles = document.querySelectorAll('#channel-mode-toggle button');
+  channelToggles.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      channelToggles.forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      state.currentChannelMode = e.target.dataset.mode;
+      const desc = byId('target-channels-desc');
+      if (desc) {
+        desc.textContent = state.currentChannelMode === 'pin' 
+          ? 'Add Pinterest sources for automated scraping.' 
+          : 'Add Instagram sources for automated reel-to-pin missions.';
+      }
+      refreshChannels();
+    });
+  });
+
+  const logsToggles = document.querySelectorAll('#logs-mode-toggle button');
+  logsToggles.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      logsToggles.forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      state.currentLogMode = e.target.dataset.mode;
+      const desc = byId('logs-desc');
+      if (desc) {
+        desc.textContent = state.currentLogMode === 'pin' 
+          ? 'Read-only stream of Pinterest scraper activity.' 
+          : 'Read-only stream of engagement activity in the last 24 hours.';
+      }
+      loadEngagements();
+    });
+  });
+
 
   on('auto-refresh-toggle', 'change', (event) => {
     setAutoRefresh(!!event.target.checked);
@@ -1911,13 +1946,19 @@ function renderPinterestPostedPins() {
 
 async function loadEngagements() {
   try {
-    const response = await apiRequest(getEngagementApiPath());
-    state.engagements = Array.isArray(response.engagements) ? response.engagements : [];
-    state.engagementSummary = response.summary || null;
+    if (state.currentLogMode === 'pin') {
+      const response = await apiRequest('/api/pinterest/logs');
+      state.engagements = Array.isArray(response.logs) ? response.logs : [];
+      state.engagementSummary = null;
+    } else {
+      const response = await apiRequest(getEngagementApiPath());
+      state.engagements = Array.isArray(response.engagements) ? response.engagements : [];
+      state.engagementSummary = response.summary || null;
+    }
     renderEngagements();
     renderEngagementAuditList();
   } catch (error) {
-    showToast(error.message || 'Failed to load engagement logs.', 'error');
+    showToast(error.message || 'Failed to load logs.', 'error');
   }
 }
 
@@ -2194,11 +2235,13 @@ async function runIgScanNow() {
   hydrateIcons();
 
   try {
-    const response = await apiRequest('/api/ig-tracker/scan', { method: 'POST' });
-    showToast(response.message || 'Independent IG repost scan dispatched.', 'success');
+    const isPinMode = state.currentChannelMode === 'pin';
+    const apiPath = isPinMode ? '/api/pinterest/scan' : '/api/ig-tracker/scan';
+    const response = await apiRequest(apiPath, { method: 'POST' });
+    showToast(response.message || `Independent ${isPinMode ? 'Pinterest' : 'IG'} repost scan dispatched.`, 'success');
     await refreshOverview();
   } catch (error) {
-    showToast(error.message || 'Failed to dispatch IG repost scan.', 'error');
+    showToast(error.message || 'Failed to dispatch scan.', 'error');
   } finally {
     buttons.forEach((button) => {
       button.disabled = false;
@@ -3018,7 +3061,10 @@ async function refreshChannels() {
   if (!list) return;
 
   try {
-    const res = await apiRequest('/api/ig-tracker/channels');
+    const apiPath = state.currentChannelMode === 'pin' 
+      ? '/api/pinterest/channels' 
+      : '/api/ig-tracker/channels';
+    const res = await apiRequest(apiPath);
     state.channels = Array.isArray(res.channels) ? res.channels : [];
     renderChannelsList();
   } catch (err) {
@@ -3218,12 +3264,16 @@ async function handleAddChannel() {
   if (typeof lucide !== 'undefined') lucide.createIcons();
 
   try {
-    const res = await apiRequest('/api/ig-tracker/channels', {
+    const apiPath = state.currentChannelMode === 'pin' 
+      ? '/api/pinterest/channels' 
+      : '/api/ig-tracker/channels';
+
+    const res = await apiRequest(apiPath, {
       method: 'POST',
       body: { username: normalizedInput }
     });
 
-    showToast(res.message || `Channel @${res.username} added. Verification started.`, 'success');
+    showToast(res.message || `Channel @${res.username} added.`, 'success');
     input.value = '';
     await refreshChannels();
     await refreshOverview();
@@ -3240,7 +3290,11 @@ async function handleRemoveChannel(username) {
   if (!confirm(`Remove @${username} from target channels?`)) return;
 
   try {
-    await apiRequest('/api/ig-tracker/channels', {
+    const apiPath = state.currentChannelMode === 'pin' 
+      ? '/api/pinterest/channels' 
+      : '/api/ig-tracker/channels';
+
+    await apiRequest(apiPath, {
       method: 'DELETE',
       body: { username }
     });

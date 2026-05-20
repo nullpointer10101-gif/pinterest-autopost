@@ -240,4 +240,92 @@ router.post('/unlink', async (req, res) => {
   }
 });
 
+const pinterestTargetService = require('../services/pinterestTargetService');
+const fs = require('fs');
+const path = require('path');
+
+// ─── Target Channels Management ───────────────────────────────────────────────
+router.get('/channels', async (req, res) => {
+  try {
+    const channels = await pinterestTargetService.listChannels();
+    res.json({ success: true, channels });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/channels', async (req, res) => {
+  try {
+    const { username: rawInput } = req.body;
+    if (!rawInput) {
+      return res.status(400).json({ success: false, error: 'username is required' });
+    }
+    const account = await pinterestTargetService.addChannel(rawInput);
+    const channels = await pinterestTargetService.listChannels();
+    res.json({
+      success: true,
+      username: account.username,
+      channels,
+      message: `Pinterest channel @${account.username} added. Scraper will process it on the next run.`,
+    });
+  } catch (err) {
+    if (err.code === 'DUPLICATE_ACCOUNT') {
+      return res.status(409).json({ success: false, error: err.message, code: err.code, username: err.username });
+    }
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/channels', async (req, res) => {
+  try {
+    const { username } = req.body;
+    if (!username) {
+      return res.status(400).json({ success: false, error: 'username is required' });
+    }
+    const channels = await pinterestTargetService.removeChannel(username);
+    res.json({ success: true, channels });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── Logs ─────────────────────────────────────────────────────────────────────
+router.get('/logs', async (req, res) => {
+  try {
+    const pinsFile = path.join(__dirname, '..', 'data', 'pinterest_pins.json');
+    let logs = [];
+    if (fs.existsSync(pinsFile)) {
+      const pins = JSON.parse(fs.readFileSync(pinsFile, 'utf8'));
+      logs = pins.slice(0, 50).map(pin => ({
+        id: pin.id || Date.now(),
+        when: pin.scrapedAt || new Date().toISOString(),
+        action: 'SCRAPED',
+        url: pin.pinUrl || '',
+        pinTitle: pin.pinId,
+        boardName: pin.authorUsername || 'unknown',
+        status: 'success'
+      }));
+    }
+    res.json({ success: true, logs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── Scan ───────────────────────────────────────────────────────────────────────
+router.post('/scan', async (req, res) => {
+  try {
+    const { exec } = require('child_process');
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'sync-pinterest-queue.js');
+    exec(`node "${scriptPath}"`, (error, stdout, stderr) => {
+      if (error) {
+        console.error('Pinterest scan error:', error);
+      }
+    });
+    res.json({ success: true, message: 'Pinterest queue scan dispatched.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

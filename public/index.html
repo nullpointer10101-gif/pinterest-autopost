@@ -490,9 +490,15 @@
 
             <section id="panel-channels" class="panel hidden">
                 <article class="card">
-                    <div class="card-title-wrap">
-                        <h2><i data-lucide="users-round" class="heading-icon"></i>Target Channels</h2>
-                        <p class="muted-text">Add Instagram sources for automated reel-to-pin missions.</p>
+                    <div class="card-title-wrap" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+                        <div>
+                            <h2><i data-lucide="users-round" class="heading-icon"></i>Target Channels</h2>
+                            <p class="muted-text" id="target-channels-desc">Add sources for automated reel-to-pin missions.</p>
+                        </div>
+                        <div class="segmented-control" id="channel-mode-toggle">
+                            <button type="button" class="active" data-mode="ig">Instagram</button>
+                            <button type="button" data-mode="pin">Pinterest</button>
+                        </div>
                     </div>
 
                     <div class="field-wrap">
@@ -818,9 +824,15 @@
 
             <section id="panel-engagements" class="panel hidden">
                 <article class="card">
-                    <div class="card-title-wrap">
-                        <h2><i data-lucide="activity" class="heading-icon"></i>Engagement Logbook</h2>
-                        <p class="muted-text">Read-only stream of engagement activity in the last 24 hours.</p>
+                    <div class="card-title-wrap" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+                        <div>
+                            <h2><i data-lucide="activity" class="heading-icon"></i>Engagement Logbook</h2>
+                            <p class="muted-text" id="logs-desc">Read-only stream of engagement activity in the last 24 hours.</p>
+                        </div>
+                        <div class="segmented-control" id="logs-mode-toggle">
+                            <button type="button" class="active" data-mode="ig">Instagram Engagements</button>
+                            <button type="button" data-mode="pin">Pinterest Scraper Logs</button>
+                        </div>
                     </div>
 
                     <div class="control-row">

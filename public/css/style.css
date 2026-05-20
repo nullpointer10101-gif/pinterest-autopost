@@ -1408,6 +1408,40 @@ button {
   transition: transform 160ms ease, filter 160ms ease, border-color 160ms ease, background-color 160ms ease;
 }
 
+
+.segmented-control {
+  display: inline-flex;
+  background: var(--surface-1);
+  border: 1px solid var(--line-weak);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.segmented-control button {
+  background: transparent;
+  color: var(--text-soft);
+  border-radius: calc(var(--radius-md) - 4px);
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.segmented-control button:hover {
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.segmented-control button.active {
+  background: var(--accent-strong);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-sm);
+}
+
 .btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.04);
