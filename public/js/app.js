@@ -2872,6 +2872,7 @@ async function apiRequest(url, options = {}) {
   const init = {
     method: options.method || 'GET',
     headers: options.headers || {},
+    cache: 'no-store'
   };
 
   if (options.body !== undefined) {

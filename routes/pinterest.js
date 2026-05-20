@@ -248,6 +248,7 @@ const path = require('path');
 router.get('/channels', async (req, res) => {
   try {
     const channels = await pinterestTargetService.listChannels();
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json({ success: true, channels });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
