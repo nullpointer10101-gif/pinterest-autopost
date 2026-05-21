@@ -6,6 +6,8 @@ const stateService = require('./pinterestImageStateService');
 const contentFilter = require('./pinterestImageContentFilterService');
 
 const PINTEREST_ORIGIN = 'https://www.pinterest.com';
+const MAX_BROWSER_SCROLL_ROUNDS = 160;
+const MAX_BROWSER_IDLE_ROUNDS = 5;
 const VERIFIED_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
@@ -26,6 +28,7 @@ const BOARD_ALLOW_KEYWORDS = [
   'wardrobe',
   'look',
 ];
+let puppeteerExtra;
 
 function getAppBaseUrl() {
   const explicit = process.env.APP_BASE_URL || process.env.BASE_URL || '';
@@ -55,6 +58,25 @@ function parseBoolean(value, fallback = false) {
   if (['1', 'true', 'yes', 'on'].includes(clean)) return true;
   if (['0', 'false', 'no', 'off'].includes(clean)) return false;
   return fallback;
+}
+
+function getPuppeteerExtra() {
+  if (typeof puppeteerExtra !== 'undefined') return puppeteerExtra;
+
+  try {
+    puppeteerExtra = require('puppeteer-extra');
+    const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+    puppeteerExtra.use(StealthPlugin());
+  } catch (err) {
+    console.warn('[Pinterest Image Sync] Verified browser scroll unavailable:', err.message);
+    puppeteerExtra = null;
+  }
+
+  return puppeteerExtra;
+}
+
+function isVerifiedBrowserScrollEnabled() {
+  return !parseBoolean(process.env.PINTEREST_IMAGE_DISABLE_VERIFIED_BROWSER_SCROLL, false);
 }
 
 function extractObjectAfterKey(text, key) {
@@ -188,6 +210,106 @@ function normalizeVerifiedPin(rawPin = {}, boardName = '') {
   };
 }
 
+function addNormalizedPins(pinsById, rawPins = [], boardName = '', limit = 2000) {
+  for (const rawPin of Array.isArray(rawPins) ? rawPins : []) {
+    if (pinsById.size >= limit) break;
+    const pin = normalizeVerifiedPin(rawPin, boardName);
+    if (pin && pin.mediaType === 'image') pinsById.set(pin.pinId, pin);
+  }
+}
+
+function extractResourcePins(payload = {}) {
+  const data = payload?.resource_response?.data || payload?.data || payload;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.board_feed)) return data.board_feed;
+  if (Array.isArray(data?.pins)) return data.pins;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+}
+
+async function fetchVerifiedBoardPinsViaBrowser(board, seedPins = [], limit = 2000) {
+  const browserLib = getPuppeteerExtra();
+  if (!browserLib) return seedPins;
+
+  const pinsById = new Map();
+  for (const pin of seedPins) {
+    if (pin?.pinId) pinsById.set(pin.pinId, pin);
+  }
+
+  let browser;
+  try {
+    browser = await browserLib.launch({
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--window-size=1600,1000',
+      ],
+    });
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1600, height: 1000 });
+    await page.setUserAgent(VERIFIED_HEADERS['User-Agent']);
+    await page.setExtraHTTPHeaders({ 'Accept-Language': VERIFIED_HEADERS['Accept-Language'] });
+
+    page.on('response', async (response) => {
+      const url = response.url();
+      if (!url.includes('/resource/BoardFeedResource/')) return;
+
+      try {
+        const parsed = new URL(url);
+        const sourceUrl = parsed.searchParams.get('source_url') || '';
+        if (sourceUrl && sourceUrl !== board.url) return;
+      } catch {
+        return;
+      }
+
+      try {
+        const payload = await response.json();
+        addNormalizedPins(pinsById, extractResourcePins(payload), board.name, limit);
+      } catch {
+        // Pinterest also emits non-JSON responses while scrolling; those are not useful here.
+      }
+    });
+
+    await page.goto(`${PINTEREST_ORIGIN}${board.url}`, {
+      waitUntil: 'networkidle2',
+      timeout: 45000,
+    });
+
+    let lastCount = pinsById.size;
+    let idleRounds = 0;
+    const expected = board.pinCount || limit;
+    const scrollRounds = Math.min(
+      MAX_BROWSER_SCROLL_ROUNDS,
+      Math.max(8, Math.ceil(Math.min(expected, limit) / 12) + 4)
+    );
+
+    for (let round = 0; round < scrollRounds; round += 1) {
+      if (pinsById.size >= limit || (board.pinCount && pinsById.size >= board.pinCount)) break;
+
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      if (pinsById.size === lastCount) {
+        idleRounds += 1;
+        if (idleRounds >= MAX_BROWSER_IDLE_ROUNDS) break;
+      } else {
+        idleRounds = 0;
+        lastCount = pinsById.size;
+      }
+    }
+  } catch (err) {
+    console.warn(`[Pinterest Image Sync] Verified browser scroll failed for board "${board.name}": ${err.message}`);
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+
+  return Array.from(pinsById.values()).slice(0, limit);
+}
+
 async function fetchVerifiedProfileBoards(username) {
   const html = await fetchPinterestHtml(`/${username}/`);
   const boardsMap = extractStateMap(html, 'boards');
@@ -214,7 +336,14 @@ async function fetchVerifiedProfilePins(username, limit = 2000) {
   const pinsById = new Map();
 
   for (const board of boards) {
-    const boardPins = await fetchVerifiedBoardPins(board);
+    let boardPins = await fetchVerifiedBoardPins(board);
+    const remaining = limit - pinsById.size;
+    const boardHasMorePins = board.pinCount > boardPins.length;
+    if (remaining > boardPins.length && boardHasMorePins && isVerifiedBrowserScrollEnabled()) {
+      const deepPins = await fetchVerifiedBoardPinsViaBrowser(board, boardPins, Math.min(remaining, board.pinCount || remaining));
+      if (deepPins.length > boardPins.length) boardPins = deepPins;
+    }
+
     for (const pin of boardPins) {
       if (pinsById.size >= limit) break;
       pinsById.set(pin.pinId, pin);
