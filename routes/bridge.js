@@ -63,20 +63,59 @@ function getDisplayTitle(value) {
     .slice(0, 86);
 }
 
+async function getBridgePin(pinId) {
+  const directPin = await pinterestImageStateService.getPinById(pinId)
+    || await pinterestStateService.getPinById(pinId);
+  if (directPin) return { pin: directPin, recovered: false };
+
+  const posted = typeof pinterestImageStateService.getPostedByPinId === 'function'
+    ? await pinterestImageStateService.getPostedByPinId(pinId)
+    : null;
+  if (posted) {
+    return {
+      recovered: true,
+      pin: {
+        pinId,
+        title: posted.title || 'Shop this look',
+        description: 'Leave your email and we will send the product link shortly.',
+        sourceAccount: posted.sourceAccount || '',
+        boardName: posted.sourceBoardName || '',
+        targetUrl: posted.targetUrl || '',
+        originalLink: posted.originalLink || '',
+        sourceUrl: posted.sourceUrl || '',
+      },
+    };
+  }
+
+  return {
+    recovered: true,
+    pin: {
+      pinId,
+      title: 'Shop this look',
+      description: 'Leave your email and we will send the product link shortly.',
+      boardName: 'Saved find',
+      sourceAccount: '',
+    },
+  };
+}
+
+function resolveTargetUrl(pin = {}) {
+  const targetUrl = pin.originalLink || pin.targetUrl || pin.sourceUrl || '';
+  if (!targetUrl || String(targetUrl).includes('/bridge/')) return '';
+  return targetUrl;
+}
+
 // Serve the bridge landing page
 router.get('/:pinId', async (req, res) => {
   const { pinId } = req.params;
-  const pin = await pinterestImageStateService.getPinById(pinId)
-    || await pinterestStateService.getPinById(pinId);
-
-  if (!pin) {
-    return res.status(404).send('Pin not found');
-  }
+  const { pin, recovered } = await getBridgePin(pinId);
 
   const imageUrls = getPinImages(pin);
   const hasMultipleImages = imageUrls.length > 1;
   const title = getDisplayTitle(pin.title);
-  const description = cleanText(pin.description || pin.caption, 'Get the direct link for this Pinterest find.');
+  const description = cleanText(pin.description || pin.caption, recovered
+    ? 'Leave your email and we will send the product link shortly.'
+    : 'Get the direct link for this Pinterest find.');
   const shortDescription = description.length > 112 ? `${description.slice(0, 109).trim()}...` : description;
   const brandName = cleanText(process.env.BRIDGE_BRAND_NAME, 'Aura Closet');
   const boardName = cleanText(pin.boardName || pin.sourceBoardName, 'Pinterest find');
@@ -87,6 +126,9 @@ router.get('/:pinId', async (req, res) => {
   const safeBrandName = escapeHtml(brandName);
   const safeBoardName = escapeHtml(boardName);
   const safeSourceAccount = escapeHtml(sourceAccount);
+  const safeRecoveredNote = escapeHtml(recovered
+    ? 'We found this older pin link. Send your email and we will match the product link manually.'
+    : 'We will send the matched product link to your email within 5 minutes.');
   const imageAlt = escapeHtml(title || 'Pinned product image');
 
   let imageHtml = '';
@@ -127,7 +169,7 @@ router.get('/:pinId', async (req, res) => {
   } else {
     imageHtml = `
         <div class="image-fallback" aria-label="Pinned product image">
-          <span>${safeBrandName}</span>
+          <span>Product link</span>
         </div>
       `;
   }
@@ -275,8 +317,11 @@ router.get('/:pinId', async (req, res) => {
         .image-fallback {
           display: grid;
           place-items: center;
-          color: #ffffff;
-          font-weight: 800;
+          color: var(--ink);
+          background:
+            radial-gradient(circle at 30% 20%, rgba(226, 29, 43, 0.14), transparent 34%),
+            linear-gradient(135deg, #fff7ed, #edf7f2);
+          font-weight: 900;
           letter-spacing: 0;
         }
 
@@ -460,6 +505,10 @@ router.get('/:pinId', async (req, res) => {
           gap: 12px;
         }
 
+        .unlock-form[hidden] {
+          display: none;
+        }
+
         label {
           color: var(--ink);
           font-size: 13px;
@@ -548,6 +597,59 @@ router.get('/:pinId', async (req, res) => {
           font-size: 12px;
           line-height: 1.45;
           margin: 2px 0 0;
+        }
+
+        .success-card {
+          display: grid;
+          gap: 12px;
+          padding: 16px;
+          border: 1px solid #bfe9dc;
+          border-radius: 8px;
+          background: linear-gradient(135deg, #f0fdf8, #fff7ed);
+          box-shadow: 0 14px 30px rgba(8, 127, 91, 0.12);
+        }
+
+        .success-card[hidden] {
+          display: none;
+        }
+
+        .success-icon {
+          width: 46px;
+          height: 46px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          background: var(--success);
+          color: #ffffff;
+          font-size: 24px;
+          font-weight: 900;
+        }
+
+        .success-card h2 {
+          margin: 0;
+          color: var(--ink);
+          font-size: 24px;
+          line-height: 1.08;
+          letter-spacing: 0;
+        }
+
+        .success-card p {
+          margin: 0;
+          color: #40504b;
+          font-size: 14px;
+          line-height: 1.5;
+        }
+
+        .success-email {
+          display: inline-flex;
+          max-width: 100%;
+          padding: 8px 10px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.78);
+          color: var(--ink);
+          font-size: 13px;
+          font-weight: 850;
+          overflow-wrap: anywhere;
         }
 
         #error-msg {
@@ -733,8 +835,16 @@ router.get('/:pinId', async (req, res) => {
                 <span class="button-text">Unlock shopping link</span>
                 <span class="loader" aria-hidden="true"></span>
               </button>
-              <p class="privacy">We will send you straight to the source link after this step.</p>
+              <p class="privacy">${safeRecoveredNote}</p>
             </form>
+
+            <div id="success-card" class="success-card" hidden>
+              <div class="success-icon" aria-hidden="true">✓</div>
+              <h2>Request received</h2>
+              <p>Your product link will arrive in your email within 5 minutes.</p>
+              <span id="success-email" class="success-email"></span>
+              <p>Check Promotions or Spam too if it does not appear.</p>
+            </div>
           </div>
         </section>
       </main>
@@ -836,10 +946,12 @@ router.get('/:pinId', async (req, res) => {
           const btn = e.target.querySelector('button');
           const buttonText = btn.querySelector('.button-text');
           const errorMsg = document.getElementById('error-msg');
+          const successCard = document.getElementById('success-card');
+          const successEmail = document.getElementById('success-email');
           
           if (!email) return;
 
-          buttonText.textContent = 'Opening link...';
+          buttonText.textContent = 'Sending request...';
           btn.classList.add('loading');
           btn.disabled = true;
           errorMsg.style.display = 'none';
@@ -852,11 +964,11 @@ router.get('/:pinId', async (req, res) => {
             });
             const data = await res.json();
 
-            if (data.success && data.targetUrl) {
-              window.location.href = data.targetUrl;
-            } else {
-              throw new Error(data.error || 'Failed to unlock link');
-            }
+            if (!data.success) throw new Error(data.error || 'Failed to request link');
+
+            e.target.hidden = true;
+            if (successEmail) successEmail.textContent = email;
+            if (successCard) successCard.hidden = false;
           } catch (err) {
             errorMsg.textContent = err.message;
             errorMsg.style.display = 'block';
@@ -879,17 +991,15 @@ router.post('/api/leads', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Email and Pin ID are required' });
   }
 
-  const imagePin = await pinterestImageStateService.getPinById(pinId)
-    || await pinterestStateService.getPinById(pinId);
-  if (!imagePin) {
-    return res.status(404).json({ success: false, error: 'Pin not found' });
-  }
-
-  const targetUrl = imagePin.originalLink || imagePin.targetUrl || imagePin.sourceUrl || imagePin.link || '#';
+  const { pin: imagePin } = await getBridgePin(pinId);
+  const targetUrl = resolveTargetUrl(imagePin);
 
   try {
     await leadStorageService.addLead({ email, pinId, targetUrl });
-    return res.json({ success: true, targetUrl });
+    return res.json({
+      success: true,
+      message: 'Your product link will arrive in your email within 5 minutes.',
+    });
   } catch (err) {
     console.error('[Bridge] Error saving lead:', err);
     return res.status(500).json({ success: false, error: 'Internal server error' });

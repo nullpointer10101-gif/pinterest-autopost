@@ -46,6 +46,11 @@ async function isPosted(pinId) {
   return !!posted[String(pinId || '').trim()];
 }
 
+async function getPostedByPinId(pinId) {
+  const posted = await loadPosted();
+  return posted[String(pinId || '').trim()] || null;
+}
+
 async function markPosted(originalPinId, newPinId, meta = {}) {
   const pinId = String(originalPinId || '').trim();
   if (!pinId) throw new Error('originalPinId is required');
@@ -102,6 +107,7 @@ module.exports = {
   saveScrapedPins,
   getPinById,
   isPosted,
+  getPostedByPinId,
   markPosted,
   getLogs,
   appendLog,
