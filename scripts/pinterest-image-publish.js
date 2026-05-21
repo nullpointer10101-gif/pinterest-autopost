@@ -10,9 +10,10 @@ function readArg(name) {
 
 async function main() {
   const isScheduledRun = process.env.GITHUB_EVENT_NAME === 'schedule';
-  const autoPublishEnabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.PINTEREST_IMAGE_AUTO_PUBLISH_ENABLED || '').toLowerCase());
-  if (isScheduledRun && !autoPublishEnabled) {
-    console.log('[Pinterest Image Publish] Scheduled auto-publish is paused. Set PINTEREST_IMAGE_AUTO_PUBLISH_ENABLED=true to enable hourly publishing.');
+  const autoPublishSetting = String(process.env.PINTEREST_IMAGE_AUTO_PUBLISH_ENABLED || '').trim().toLowerCase();
+  const autoPublishDisabled = ['0', 'false', 'no', 'off'].includes(autoPublishSetting);
+  if (isScheduledRun && autoPublishDisabled) {
+    console.log('[Pinterest Image Publish] Scheduled auto-publish is paused because PINTEREST_IMAGE_AUTO_PUBLISH_ENABLED=false.');
     return;
   }
 

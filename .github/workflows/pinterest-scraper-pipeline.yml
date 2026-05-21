@@ -57,6 +57,17 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Cache Puppeteer Chrome
+        id: cache-puppeteer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Puppeteer Chrome
+        if: steps.cache-puppeteer.outputs.cache-hit != 'true'
+        run: npx puppeteer browsers install chrome
+
       - name: Publish queued Pinterest image pins
         env:
           PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
@@ -104,6 +115,18 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+
+      - name: Cache Puppeteer Chrome
+        id: cache-puppeteer
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_after_sync == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Puppeteer Chrome
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_after_sync == 'true' && steps.cache-puppeteer.outputs.cache-hit != 'true' }}
+        run: npx puppeteer browsers install chrome
 
       - name: Sync Pinterest image sources
         env:

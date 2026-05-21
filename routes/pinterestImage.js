@@ -73,7 +73,7 @@ router.post('/channels', async (req, res) => {
     const result = await channelService.addChannel(rawInput);
     const channels = await channelService.listChannels();
     const bootstrapEnabled = parseBoolean(req.body?.bootstrap ?? req.query?.bootstrap, true);
-    const publishAfterSync = parseBoolean(req.body?.publishAfterSync ?? req.body?.publish_after_sync ?? req.query?.publishAfterSync ?? req.query?.publish_after_sync, false);
+    const publishAfterSync = parseBoolean(req.body?.publishAfterSync ?? req.body?.publish_after_sync ?? req.query?.publishAfterSync ?? req.query?.publish_after_sync, true);
     const bootstrap = bootstrapEnabled
       ? await dispatchPinterestImageSync(result.channel.username, {
         publishAfterSync,
@@ -88,7 +88,7 @@ router.post('/channels', async (req, res) => {
       ? (bootstrap.success
         ? (publishAfterSync
           ? ` Sync started and will publish up to ${bootstrap.maxPosts} queued pins.`
-          : ' Sync started; publishing is paused until you run publish manually.')
+          : ' Sync started; publishing will wait for the next publish run.')
         : ` Auto sync did not start: ${bootstrap.error || 'GitHub dispatch failed'}.`)
       : '';
 
@@ -160,7 +160,7 @@ router.post('/sync', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Enter a valid Pinterest username, profile URL, or pin.it profile invite link.' });
     }
 
-    const publishAfterSync = parseBoolean(req.body?.publishAfterSync ?? req.body?.publish_after_sync ?? req.query?.publishAfterSync ?? req.query?.publish_after_sync, false);
+    const publishAfterSync = parseBoolean(req.body?.publishAfterSync ?? req.body?.publish_after_sync ?? req.query?.publishAfterSync ?? req.query?.publish_after_sync, true);
     const maxPosts = getMaxPosts(req);
     const dispatch = await dispatchPinterestImageSync(cleanUsername, { publishAfterSync, maxPosts });
     if (dispatch.success) {

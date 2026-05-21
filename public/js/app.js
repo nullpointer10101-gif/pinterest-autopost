@@ -2322,7 +2322,7 @@ async function runIgScanNow() {
       method: 'POST',
       body: isPinMode
         ? {
-          publishAfterSync: false,
+          publishAfterSync: true,
           maxPosts: PINTEREST_IMAGE_BOOTSTRAP_POSTS,
         }
         : undefined,
@@ -3419,11 +3419,11 @@ async function handleAddChannel() {
           method: 'POST',
           body: {
             username: normalizedInput,
-            publishAfterSync: false,
+            publishAfterSync: true,
             maxPosts: PINTEREST_IMAGE_BOOTSTRAP_POSTS,
           },
         });
-        showToast(res.message || `@${normalizedInput} is already added. Sync started; publishing is paused.`, 'success');
+        showToast(res.message || `@${normalizedInput} is already added. Sync started and will publish first pins.`, 'success');
         await refreshOverview();
       } catch (err) {
         showToast(err.message || `@${normalizedInput} is already in target channels.`, 'error');
@@ -3456,7 +3456,7 @@ async function handleAddChannel() {
         ? {
           username: normalizedInput,
           bootstrap: true,
-          publishAfterSync: false,
+          publishAfterSync: true,
           maxPosts: PINTEREST_IMAGE_BOOTSTRAP_POSTS,
         }
         : { username: normalizedInput }
