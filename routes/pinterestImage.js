@@ -208,9 +208,27 @@ router.post('/sync', async (req, res) => {
 
 router.post('/publish', async (req, res) => {
   try {
-    const dispatch = await githubService.triggerPinterestImagePublish();
+    const username = req.body?.username || req.query?.username || req.body?.sourceAccount || req.query?.sourceAccount || '';
+    const cleanUsername = username ? await channelService.resolveUsername(username) : '';
+    if (username && !cleanUsername) {
+      return res.status(400).json({ success: false, error: 'Enter a valid Pinterest username, profile URL, or pin.it profile invite link.' });
+    }
+
+    const maxPosts = getMaxPosts(req);
+    const dispatch = await githubService.triggerPinterestImagePublish({
+      username: cleanUsername,
+      maxPosts,
+    });
     if (dispatch.success) {
-      return res.json({ success: true, queued: true, message: 'Pinterest image publisher dispatched.' });
+      return res.json({
+        success: true,
+        queued: true,
+        username: cleanUsername,
+        maxPosts,
+        message: cleanUsername
+          ? `Pinterest image publisher dispatched for @${cleanUsername} (up to ${maxPosts} pins).`
+          : 'Pinterest image publisher dispatched.',
+      });
     }
 
     const isServerless = !!(process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -220,10 +238,20 @@ router.post('/publish', async (req, res) => {
 
     const { exec } = require('child_process');
     const scriptPath = path.join(__dirname, '..', 'scripts', 'pinterest-image-publish.js');
-    exec(`node "${scriptPath}"`, (error) => {
+    const suffix = cleanUsername ? ` --source=${cleanUsername}` : '';
+    exec(`node "${scriptPath}" --max=${maxPosts}${suffix}`, (error) => {
       if (error) console.error('[Pinterest Image API] Local publish failed:', error);
     });
-    return res.json({ success: true, queued: true, local: true, message: 'Pinterest image publisher started locally.' });
+    return res.json({
+      success: true,
+      queued: true,
+      local: true,
+      username: cleanUsername,
+      maxPosts,
+      message: cleanUsername
+        ? `Pinterest image publisher started locally for @${cleanUsername}.`
+        : 'Pinterest image publisher started locally.',
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

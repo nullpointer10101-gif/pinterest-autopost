@@ -105,6 +105,8 @@ async function triggerPinterestImagePublish(options = {}) {
   const inputs = {
     mode: 'publish',
   };
+  const cleanUsername = String(options.username || options.sourceAccount || '').trim();
+  if (cleanUsername) inputs.username = cleanUsername;
   const maxPosts = Number.parseInt(options.maxPosts, 10);
   if (Number.isFinite(maxPosts) && maxPosts > 0) inputs.max_posts = String(maxPosts);
   return dispatchWorkflow('pinterest-scraper-pipeline.yml', 'Pinterest Image Publish', inputs);
