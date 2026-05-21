@@ -4,6 +4,7 @@ const state = {
   currentLogMode: 'ig',
   queue: [],
   history: [],
+  historySummary: null,
   channels: [],
   igStatus: null,
   pinterestImageStatus: null,
@@ -53,6 +54,7 @@ const PERFORMANCE_MODE_STORAGE_KEY = 'pmc_performance_mode_v1';
 const MOBILE_VIEWPORT_QUERY = '(max-width: 760px)';
 const MOBILE_WORKING_TABS = new Set(['dashboard', 'studio', 'channels', 'engagements', 'history']);
 const HISTORY_PIN_LIMIT = 10;
+const DASHBOARD_HISTORY_LIMIT = 20;
 const ENGAGEMENT_LOG_HOURS = 24;
 const ENGAGEMENT_LOG_LIMIT = 50;
 const POSTED_HISTORY_STATUSES = new Set(['success', 'completed', 'posted']);
@@ -602,14 +604,15 @@ async function refreshAll(options = {}) {
 
 async function refreshOverview() {
   // â”€â”€ Each fetch is isolated so one failure cannot blank the whole dashboard â”€â”€
+  const dashboardRequest = { timeoutMs: 12000 };
   const [queueResp, historyResp, pinterestResp, systemStatus, trackerStatusResp, pinterestImageResp] =
     await Promise.all([
-      apiRequest('/api/queue').catch(err => { console.warn('[Dashboard] Queue fetch failed:', err.message); return null; }),
-      apiRequest(getHistoryApiPath()).catch(err => { console.warn('[Dashboard] History fetch failed:', err.message); return null; }),
-      apiRequest('/api/pinterest/status').catch(err => { console.warn('[Dashboard] Pinterest status failed:', err.message); return {}; }),
-      apiRequest('/api/system/status').catch(err => { console.warn('[Dashboard] System status failed:', err.message); return {}; }),
-      apiRequest('/api/ig-tracker/status').catch(() => null),
-      apiRequest('/api/pinterest-image/status').catch(() => null),
+      apiRequest('/api/queue', dashboardRequest).catch(err => { console.warn('[Dashboard] Queue fetch failed:', err.message); return null; }),
+      apiRequest(getHistoryApiPath(), dashboardRequest).catch(err => { console.warn('[Dashboard] History fetch failed:', err.message); return null; }),
+      apiRequest('/api/pinterest/status', dashboardRequest).catch(err => { console.warn('[Dashboard] Pinterest status failed:', err.message); return {}; }),
+      apiRequest('/api/system/status', dashboardRequest).catch(err => { console.warn('[Dashboard] System status failed:', err.message); return {}; }),
+      apiRequest('/api/ig-tracker/status', dashboardRequest).catch(() => null),
+      apiRequest('/api/pinterest-image/status', dashboardRequest).catch(() => null),
     ]);
 
   // Only update state if the fetch succeeded (non-null response)
@@ -619,6 +622,7 @@ async function refreshOverview() {
   }
   if (historyResp !== null) {
     state.history = Array.isArray(historyResp.history) ? historyResp.history : [];
+    state.historySummary = historyResp.summary || null;
   }
 
   state.igStatus = trackerStatusResp?.status || null;
@@ -638,7 +642,7 @@ async function refreshOverview() {
     }
   }
 
-  updateStats(state.queue, state.history);
+  updateStats(state.queue, state.history, state.historySummary);
   updateConnectionBar(pinterestResp || {}, systemStatus || {});
   updateHealthDashboard(pinterestResp || {}, systemStatus || {});
   updateIgPipelineUI();
@@ -662,7 +666,7 @@ async function refreshOverview() {
     if (systemStatus && systemStatus.workflows) {
       updateWorkflowUI(systemStatus.workflows);
     } else {
-      const wfResp = await apiRequest('/api/system/workflows').catch(() => null);
+      const wfResp = await apiRequest('/api/system/workflows', { timeoutMs: 8000 }).catch(() => null);
       if (wfResp && wfResp.success) updateWorkflowUI(wfResp.config);
     }
   } catch (e) {
@@ -670,10 +674,16 @@ async function refreshOverview() {
   }
 }
 
-function updateStats(queue, history) {
+function updateStats(queue, history, summary = null) {
   // Count both 'success' and 'completed' as successfully published pins
-  const successCount = history.filter((item) => item.status === 'success' || item.status === 'completed').length;
-  const failedCount = history.filter((item) => item.status === 'error' || item.status === 'failed').length;
+  const summarySuccessCount = Number(summary?.successCount);
+  const summaryFailedCount = Number(summary?.failedCount);
+  const successCount = Number.isFinite(summarySuccessCount)
+    ? summarySuccessCount
+    : history.filter((item) => item.status === 'success' || item.status === 'completed' || item.status === 'posted').length;
+  const failedCount = Number.isFinite(summaryFailedCount)
+    ? summaryFailedCount
+    : history.filter((item) => item.status === 'error' || item.status === 'failed').length;
   const pendingCount = queue.filter((item) => item.status === 'pending' || item.status === 'processing').length;
   const queueFailedCount = queue.filter((item) => item.status === 'failed' || item.status === 'error').length;
   const successRateBase = successCount + failedCount;
@@ -716,8 +726,12 @@ function getRecentPostedHistoryPins(history = state.history, limit = HISTORY_PIN
 }
 
 function getHistoryApiPath() {
-  if (!isMobileViewport()) return '/api/history';
-  return `/api/history?postedOnly=1&limit=${HISTORY_PIN_LIMIT}`;
+  const params = new URLSearchParams({
+    summary: '1',
+    limit: String(isMobileViewport() ? HISTORY_PIN_LIMIT : DASHBOARD_HISTORY_LIMIT),
+  });
+  if (isMobileViewport()) params.set('postedOnly', '1');
+  return `/api/history?${params.toString()}`;
 }
 
 function getEngagementApiPath() {
@@ -2935,27 +2949,45 @@ function normalizeDestinationLink(value) {
 }
 
 async function apiRequest(url, options = {}) {
+  const timeoutMs = Number.parseInt(options.timeoutMs, 10);
+  const useTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0;
+  const controller = useTimeout ? new AbortController() : null;
+  let timeoutId = null;
   const init = {
     method: options.method || 'GET',
-    headers: options.headers || {},
+    headers: { ...(options.headers || {}) },
     cache: 'no-store'
   };
+  if (controller) init.signal = controller.signal;
 
   if (options.body !== undefined) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(url, init);
-  const contentType = response.headers.get('content-type') || '';
-  const payload = contentType.includes('application/json')
-    ? await response.json()
-    : { success: response.ok, message: await response.text() };
+  try {
+    if (controller) {
+      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    }
 
-  if (!response.ok || payload.success === false) {
-    throw new Error(payload.error || payload.message || `Request failed (${response.status})`);
+    const response = await fetch(url, init);
+    const contentType = response.headers.get('content-type') || '';
+    const payload = contentType.includes('application/json')
+      ? await response.json()
+      : { success: response.ok, message: await response.text() };
+
+    if (!response.ok || payload.success === false) {
+      throw new Error(payload.error || payload.message || `Request failed (${response.status})`);
+    }
+    return payload;
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`Request timed out: ${url}`);
+    }
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
-  return payload;
 }
 
 function showToast(message, type = 'info') {

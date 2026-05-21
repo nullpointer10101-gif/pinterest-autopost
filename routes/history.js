@@ -8,6 +8,8 @@ const githubService = require('../services/githubService');
 
 const FALLBACK_THUMB =
   'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=100&h=130&fit=crop';
+const SUCCESS_HISTORY_STATUSES = new Set(['success', 'completed', 'posted']);
+const FAILED_HISTORY_STATUSES = new Set(['error', 'failed']);
 
 function normalizeUrl(url) {
   if (!url || typeof url !== 'string') return '';
@@ -90,6 +92,26 @@ function getEngagementTime(entry = {}) {
   return entry.engagedAt || entry.createdAt || entry.timestamp || entry.at || null;
 }
 
+function summarizeHistory(history = []) {
+  let successCount = 0;
+  let failedCount = 0;
+  let pendingCount = 0;
+
+  for (const item of history) {
+    const status = String(item?.status || '').toLowerCase();
+    if (SUCCESS_HISTORY_STATUSES.has(status)) successCount += 1;
+    else if (FAILED_HISTORY_STATUSES.has(status)) failedCount += 1;
+    else if (status) pendingCount += 1;
+  }
+
+  return {
+    totalCount: history.length,
+    successCount,
+    failedCount,
+    pendingCount,
+  };
+}
+
 function getPinterestEngagementTargets() {
   return {
     likeTarget: Math.max(0, toInt(process.env.AUTOMATION_ENGAGEMENT_LIKE_TARGET ?? process.env.AUTOMATION_ENGAGEMENT_LIKES_PER_HOUR, 5)),
@@ -161,18 +183,22 @@ async function buildPinterestEngagementSummary(engagements = []) {
 router.get('/history', async (req, res) => {
   try {
     const postedOnly = ['1', 'true', 'yes'].includes(String(req.query.postedOnly || '').toLowerCase());
+    const includeSummary = ['1', 'true', 'yes'].includes(String(req.query.summary || '').toLowerCase());
     const limit = Math.min(100, Math.max(0, Number.parseInt(req.query.limit, 10) || 0));
-    let history = await historyService.getAll();
+    const allHistory = await historyService.getAll();
+    let history = allHistory;
 
     if (postedOnly) {
-      history = history.filter((item) => ['success', 'completed', 'posted'].includes(String(item.status || '').toLowerCase()));
+      history = history.filter((item) => SUCCESS_HISTORY_STATUSES.has(String(item.status || '').toLowerCase()));
     }
 
     if (limit > 0) {
       history = history.slice(0, limit);
     }
 
-    res.json({ success: true, history });
+    const payload = { success: true, history };
+    if (includeSummary) payload.summary = summarizeHistory(allHistory);
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
