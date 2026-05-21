@@ -1,5 +1,9 @@
 const storageService = require('./pinterestImageStorageService');
 
+function normalizeSourceAccount(username) {
+  return String(username || '').replace(/^@/, '').trim().toLowerCase();
+}
+
 async function loadQueue() {
   const state = await storageService.loadState();
   return Array.isArray(state.queue) ? state.queue : [];
@@ -20,7 +24,7 @@ function normalizeQueuePin(pin = {}) {
     id: pin.id || `pinimg_${pinId}`,
     pinId,
     sourcePinId: pinId,
-    sourceAccount: String(pin.sourceAccount || '').trim().toLowerCase(),
+    sourceAccount: normalizeSourceAccount(pin.sourceAccount),
     mediaType: pin.mediaType || 'image',
     imageUrls: Array.isArray(pin.imageUrls) ? pin.imageUrls.filter(Boolean) : [],
     attempts: Number.parseInt(pin.attempts, 10) || 0,
@@ -56,11 +60,29 @@ async function addPinsToQueue(newPins = []) {
   return { added, skipped };
 }
 
-async function popPinsFromQueue(count = 5) {
+async function popPinsFromQueue(count = 5, options = {}) {
   const queue = await loadQueue();
   const limit = Math.max(1, Number.parseInt(count, 10) || 5);
-  const popped = queue.splice(0, limit);
-  await saveQueue(queue);
+  const sourceAccount = normalizeSourceAccount(options.sourceAccount);
+
+  if (!sourceAccount) {
+    const popped = queue.splice(0, limit);
+    await saveQueue(queue);
+    return popped;
+  }
+
+  const popped = [];
+  const remaining = [];
+
+  for (const pin of queue) {
+    if (popped.length < limit && normalizeSourceAccount(pin.sourceAccount) === sourceAccount) {
+      popped.push(pin);
+    } else {
+      remaining.push(pin);
+    }
+  }
+
+  await saveQueue(remaining);
   return popped;
 }
 
@@ -74,7 +96,7 @@ async function prependPins(pins = []) {
 }
 
 async function removeBySourceAccount(username) {
-  const cleanUsername = String(username || '').replace(/^@/, '').trim().toLowerCase();
+  const cleanUsername = normalizeSourceAccount(username);
   const queue = await loadQueue();
   const next = queue.filter((pin) => String(pin.sourceAccount || '').toLowerCase() !== cleanUsername);
   await saveQueue(next);
@@ -98,6 +120,7 @@ async function getQueueStats() {
 }
 
 module.exports = {
+  normalizeSourceAccount,
   loadQueue,
   saveQueue,
   addPinsToQueue,

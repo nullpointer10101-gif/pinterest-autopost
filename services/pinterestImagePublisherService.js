@@ -198,7 +198,12 @@ async function publishPin(pin, options = {}) {
 async function publishNextBatch(options = {}) {
   const maxPosts = Math.max(1, toInt(options.maxPosts || process.env.PINTEREST_IMAGE_MAX_POSTS_PER_RUN, DEFAULT_MAX_POSTS));
   const maxAttempts = Math.max(1, toInt(process.env.PINTEREST_IMAGE_MAX_ATTEMPTS, 3));
-  const pins = await queueService.popPinsFromQueue(maxPosts);
+  const sourceAccount = queueService.normalizeSourceAccount(
+    options.sourceAccount
+    || process.env.PINTEREST_IMAGE_PUBLISH_SOURCE_ACCOUNT
+    || process.env.PINTEREST_IMAGE_SOURCE_ACCOUNT
+  );
+  const pins = await queueService.popPinsFromQueue(maxPosts, { sourceAccount });
   const failedForRetry = [];
   const items = [];
   let posted = 0;
@@ -274,6 +279,7 @@ async function publishNextBatch(options = {}) {
 
   return {
     success: failed === 0,
+    sourceAccount: sourceAccount || '',
     attempted: pins.length,
     posted,
     failed,

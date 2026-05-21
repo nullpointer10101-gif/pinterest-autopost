@@ -18,11 +18,16 @@ async function main() {
   }
 
   const maxPosts = process.env.PINTEREST_IMAGE_MAX_POSTS_PER_RUN || readArg('max') || 6;
+  const sourceAccount = process.env.PINTEREST_IMAGE_PUBLISH_SOURCE_ACCOUNT
+    || process.env.PINTEREST_IMAGE_SOURCE_ACCOUNT
+    || readArg('source')
+    || readArg('username');
 
   console.log('[Pinterest Image Publish] Starting...');
   console.log(`[Pinterest Image Publish] Max posts this run: ${maxPosts}`);
+  if (sourceAccount) console.log(`[Pinterest Image Publish] Source filter: @${sourceAccount}`);
 
-  const result = await publisherService.publishNextBatch({ maxPosts });
+  const result = await publisherService.publishNextBatch({ maxPosts, sourceAccount });
 
   console.log('[Pinterest Image Publish] Result:');
   console.log(JSON.stringify(result, null, 2));
