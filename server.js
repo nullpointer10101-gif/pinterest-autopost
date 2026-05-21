@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 
 const apiRoutes = require('./routes/api');
+const ownerAuth = require('./routes/ownerAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +29,14 @@ const bridgeRoutes = require('./routes/bridge');
 const adminRoutes = require('./routes/admin');
 app.use('/bridge', bridgeRoutes);
 app.use('/admin', adminRoutes);
+
+app.get(['/dashboard', '/app'], ownerAuth.requireOwnerSession, (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));
+});
+
+app.get('/login', (req, res) => {
+  res.redirect('/?login=1');
+});
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

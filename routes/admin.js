@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const leadStorageService = require('../services/leadStorageService');
+const waitlistStorageService = require('../services/waitlistStorageService');
 
 function escapeHtml(value) {
   return String(value || '')
@@ -50,6 +51,29 @@ async function getSortedLeads() {
   return (Array.isArray(leads) ? leads : [])
     .map(normalizeLead)
     .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+}
+
+function normalizeWaitlistSignup(signup = {}) {
+  return {
+    id: String(signup.id || ''),
+    name: String(signup.name || '').trim(),
+    email: String(signup.email || '').trim(),
+    company: String(signup.company || '').trim(),
+    role: String(signup.role || '').trim(),
+    website: String(signup.website || '').trim(),
+    monthlyVolume: String(signup.monthlyVolume || '').trim(),
+    primaryUseCase: String(signup.primaryUseCase || '').trim(),
+    message: String(signup.message || '').trim(),
+    createdAt: signup.createdAt || signup.timestamp || '',
+    capturedAt: formatDate(signup.createdAt || signup.timestamp),
+  };
+}
+
+async function getSortedWaitlist() {
+  const signups = await waitlistStorageService.getSignups();
+  return (Array.isArray(signups) ? signups : [])
+    .map(normalizeWaitlistSignup)
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 }
 
 function renderDashboard(leads) {
@@ -350,6 +374,7 @@ function renderDashboard(leads) {
           </div>
           <div class="actions">
             <button class="btn" type="button" id="copy-emails">Copy emails</button>
+            <a class="btn" href="/admin/waitlist">Product waitlist</a>
             <a class="btn primary" href="/admin/leads.csv">Export CSV</a>
           </div>
         </div>
@@ -429,6 +454,108 @@ function renderDashboard(leads) {
   `;
 }
 
+function renderWaitlistDashboard(signups) {
+  const total = signups.length;
+  const uniqueEmails = new Set(signups.map((signup) => signup.email.toLowerCase()).filter(Boolean)).size;
+  const rows = signups.map((signup) => `
+    <tr data-search="${escapeHtml(`${signup.name} ${signup.email} ${signup.company} ${signup.role} ${signup.website} ${signup.primaryUseCase} ${signup.message}`.toLowerCase())}">
+      <td data-label="Person"><strong>${escapeHtml(signup.name || 'No name')}</strong><span>${escapeHtml(signup.email || 'No email')}</span></td>
+      <td data-label="Company">${escapeHtml(signup.company || '-')}</td>
+      <td data-label="Role">${escapeHtml(signup.role || '-')}</td>
+      <td data-label="Volume">${escapeHtml(signup.monthlyVolume || '-')}</td>
+      <td data-label="Use case">${escapeHtml(signup.primaryUseCase || signup.message || '-')}</td>
+      <td data-label="Captured">${escapeHtml(signup.capturedAt)}</td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Admin - Product Waitlist</title>
+  <style>
+    :root { --paper:#fff; --canvas:#f4f6f8; --ink:#15161a; --muted:#667085; --line:#e4e7eb; --accent:#e21d2b; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100svh; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--canvas); color:var(--ink); }
+    .page { width:min(1240px,100%); margin:0 auto; padding:28px 18px; }
+    .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:900; }
+    .brand-mark { width:32px; height:32px; border-radius:50%; display:grid; place-items:center; background:var(--accent); color:#fff; }
+    h1 { margin:14px 0 6px; font-size:clamp(30px,5vw,48px); line-height:1; letter-spacing:0; }
+    .subtitle { margin:0; color:var(--muted); line-height:1.5; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+    .btn { min-height:38px; display:inline-flex; align-items:center; justify-content:center; padding:0 12px; border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--ink); text-decoration:none; font-weight:850; font-size:13px; }
+    .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:22px 0; }
+    .stat { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:16px; }
+    .stat span { display:block; color:var(--muted); font-size:12px; font-weight:850; text-transform:uppercase; }
+    .stat strong { display:block; margin-top:8px; font-size:30px; line-height:1; }
+    .panel { background:var(--paper); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+    .panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px; border-bottom:1px solid var(--line); }
+    .panel-head strong { font-size:16px; }
+    .search { width:min(360px,100%); min-height:38px; border:1px solid var(--line); border-radius:8px; padding:0 12px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:13px 14px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; font-size:14px; }
+    th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:0; }
+    td span { display:block; margin-top:4px; color:var(--muted); font-size:13px; }
+    .empty { padding:32px; color:var(--muted); text-align:center; }
+    @media (max-width:760px) {
+      .topbar, .panel-head { flex-direction:column; align-items:stretch; }
+      .actions { justify-content:flex-start; }
+      .stats { grid-template-columns:1fr; }
+      table, thead, tbody, tr, th, td { display:block; }
+      thead { display:none; }
+      tr { border-bottom:1px solid var(--line); padding:10px 0; }
+      td { border:0; padding:8px 14px; }
+      td::before { content:attr(data-label); display:block; color:var(--muted); font-size:11px; font-weight:850; text-transform:uppercase; margin-bottom:3px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <div class="brand"><span class="brand-mark">P</span><span>Pinterest Autopost Admin</span></div>
+        <h1>Product Waitlist</h1>
+        <p class="subtitle">Requests captured from the public homepage. Times are shown in IST.</p>
+      </div>
+      <div class="actions">
+        <a class="btn" href="/admin/leads">Bridge leads</a>
+        <a class="btn" href="/dashboard">Dashboard</a>
+        <a class="btn primary" href="/admin/waitlist.csv">Export CSV</a>
+      </div>
+    </header>
+
+    <section class="stats" aria-label="Waitlist stats">
+      <div class="stat"><span>Total requests</span><strong>${total}</strong></div>
+      <div class="stat"><span>Unique emails</span><strong>${uniqueEmails}</strong></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <strong>Access requests</strong>
+        <input id="waitlist-search" class="search" type="search" placeholder="Search name, email, company, use case..." autocomplete="off">
+      </div>
+      ${rows ? `<table>
+        <thead><tr><th>Person</th><th>Company</th><th>Role</th><th>Volume</th><th>Use case</th><th>Captured</th></tr></thead>
+        <tbody id="waitlist-rows">${rows}</tbody>
+      </table>` : '<div class="empty">No waitlist requests yet.</div>'}
+    </section>
+  </main>
+  <script>
+    const search = document.getElementById('waitlist-search');
+    const rows = Array.from(document.querySelectorAll('#waitlist-rows tr'));
+    search?.addEventListener('input', () => {
+      const query = search.value.trim().toLowerCase();
+      rows.forEach((row) => { row.hidden = query && !row.dataset.search.includes(query); });
+    });
+  </script>
+</body>
+</html>`;
+}
+
 router.get('/', async (req, res) => {
   const leads = await getSortedLeads();
   res.send(renderDashboard(leads));
@@ -444,6 +571,16 @@ router.get('/api/leads', async (req, res) => {
   res.json({ success: true, total: leads.length, leads });
 });
 
+router.get('/waitlist', async (req, res) => {
+  const signups = await getSortedWaitlist();
+  res.send(renderWaitlistDashboard(signups));
+});
+
+router.get('/api/waitlist', async (req, res) => {
+  const signups = await getSortedWaitlist();
+  res.json({ success: true, total: signups.length, signups });
+});
+
 router.get('/leads.csv', async (req, res) => {
   const leads = await getSortedLeads();
   const header = ['timestamp', 'email', 'pinId', 'targetUrl'];
@@ -453,6 +590,28 @@ router.get('/leads.csv', async (req, res) => {
   ];
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="bridge-leads.csv"');
+  res.send(lines.join('\n'));
+});
+
+router.get('/waitlist.csv', async (req, res) => {
+  const signups = await getSortedWaitlist();
+  const header = ['createdAt', 'name', 'email', 'company', 'role', 'monthlyVolume', 'website', 'primaryUseCase', 'message'];
+  const lines = [
+    header.map(csvCell).join(','),
+    ...signups.map((signup) => [
+      signup.createdAt,
+      signup.name,
+      signup.email,
+      signup.company,
+      signup.role,
+      signup.monthlyVolume,
+      signup.website,
+      signup.primaryUseCase,
+      signup.message,
+    ].map(csvCell).join(',')),
+  ];
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="product-waitlist.csv"');
   res.send(lines.join('\n'));
 });
 

@@ -1105,7 +1105,7 @@ function renderStorePage(looks = []) {
         </span>
       </a>
       <nav class="top-actions" aria-label="Store navigation">
-        <a class="nav-btn" href="/">Dashboard</a>
+        <a class="nav-btn" href="/dashboard">Dashboard</a>
         <a class="nav-btn" href="/store">Store</a>
         <button class="nav-btn" id="copy-store" type="button">Copy Link</button>
       </nav>
@@ -1120,7 +1120,7 @@ function renderStorePage(looks = []) {
         <p>A dark, simple storefront for your men&apos;s fashion archive. Browse by category, open any reel card, and shop the matched products inside the look page.</p>
         <div class="hero-actions">
           <a class="primary-cta" href="#looks">Browse looks</a>
-          <a class="nav-btn" href="/">Dashboard</a>
+          <a class="nav-btn" href="/dashboard">Dashboard</a>
         </div>
         <button class="hero-search-panel" type="button" data-focus-search>
           <span>Find a look fast</span>

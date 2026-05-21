@@ -113,7 +113,7 @@ function oauthPage(type, message) {
   <div class="box">
     <h1>${success ? 'Connection Complete' : 'Connection Failed'}</h1>
     <p>${message}</p>
-    ${success ? '<a href="/">Open dashboard</a>' : ''}
+    ${success ? '<a href="/dashboard">Open dashboard</a>' : ''}
   </div>
 </body>
 </html>`;

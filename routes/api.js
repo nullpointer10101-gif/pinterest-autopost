@@ -14,6 +14,8 @@ const autopostRoutes = require('./autopost');
 const igTrackerRoutes = require('./igTrackerApi');
 const studioRoutes = require('./studio');
 const pinterestImageRoutes = require('./pinterestImage');
+const waitlistRoutes = require('./waitlist');
+const ownerAuthRoutes = require('./ownerAuth');
 
 // Mount sub-routers - System first for priority
 router.use('/system', systemRoutes);
@@ -32,6 +34,8 @@ router.use('/', authRoutes);
 router.use('/', contentRoutes);
 router.use('/pinterest', pinterestRoutes);
 router.use('/pinterest-image', pinterestImageRoutes);
+router.use('/waitlist', waitlistRoutes);
+router.use('/owner', ownerAuthRoutes.router);
 router.use('/', historyRoutes);
 router.use('/autopost', autopostRoutes);
 router.use('/studio', studioRoutes);
