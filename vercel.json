@@ -3,10 +3,7 @@
   "functions": {
     "server.js": {
       "maxDuration": 60,
-      "includeFiles": [
-        "public/**",
-        "views/**"
-      ]
+      "includeFiles": "{public/**,views/**}"
     }
   },
   "rewrites": [
