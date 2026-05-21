@@ -26,13 +26,41 @@ function cleanText(value, fallback = '') {
   return String(value || fallback).replace(/\s+/g, ' ').trim();
 }
 
+function canonicalImageKey(url) {
+  try {
+    const parsed = new URL(String(url || '').trim());
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString().replace(/\.(jpe?g|png|webp|gif)$/i, '');
+  } catch {
+    return String(url || '').trim().replace(/\?.*$/, '').replace(/\.(jpe?g|png|webp|gif)$/i, '');
+  }
+}
+
 function getPinImages(pin = {}) {
-  const urls = Array.isArray(pin.imageUrls) ? pin.imageUrls : [];
-  return Array.from(new Set([
-    ...urls,
+  const urls = [
     pin.mediaUrl,
     pin.thumbnailUrl,
-  ].filter(Boolean)));
+    ...(Array.isArray(pin.imageUrls) ? pin.imageUrls : []),
+  ].filter(Boolean);
+  const unique = new Map();
+
+  for (const url of urls) {
+    const cleanUrl = String(url || '').trim();
+    const key = canonicalImageKey(cleanUrl);
+    if (cleanUrl && key && !unique.has(key)) unique.set(key, cleanUrl);
+  }
+
+  return Array.from(unique.values());
+}
+
+function getDisplayTitle(value) {
+  const title = cleanText(value, 'Shop this look');
+  return title
+    .split('|')[0]
+    .replace(/\s+\d{4}$/, '')
+    .trim()
+    .slice(0, 86);
 }
 
 // Serve the bridge landing page
@@ -47,9 +75,9 @@ router.get('/:pinId', async (req, res) => {
 
   const imageUrls = getPinImages(pin);
   const hasMultipleImages = imageUrls.length > 1;
-  const title = cleanText(pin.title, 'Shop this look');
+  const title = getDisplayTitle(pin.title);
   const description = cleanText(pin.description || pin.caption, 'Get the direct link for this Pinterest find.');
-  const shortDescription = description.length > 138 ? `${description.slice(0, 135).trim()}...` : description;
+  const shortDescription = description.length > 112 ? `${description.slice(0, 109).trim()}...` : description;
   const brandName = cleanText(process.env.BRIDGE_BRAND_NAME, 'Aura Closet');
   const boardName = cleanText(pin.boardName || pin.sourceBoardName, 'Pinterest find');
   const sourceAccount = cleanText(pin.sourceAccount ? `@${pin.sourceAccount}` : '', '');
@@ -74,6 +102,10 @@ router.get('/:pinId', async (req, res) => {
     imageHtml = `
         <div class="slider" aria-roledescription="carousel">
           <div class="slides">${slides}</div>
+          <div class="image-badge">Shop the look</div>
+          <div class="image-error" aria-hidden="true">
+            <span>${safeBrandName}</span>
+          </div>
           <button class="slider-btn slider-btn-prev" type="button" aria-label="Previous image">&#8249;</button>
           <button class="slider-btn slider-btn-next" type="button" aria-label="Next image">&#8250;</button>
           <div class="slider-footer">
@@ -86,6 +118,10 @@ router.get('/:pinId', async (req, res) => {
     imageHtml = `
         <div class="single-image">
           <img src="${escapeHtml(primaryImage)}" alt="${imageAlt}" loading="eager" decoding="async" />
+          <div class="image-badge">Shop the look</div>
+          <div class="image-error" aria-hidden="true">
+            <span>${safeBrandName}</span>
+          </div>
         </div>
       `;
   } else {
@@ -112,15 +148,16 @@ router.get('/:pinId', async (req, res) => {
         :root {
           color-scheme: light;
           --paper: #ffffff;
-          --canvas: #f5f6f8;
-          --ink: #121417;
-          --muted: #626873;
-          --line: #e2e5ea;
-          --soft: #eef6f1;
-          --accent: #d92128;
-          --accent-dark: #aa151a;
-          --success: #0f766e;
-          --shadow: 0 18px 42px rgba(18, 20, 23, 0.12);
+          --canvas: #f3f5f4;
+          --ink: #15161a;
+          --muted: #656b76;
+          --line: #e4e7eb;
+          --soft: #edf7f2;
+          --accent: #e21d2b;
+          --accent-dark: #b81420;
+          --success: #087f5b;
+          --warm: #fff7ed;
+          --shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
         }
 
         * {
@@ -151,9 +188,9 @@ router.get('/:pinId', async (req, res) => {
 
         .bridge-shell {
           width: 100%;
-          max-width: 980px;
+          max-width: 1040px;
           display: grid;
-          grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+          grid-template-columns: minmax(0, 1.08fr) minmax(340px, 0.92fr);
           background: var(--paper);
           border: 1px solid var(--line);
           border-radius: 8px;
@@ -163,8 +200,9 @@ router.get('/:pinId', async (req, res) => {
 
         .visual-panel {
           min-width: 0;
-          background: #f7f8fa;
+          background: #eef0ef;
           display: grid;
+          padding: 12px;
         }
 
         .single-image,
@@ -176,6 +214,7 @@ router.get('/:pinId', async (req, res) => {
           position: relative;
           overflow: hidden;
           background: #f7f8fa;
+          border-radius: 8px;
         }
 
         .single-image img,
@@ -185,6 +224,52 @@ router.get('/:pinId', async (req, res) => {
           display: block;
           object-fit: cover;
           background: #f7f8fa;
+        }
+
+        .single-image.image-missing img {
+          display: none;
+        }
+
+        .image-badge {
+          position: absolute;
+          top: 12px;
+          left: 12px;
+          z-index: 3;
+          display: inline-flex;
+          align-items: center;
+          min-height: 32px;
+          padding: 0 12px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.9);
+          color: var(--ink);
+          font-size: 12px;
+          font-weight: 900;
+          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+          backdrop-filter: blur(10px);
+        }
+
+        .image-error {
+          position: absolute;
+          inset: 0;
+          display: none;
+          place-items: center;
+          background: linear-gradient(135deg, #f7f8fa, #ecf6f1);
+          color: var(--ink);
+          font-weight: 900;
+        }
+
+        .single-image.image-missing .image-error {
+          display: grid;
+        }
+
+        .slider.image-missing .image-error {
+          display: grid;
+        }
+
+        .slider.image-missing .slides,
+        .slider.image-missing .slider-btn,
+        .slider.image-missing .slider-footer {
+          display: none;
         }
 
         .image-fallback {
@@ -297,7 +382,7 @@ router.get('/:pinId', async (req, res) => {
 
         .unlock-panel {
           min-width: 0;
-          padding: 34px;
+          padding: 38px 36px;
           display: flex;
           flex-direction: column;
           justify-content: center;
@@ -310,7 +395,7 @@ router.get('/:pinId', async (req, res) => {
           color: var(--ink);
           font-size: 14px;
           font-weight: 800;
-          margin-bottom: 26px;
+          margin-bottom: 24px;
         }
 
         .brand-mark {
@@ -336,8 +421,8 @@ router.get('/:pinId', async (req, res) => {
         }
 
         h1 {
-          font-size: clamp(28px, 5vw, 42px);
-          line-height: 1.02;
+          font-size: clamp(30px, 4vw, 44px);
+          line-height: 1.04;
           letter-spacing: 0;
           margin: 0;
           font-weight: 900;
@@ -347,7 +432,7 @@ router.get('/:pinId', async (req, res) => {
           color: var(--muted);
           font-size: 16px;
           line-height: 1.55;
-          margin: 16px 0 22px;
+          margin: 15px 0 20px;
         }
 
         .meta-strip {
@@ -389,7 +474,7 @@ router.get('/:pinId', async (req, res) => {
           width: 100%;
           min-height: 54px;
           padding: 0 15px;
-          border: 1px solid var(--line);
+          border: 1.5px solid var(--line);
           border-radius: 8px;
           font-size: 16px;
           color: var(--ink);
@@ -422,7 +507,7 @@ router.get('/:pinId', async (req, res) => {
           align-items: center;
           justify-content: center;
           gap: 10px;
-          box-shadow: 0 12px 24px rgba(217, 33, 40, 0.24);
+          box-shadow: 0 12px 24px rgba(226, 29, 43, 0.24);
           transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
         }
 
@@ -479,36 +564,38 @@ router.get('/:pinId', async (req, res) => {
         @media (max-width: 760px) {
           .page {
             display: block;
-            padding: 0;
-            background: var(--paper);
+            padding: 10px;
+            background: var(--canvas);
           }
 
           .bridge-shell {
-            min-height: 100svh;
+            min-height: calc(100svh - 20px);
             display: flex;
             flex-direction: column;
-            border: 0;
-            border-radius: 0;
-            box-shadow: none;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
           }
 
           .visual-panel {
-            background: var(--paper);
+            background: #eef0ef;
+            padding: 8px;
           }
 
           .single-image,
           .slider,
           .image-fallback {
             min-height: auto;
-            height: clamp(300px, 42vh, 390px);
+            height: clamp(330px, 48vh, 430px);
             max-height: none;
-            border-radius: 0 0 8px 8px;
+            border-radius: 8px;
           }
 
           .unlock-panel {
             flex: 1;
-            padding: 16px 18px calc(16px + env(safe-area-inset-bottom));
+            padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
             justify-content: flex-start;
+            background: var(--paper);
           }
 
           .brand-row {
@@ -527,11 +614,11 @@ router.get('/:pinId', async (req, res) => {
 
           h1 {
             display: -webkit-box;
-            -webkit-line-clamp: 2;
+            -webkit-line-clamp: 3;
             -webkit-box-orient: vertical;
             overflow: hidden;
-            font-size: clamp(24px, 6.8vw, 30px);
-            line-height: 1.05;
+            font-size: clamp(24px, 6.6vw, 29px);
+            line-height: 1.07;
           }
 
           .lead {
@@ -596,6 +683,22 @@ router.get('/:pinId', async (req, res) => {
             padding: 0 10px;
           }
         }
+
+        @media (max-width: 760px) and (max-height: 760px) {
+          .single-image,
+          .slider,
+          .image-fallback {
+            height: clamp(260px, 39vh, 310px);
+          }
+
+          .brand-row {
+            margin-bottom: 8px;
+          }
+
+          .lead {
+            -webkit-line-clamp: 1;
+          }
+        }
       </style>
     </head>
     <body>
@@ -639,10 +742,56 @@ router.get('/:pinId', async (req, res) => {
       <script>
         const PIN_ID = ${safeJson(pinId)};
         const slides = document.querySelector('.slides');
-        const dots = document.querySelectorAll('.dot');
         const current = document.getElementById('slide-current');
         const prevBtn = document.querySelector('.slider-btn-prev');
         const nextBtn = document.querySelector('.slider-btn-next');
+
+        function getSlideEls() {
+          return Array.from(document.querySelectorAll('.slide'));
+        }
+
+        function getDotEls() {
+          return Array.from(document.querySelectorAll('.dot'));
+        }
+
+        function reindexDots() {
+          getDotEls().forEach((dot, index) => {
+            dot.dataset.index = String(index);
+            dot.setAttribute('aria-label', 'Show image ' + (index + 1));
+          });
+        }
+
+        function syncCarouselControls() {
+          const slideCount = getSlideEls().length;
+          const footer = document.querySelector('.slider-footer');
+          const count = document.querySelector('.image-count');
+          const controls = [footer, prevBtn, nextBtn].filter(Boolean);
+          controls.forEach((control) => {
+            control.style.display = slideCount > 1 ? '' : 'none';
+          });
+          if (count) count.lastChild.textContent = '/' + slideCount;
+        }
+
+        function handleBrokenImage(img) {
+          const slide = img.closest('.slide');
+          const slider = img.closest('.slider');
+          if (slide && slider) {
+            const index = getSlideEls().indexOf(slide);
+            slide.remove();
+            const dot = getDotEls()[index];
+            if (dot) dot.remove();
+            reindexDots();
+            if (getSlideEls().length === 0) {
+              slider.classList.add('image-missing');
+            }
+            syncCarouselControls();
+            updateDots();
+            return;
+          }
+
+          const single = img.closest('.single-image');
+          if (single) single.classList.add('image-missing');
+        }
 
         function setSlide(index) {
           if (!slides) return;
@@ -650,6 +799,7 @@ router.get('/:pinId', async (req, res) => {
         }
 
         function updateDots() {
+          const dots = getDotEls();
           if (!slides || dots.length === 0) return;
           const index = Math.max(0, Math.min(dots.length - 1, Math.round(slides.scrollLeft / slides.offsetWidth)));
           dots.forEach((dot, i) => {
@@ -658,16 +808,26 @@ router.get('/:pinId', async (req, res) => {
           if (current) current.textContent = String(index + 1);
         }
 
-        if (slides && dots.length > 0) {
+        document.querySelectorAll('.visual-panel img').forEach((img) => {
+          img.addEventListener('error', () => handleBrokenImage(img), { once: true });
+          if (img.complete && img.naturalWidth === 0) handleBrokenImage(img);
+        });
+
+        if (slides && getDotEls().length > 0) {
           let scrollTimer = null;
           slides.addEventListener('scroll', () => {
             window.clearTimeout(scrollTimer);
             scrollTimer = window.setTimeout(updateDots, 40);
           }, { passive: true });
-          dots.forEach((dot, index) => dot.addEventListener('click', () => setSlide(index)));
+          getDotEls().forEach((dot) => dot.addEventListener('click', () => setSlide(Number.parseInt(dot.dataset.index, 10) || 0)));
           prevBtn?.addEventListener('click', () => setSlide(Math.max(0, Math.round(slides.scrollLeft / slides.offsetWidth) - 1)));
-          nextBtn?.addEventListener('click', () => setSlide(Math.min(dots.length - 1, Math.round(slides.scrollLeft / slides.offsetWidth) + 1)));
+          nextBtn?.addEventListener('click', () => {
+            const dots = getDotEls();
+            setSlide(Math.min(dots.length - 1, Math.round(slides.scrollLeft / slides.offsetWidth) + 1));
+          });
           window.addEventListener('resize', updateDots);
+          syncCarouselControls();
+          updateDots();
         }
 
         document.getElementById('lead-form').addEventListener('submit', async (e) => {
