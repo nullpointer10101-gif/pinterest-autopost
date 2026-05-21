@@ -32,6 +32,26 @@ function toInt(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function describeError(err, fallback = 'Unknown error') {
+  const parts = [];
+  const message = String(
+    err?.message || (err instanceof Error ? '' : err) || ''
+  ).trim();
+  if (message) parts.push(message);
+
+  const status = err?.response?.status || err?.status;
+  if (status && !parts.some((part) => part.includes(String(status)))) {
+    parts.push(`status ${status}`);
+  }
+
+  const code = err?.code;
+  if (code && !parts.some((part) => part.includes(String(code)))) {
+    parts.push(`code ${code}`);
+  }
+
+  return parts.join(' - ') || fallback;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -95,6 +115,36 @@ function backoffMs(attempt) {
   const exponent = Math.max(0, attempt - 1);
   const minutes = Math.min(6 * 60, baseMinutes * (2 ** exponent));
   return minutes * 60 * 1000;
+}
+
+function determineRunOutcome(mode, scanResults = [], queueResults = {}) {
+  const scanErrors = scanResults.filter((item) => !!item.error);
+  const queued = scanResults.reduce((sum, item) => sum + Number(item.queued || 0), 0);
+  const posted = Number(queueResults.posted || 0);
+  const attempted = Number(queueResults.attempted || 0);
+  const failed = Number(queueResults.failed || 0);
+  const deferred = Number(queueResults.deferred || 0);
+  const held = Number(queueResults.held || 0);
+
+  const validationIncomplete = mode === 'validate' && posted === 0;
+  const hardQueueFailure = attempted > 0 && posted === 0 && deferred === 0 && held === 0 && failed > 0;
+  const hardScanFailure = mode !== 'process-queue'
+    && scanResults.length > 0
+    && scanErrors.length === scanResults.length
+    && queued === 0
+    && attempted === 0;
+  const hardFailure = validationIncomplete || hardQueueFailure || hardScanFailure;
+  const hasRecoverableWarnings = scanErrors.length > 0 || deferred > 0 || failed > 0 || held > 0;
+
+  return {
+    success: !hardFailure,
+    status: hardFailure ? 'error' : (hasRecoverableWarnings ? 'partial_failure' : 'success'),
+    scanErrors,
+    validationIncomplete,
+    hardQueueFailure,
+    hardScanFailure,
+    hasRecoverableWarnings,
+  };
 }
 
 let directIgBlocked = false;
@@ -587,18 +637,19 @@ async function processQueue(options = {}) {
         pinUrl: publishResult.pinUrl || '',
       });
     } catch (err) {
+      const errorMessage = describeError(err, `Publish attempt failed for ${item.shortcode}`);
       const shouldRetry = Number(item.attempts || 0) < Math.max(1, Number(item.maxAttempts || 3));
       const nextRetryAt = shouldRetry
         ? new Date(Date.now() + backoffMs(Number(item.attempts || 1))).toISOString()
         : null;
 
-      await stateService.failQueueItem(item.id, err.message, {
+      await stateService.failQueueItem(item.id, errorMessage, {
         retry: shouldRetry,
         nextRetryAt,
       });
 
       if (item.validationJob) {
-        await stateService.markAccountFailed(item.username, err.message, {
+        await stateService.markAccountFailed(item.username, errorMessage, {
           keepPending: shouldRetry,
           stage: shouldRetry ? 'publish_retry_scheduled' : 'publish',
         });
@@ -614,7 +665,7 @@ async function processQueue(options = {}) {
         username: item.username,
         shortcode: item.shortcode,
         status: shouldRetry ? 'retry_scheduled' : 'failed',
-        error: err.message,
+        error: errorMessage,
         nextRetryAt,
       });
     }
@@ -716,18 +767,14 @@ async function runPipeline(options = {}) {
       ignoreSchedule: mode === 'validate',
     });
 
-    const scanErrors = scanResults.filter((item) => !!item.error);
-    const validationIncomplete = mode === 'validate' && queueResults.posted === 0;
-    const hasDeferred = queueResults.deferred > 0;
-    const hasFailures = queueResults.failed > 0 || scanErrors.length > 0 || validationIncomplete;
-    const success = !hasFailures && !hasDeferred;
-    const status = success
-      ? 'success'
-      : ((queueResults.posted > 0 || hasDeferred || (scanResults.length > scanErrors.length && scanResults.length > 0))
-        ? 'partial_failure'
-        : 'error');
+    const outcome = determineRunOutcome(mode, scanResults, queueResults);
+    if (outcome.status === 'partial_failure') {
+      console.warn(
+        `[IG-Repost] Recoverable partial run: posted=${queueResults.posted}, deferred=${queueResults.deferred}, failed=${queueResults.failed}, scanErrors=${outcome.scanErrors.length}.`
+      );
+    }
 
-    await stateService.markRunCompleted(runId, status, {
+    await stateService.markRunCompleted(runId, outcome.status, {
       mode,
       username,
       scans: scanResults.length,
@@ -735,27 +782,33 @@ async function runPipeline(options = {}) {
       posted: queueResults.posted,
       failed: queueResults.failed,
       deferred: queueResults.deferred,
-      scanErrors: scanErrors.length,
+      scanErrors: outcome.scanErrors.length,
+      validationIncomplete: outcome.validationIncomplete,
+      hardQueueFailure: outcome.hardQueueFailure,
+      hardScanFailure: outcome.hardScanFailure,
     });
 
     return {
-      success,
+      success: outcome.success,
+      status: outcome.status,
       mode,
       runId,
       scans: scanResults,
       queue: queueResults,
     };
   } catch (err) {
+    const errorMessage = describeError(err, 'IG repost pipeline failed');
     await stateService.markRunCompleted(runId, 'error', {
       mode,
       username,
-      error: err.message,
+      error: errorMessage,
     });
     return {
       success: false,
+      status: 'error',
       mode,
       runId,
-      error: err.message,
+      error: errorMessage,
     };
   } finally {
     await stateService.releaseRunLock(runId);

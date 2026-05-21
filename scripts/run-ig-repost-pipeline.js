@@ -31,6 +31,8 @@ async function main() {
 
   if (!result.success) {
     process.exitCode = 1;
+  } else if (result.status === 'partial_failure') {
+    console.warn('[IG-Repost] Completed with recoverable warnings. Keeping this GitHub Actions run green so retries can continue.');
   }
 }
 

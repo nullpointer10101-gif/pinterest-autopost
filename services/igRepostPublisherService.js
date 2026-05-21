@@ -80,20 +80,40 @@ function isSafeExternalLink(value) {
   }
 }
 
-async function downloadMedia(mediaUrl, destinationPath) {
-  const response = await axios({
-    url: mediaUrl,
-    method: 'GET',
-    responseType: 'stream',
-    timeout: 90000,
-  });
+function describeDownloadError(err, mediaUrl) {
+  let host = 'media URL';
+  try {
+    host = new URL(String(mediaUrl || '')).host || host;
+  } catch {}
 
-  await new Promise((resolve, reject) => {
-    const writer = fs.createWriteStream(destinationPath);
-    response.data.pipe(writer);
-    writer.on('finish', resolve);
-    writer.on('error', reject);
-  });
+  const details = [];
+  const message = String(err?.message || '').trim();
+  if (message) details.push(message);
+  if (err?.response?.status) details.push(`status ${err.response.status}`);
+  if (err?.code) details.push(`code ${err.code}`);
+
+  return `Media download failed from ${host}${details.length ? ` (${details.join(', ')})` : ''}`;
+}
+
+async function downloadMedia(mediaUrl, destinationPath) {
+  try {
+    const response = await axios({
+      url: mediaUrl,
+      method: 'GET',
+      responseType: 'stream',
+      timeout: 90000,
+    });
+
+    await new Promise((resolve, reject) => {
+      const writer = fs.createWriteStream(destinationPath);
+      response.data.pipe(writer);
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+      response.data.on('error', reject);
+    });
+  } catch (err) {
+    throw new Error(describeDownloadError(err, mediaUrl));
+  }
 }
 
 async function collectBuilderState(page) {
