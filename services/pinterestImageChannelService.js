@@ -124,6 +124,11 @@ function addCount(counts, source, amount = 1) {
   counts[cleanSource] = (counts[cleanSource] || 0) + amount;
 }
 
+function getTimeMs(value) {
+  const time = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(time) ? time : null;
+}
+
 function getPublishCompletedSourcesByPin(logs = []) {
   const sourcesByPin = new Map();
   if (!Array.isArray(logs)) return sourcesByPin;
@@ -234,12 +239,27 @@ function getSourceStats(state = {}, channels = []) {
     const activeScrapedCandidates = zeroPostedChannels.filter((channel) => (
       (scrapedBySource[channel.username] || 0) + (queuedBySource[channel.username] || 0)
     ) > 0);
+    const attributedChannelTimes = normalizedChannels
+      .filter((channel) => postedBySource[channel.username] > 0)
+      .map((channel) => getTimeMs(channel.addedAt))
+      .filter((time) => time !== null);
+    const earliestAttributedChannelAt = attributedChannelTimes.length > 0
+      ? Math.min(...attributedChannelTimes)
+      : null;
+    const olderZeroPostedChannels = earliestAttributedChannelAt === null
+      ? []
+      : zeroPostedChannels.filter((channel) => {
+        const addedAt = getTimeMs(channel.addedAt);
+        return addedAt !== null && addedAt < earliestAttributedChannelAt;
+      });
 
     let recoveredChannel = null;
     if (cycleHintCandidates.length === 1) {
       recoveredChannel = cycleHintCandidates[0];
     } else if (activeScrapedCandidates.length === 1) {
       recoveredChannel = activeScrapedCandidates[0];
+    } else if (olderZeroPostedChannels.length === 1) {
+      recoveredChannel = olderZeroPostedChannels[0];
     } else if (
       zeroPostedChannels.length === 1
       && normalizedChannels.every((channel) => (
