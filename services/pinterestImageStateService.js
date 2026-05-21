@@ -1,37 +1,13 @@
-const fs = require('fs/promises');
-const path = require('path');
-
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const PINS_FILE = path.join(DATA_DIR, 'pinterest-image-pins.json');
-const POSTED_FILE = path.join(DATA_DIR, 'pinterest-image-posted.json');
-const LOGS_FILE = path.join(DATA_DIR, 'pinterest-image-logs.json');
-
-async function ensureDataDir() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-}
-
-async function readJson(filePath, fallback) {
-  await ensureDataDir();
-  try {
-    const raw = await fs.readFile(filePath, 'utf8');
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-async function writeJson(filePath, value) {
-  await ensureDataDir();
-  await fs.writeFile(filePath, JSON.stringify(value, null, 2), 'utf8');
-}
+const storageService = require('./pinterestImageStorageService');
 
 async function loadPins() {
-  return readJson(PINS_FILE, {});
+  const state = await storageService.loadState();
+  return state.pins || {};
 }
 
 async function saveScrapedPins(pins = []) {
-  const pinsMap = await loadPins();
+  const state = await storageService.loadState();
+  const pinsMap = state.pins || {};
   let added = 0;
   const now = new Date().toISOString();
 
@@ -48,7 +24,8 @@ async function saveScrapedPins(pins = []) {
   }
 
   if (pins.length > 0) {
-    await writeJson(PINS_FILE, pinsMap);
+    state.pins = pinsMap;
+    await storageService.saveState(state);
   }
 
   return added;
@@ -60,7 +37,8 @@ async function getPinById(pinId) {
 }
 
 async function loadPosted() {
-  return readJson(POSTED_FILE, {});
+  const state = await storageService.loadState();
+  return state.posted || {};
 }
 
 async function isPosted(pinId) {
@@ -72,18 +50,21 @@ async function markPosted(originalPinId, newPinId, meta = {}) {
   const pinId = String(originalPinId || '').trim();
   if (!pinId) throw new Error('originalPinId is required');
 
-  const posted = await loadPosted();
+  const state = await storageService.loadState();
+  const posted = state.posted || {};
   posted[pinId] = {
     newPinId,
     postedAt: new Date().toISOString(),
     ...meta,
   };
-  await writeJson(POSTED_FILE, posted);
+  state.posted = posted;
+  await storageService.saveState(state);
   return posted[pinId];
 }
 
 async function appendLog(type, message, meta = {}) {
-  const logs = await readJson(LOGS_FILE, []);
+  const state = await storageService.loadState();
+  const logs = Array.isArray(state.logs) ? state.logs : [];
   const entry = {
     id: `pinimglog_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     type,
@@ -92,26 +73,28 @@ async function appendLog(type, message, meta = {}) {
     createdAt: new Date().toISOString(),
   };
   const next = [entry, ...(Array.isArray(logs) ? logs : [])].slice(0, 500);
-  await writeJson(LOGS_FILE, next);
+  state.logs = next;
+  await storageService.saveState(state);
   return entry;
 }
 
 async function getLogs(limit = 80) {
-  const logs = await readJson(LOGS_FILE, []);
+  const state = await storageService.loadState();
+  const logs = state.logs || [];
   const max = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 80));
   return Array.isArray(logs) ? logs.slice(0, max) : [];
 }
 
 async function getStats() {
-  const [pins, posted, logs] = await Promise.all([
-    loadPins(),
-    loadPosted(),
-    getLogs(20),
-  ]);
+  const state = await storageService.loadState();
+  const pins = state.pins || {};
+  const posted = state.posted || {};
+  const logs = Array.isArray(state.logs) ? state.logs.slice(0, 20) : [];
   return {
     scrapedPins: Object.keys(pins).length,
     postedPins: Object.keys(posted).length,
     recentLogs: logs,
+    storage: storageService.getStorageInfo(),
   };
 }
 

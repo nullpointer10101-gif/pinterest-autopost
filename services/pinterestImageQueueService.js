@@ -1,27 +1,14 @@
-const fs = require('fs/promises');
-const path = require('path');
-
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const QUEUE_FILE = path.join(DATA_DIR, 'pinterest-image-queue.json');
-
-async function ensureDataDir() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-}
+const storageService = require('./pinterestImageStorageService');
 
 async function loadQueue() {
-  await ensureDataDir();
-  try {
-    const raw = await fs.readFile(QUEUE_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const state = await storageService.loadState();
+  return Array.isArray(state.queue) ? state.queue : [];
 }
 
 async function saveQueue(queue) {
-  await ensureDataDir();
-  await fs.writeFile(QUEUE_FILE, JSON.stringify(Array.isArray(queue) ? queue : [], null, 2), 'utf8');
+  const state = await storageService.loadState();
+  state.queue = Array.isArray(queue) ? queue : [];
+  await storageService.saveState(state);
 }
 
 function normalizeQueuePin(pin = {}) {

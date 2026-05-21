@@ -1,14 +1,5 @@
-const fs = require('fs/promises');
-const path = require('path');
 const pinterestImageQueueService = require('./pinterestImageQueueService');
-
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const CHANNELS_FILE = path.join(DATA_DIR, 'pinterest-image-accounts.json');
-const LEGACY_CHANNELS_FILE = path.join(DATA_DIR, 'pinterest-accounts.json');
-
-async function ensureDataDir() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-}
+const storageService = require('./pinterestImageStorageService');
 
 function normalizeUsername(input) {
   let clean = String(input || '').trim().toLowerCase();
@@ -31,22 +22,6 @@ function normalizeUsername(input) {
   return /^[a-z0-9._-]+$/i.test(clean) ? clean : '';
 }
 
-async function readJson(filePath, fallback) {
-  await ensureDataDir();
-  try {
-    const raw = await fs.readFile(filePath, 'utf8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-async function writeChannels(channels) {
-  await ensureDataDir();
-  await fs.writeFile(CHANNELS_FILE, JSON.stringify(channels, null, 2), 'utf8');
-}
-
 function normalizeChannelRecord(channel) {
   const username = normalizeUsername(typeof channel === 'string' ? channel : channel?.username);
   if (!username) return null;
@@ -62,19 +37,17 @@ function normalizeChannelRecord(channel) {
 }
 
 async function readChannels() {
-  let channels = await readJson(CHANNELS_FILE, null);
-  if (!channels) {
-    const legacy = await readJson(LEGACY_CHANNELS_FILE, []);
-    channels = legacy.map(normalizeChannelRecord).filter(Boolean);
-    if (channels.length > 0) {
-      await writeChannels(channels);
-    }
-  }
-
-  return (channels || [])
+  const state = await storageService.loadState();
+  return (state.channels || [])
     .map(normalizeChannelRecord)
     .filter(Boolean)
     .sort((a, b) => a.username.localeCompare(b.username));
+}
+
+async function writeChannels(channels) {
+  const state = await storageService.loadState();
+  state.channels = (channels || []).map(normalizeChannelRecord).filter(Boolean);
+  await storageService.saveState(state);
 }
 
 async function listChannels() {
@@ -87,7 +60,8 @@ async function addChannel(input) {
     throw new Error('Enter a valid Pinterest username or profile URL.');
   }
 
-  const channels = await readChannels();
+  const state = await storageService.loadState();
+  const channels = (state.channels || []).map(normalizeChannelRecord).filter(Boolean);
   const existing = channels.find((channel) => channel.username === username);
   const now = new Date().toISOString();
 
@@ -96,7 +70,8 @@ async function addChannel(input) {
       existing.active = true;
       existing.status = 'active';
       existing.updatedAt = now;
-      await writeChannels(channels);
+      state.channels = channels;
+      await storageService.saveState(state);
       return { channel: existing, created: false, reactivated: true };
     }
 
@@ -116,7 +91,8 @@ async function addChannel(input) {
     lastQueuedAt: null,
   };
   channels.push(channel);
-  await writeChannels(channels);
+  state.channels = channels;
+  await storageService.saveState(state);
   return { channel, created: true, reactivated: false };
 }
 
@@ -126,10 +102,12 @@ async function removeChannel(input) {
     throw new Error('Enter a valid Pinterest username or profile URL.');
   }
 
-  const channels = await readChannels();
+  const state = await storageService.loadState();
+  const channels = (state.channels || []).map(normalizeChannelRecord).filter(Boolean);
   const next = channels.filter((channel) => channel.username !== username);
   const removed = channels.length - next.length;
-  await writeChannels(next);
+  state.channels = next;
+  await storageService.saveState(state);
   const queueResult = await pinterestImageQueueService.removeBySourceAccount(username);
 
   return {
@@ -143,11 +121,13 @@ async function removeChannel(input) {
 async function markChannelScan(usernameInput, patch = {}) {
   const username = normalizeUsername(usernameInput);
   if (!username) return null;
-  const channels = await readChannels();
+  const state = await storageService.loadState();
+  const channels = (state.channels || []).map(normalizeChannelRecord).filter(Boolean);
   const channel = channels.find((entry) => entry.username === username);
   if (!channel) return null;
   Object.assign(channel, patch, { updatedAt: new Date().toISOString() });
-  await writeChannels(channels);
+  state.channels = channels;
+  await storageService.saveState(state);
   return channel;
 }
 

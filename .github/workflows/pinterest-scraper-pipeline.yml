@@ -63,6 +63,9 @@ jobs:
           GEMINI_FALLBACK_API_KEY: ${{ secrets.GEMINI_FALLBACK_API_KEY }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL || secrets.BASE_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          APP_PINTEREST_IMAGE_STATE_KEY: ${{ secrets.APP_PINTEREST_IMAGE_STATE_KEY || 'pinterest_image_state_v1' }}
         run: node scripts/pinterest-image-publish.js
 
       - name: Commit updated Pinterest image state
@@ -100,6 +103,9 @@ jobs:
           PINTEREST_IMAGE_USERNAME: ${{ github.event.inputs.username }}
           PINTEREST_IMAGE_SCRAPE_LIMIT: 2000
           APP_BASE_URL: ${{ secrets.APP_BASE_URL || secrets.BASE_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          APP_PINTEREST_IMAGE_STATE_KEY: ${{ secrets.APP_PINTEREST_IMAGE_STATE_KEY || 'pinterest_image_state_v1' }}
         run: node scripts/pinterest-image-sync.js
 
       - name: Commit updated Pinterest image queue
