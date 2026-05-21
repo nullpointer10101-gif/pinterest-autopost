@@ -26,8 +26,13 @@ async function main() {
   console.log('[Pinterest Image Publish] Starting...');
   console.log(`[Pinterest Image Publish] Max posts this run: ${maxPosts}`);
   if (sourceAccount) console.log(`[Pinterest Image Publish] Source filter: @${sourceAccount}`);
+  if (isScheduledRun && !sourceAccount) console.log('[Pinterest Image Publish] Scheduled round-robin source rotation is enabled.');
 
-  const result = await publisherService.publishNextBatch({ maxPosts, sourceAccount });
+  const result = await publisherService.publishNextBatch({
+    maxPosts,
+    sourceAccount,
+    scheduledRun: isScheduledRun,
+  });
 
   console.log('[Pinterest Image Publish] Result:');
   console.log(JSON.stringify(result, null, 2));

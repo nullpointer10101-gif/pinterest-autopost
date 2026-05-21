@@ -2,6 +2,7 @@ const aiService = require('./aiService');
 const pinterestService = require('./pinterestService');
 const queueService = require('./pinterestImageQueueService');
 const stateService = require('./pinterestImageStateService');
+const storageService = require('./pinterestImageStorageService');
 const contentFilter = require('./pinterestImageContentFilterService');
 
 const DEFAULT_MAX_POSTS = 6;
@@ -14,6 +15,14 @@ function toInt(value, fallback) {
 
 function cleanText(value, max) {
   return String(value || '').replace(/\s+/g, ' ').trim().substring(0, max);
+}
+
+function buildHourlySlotKey(date = new Date()) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hour = String(date.getUTCHours()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}`;
 }
 
 function normalizeBoardName(value = '') {
@@ -74,6 +83,108 @@ async function resolveTargetBoard(pin = {}, options = {}) {
 
 function getPreferredBoardName() {
   return process.env.PINTEREST_IMAGE_BOARD_NAME || 'pinss';
+}
+
+function getActiveSourceOrder(state = {}) {
+  const channels = Array.isArray(state.channels) ? state.channels : [];
+  const activeChannels = channels
+    .filter((channel) => channel && channel.active !== false && channel.status !== 'removed')
+    .map((channel) => queueService.normalizeSourceAccount(channel.username))
+    .filter(Boolean);
+  return Array.from(new Set(activeChannels));
+}
+
+function getQueuedSources(state = {}) {
+  const queue = Array.isArray(state.queue) ? state.queue : [];
+  const sources = new Set();
+  for (const pin of queue) {
+    const source = queueService.normalizeSourceAccount(pin.sourceAccount);
+    if (source) sources.add(source);
+  }
+  return sources;
+}
+
+function pickNextSourceAccount(state = {}) {
+  const queuedSources = getQueuedSources(state);
+  const channelOrder = getActiveSourceOrder(state);
+  const fallbackOrder = Array.from(queuedSources).sort();
+  const sourceOrder = channelOrder.length > 0 ? channelOrder : fallbackOrder;
+  const eligible = sourceOrder.filter((source) => queuedSources.has(source));
+
+  if (eligible.length === 0) {
+    return {
+      sourceAccount: '',
+      eligibleSources: [],
+      lastSourceAccount: queueService.normalizeSourceAccount(state.publisher?.lastSourceAccount),
+    };
+  }
+
+  const lastSourceAccount = queueService.normalizeSourceAccount(state.publisher?.lastSourceAccount);
+  const lastIndex = eligible.indexOf(lastSourceAccount);
+  const nextIndex = lastIndex >= 0 ? (lastIndex + 1) % eligible.length : 0;
+
+  return {
+    sourceAccount: eligible[nextIndex],
+    eligibleSources: eligible,
+    lastSourceAccount,
+  };
+}
+
+async function getScheduledPublishPlan(options = {}) {
+  const explicitSourceAccount = queueService.normalizeSourceAccount(options.sourceAccount);
+  const scheduledRun = options.scheduledRun === true;
+  const slotKey = buildHourlySlotKey();
+  const state = await storageService.loadState();
+  const publisherState = state.publisher || {};
+
+  if (scheduledRun && !explicitSourceAccount && publisherState.lastSlotKey === slotKey) {
+    return {
+      skipped: true,
+      slotKey,
+      reason: 'already_published_this_hour',
+      sourceAccount: publisherState.lastSourceAccount || '',
+      publisher: publisherState,
+    };
+  }
+
+  if (explicitSourceAccount) {
+    return {
+      skipped: false,
+      slotKey,
+      sourceAccount: explicitSourceAccount,
+      explicitSource: true,
+      eligibleSources: [],
+      lastSourceAccount: queueService.normalizeSourceAccount(publisherState.lastSourceAccount),
+    };
+  }
+
+  const rotation = pickNextSourceAccount(state);
+  return {
+    skipped: false,
+    slotKey,
+    ...rotation,
+  };
+}
+
+async function markScheduledPublishSlot(plan, result) {
+  if (!plan?.slotKey || plan.explicitSource) return;
+
+  const state = await storageService.loadState();
+  state.publisher = {
+    ...(state.publisher || {}),
+    lastSlotKey: plan.slotKey,
+    lastRunAt: new Date().toISOString(),
+    lastSourceAccount: plan.sourceAccount || state.publisher?.lastSourceAccount || '',
+    lastResult: {
+      attempted: result.attempted,
+      posted: result.posted,
+      failed: result.failed,
+      deferred: result.deferred,
+      skipped: result.skipped,
+    },
+    rotationSources: plan.eligibleSources || [],
+  };
+  await storageService.saveState(state);
 }
 
 async function resolvePostingMethod() {
@@ -198,11 +309,33 @@ async function publishPin(pin, options = {}) {
 async function publishNextBatch(options = {}) {
   const maxPosts = Math.max(1, toInt(options.maxPosts || process.env.PINTEREST_IMAGE_MAX_POSTS_PER_RUN, DEFAULT_MAX_POSTS));
   const maxAttempts = Math.max(1, toInt(process.env.PINTEREST_IMAGE_MAX_ATTEMPTS, 3));
-  const sourceAccount = queueService.normalizeSourceAccount(
-    options.sourceAccount
-    || process.env.PINTEREST_IMAGE_PUBLISH_SOURCE_ACCOUNT
-    || process.env.PINTEREST_IMAGE_SOURCE_ACCOUNT
-  );
+  const scheduledRun = options.scheduledRun === true;
+  const publishPlan = await getScheduledPublishPlan({
+    scheduledRun,
+    sourceAccount: options.sourceAccount
+      || process.env.PINTEREST_IMAGE_PUBLISH_SOURCE_ACCOUNT
+      || process.env.PINTEREST_IMAGE_SOURCE_ACCOUNT,
+  });
+
+  if (publishPlan.skipped) {
+    return {
+      success: true,
+      skippedRun: true,
+      reason: publishPlan.reason,
+      slotKey: publishPlan.slotKey,
+      sourceAccount: publishPlan.sourceAccount || '',
+      attempted: 0,
+      posted: 0,
+      failed: 0,
+      deferred: 0,
+      skipped: 0,
+      items: [],
+      queue: await queueService.getQueueStats(),
+      message: `Pinterest image publisher already ran for hour ${publishPlan.slotKey}.`,
+    };
+  }
+
+  const sourceAccount = publishPlan.sourceAccount || '';
   const pins = await queueService.popPinsFromQueue(maxPosts, { sourceAccount });
   const failedForRetry = [];
   const items = [];
@@ -277,9 +410,15 @@ async function publishNextBatch(options = {}) {
     await queueService.prependPins(failedForRetry);
   }
 
-  return {
+  const result = {
     success: failed === 0,
     sourceAccount: sourceAccount || '',
+    slotKey: publishPlan.slotKey,
+    rotation: {
+      enabled: scheduledRun && !publishPlan.explicitSource,
+      previousSourceAccount: publishPlan.lastSourceAccount || '',
+      eligibleSources: publishPlan.eligibleSources || [],
+    },
     attempted: pins.length,
     posted,
     failed,
@@ -288,6 +427,12 @@ async function publishNextBatch(options = {}) {
     items,
     queue: await queueService.getQueueStats(),
   };
+
+  if (scheduledRun && !publishPlan.explicitSource) {
+    await markScheduledPublishSlot(publishPlan, result);
+  }
+
+  return result;
 }
 
 module.exports = {

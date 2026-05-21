@@ -17,6 +17,7 @@ const DEFAULT_STATE = {
   pins: {},
   posted: {},
   logs: [],
+  publisher: {},
 };
 
 let memoryCache = null;
@@ -37,6 +38,7 @@ function normalizeState(state = {}) {
     pins: isPlainObject(state.pins) ? state.pins : {},
     posted: isPlainObject(state.posted) ? state.posted : {},
     logs: Array.isArray(state.logs) ? state.logs : [],
+    publisher: isPlainObject(state.publisher) ? state.publisher : {},
   };
 }
 
