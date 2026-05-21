@@ -110,24 +110,160 @@ function shouldRefreshProfilePic(channel = {}, nowMs = Date.now(), force = false
   return true;
 }
 
-function getPostedCountsBySource(state = {}) {
-  const counts = {};
+function getFirstSource(...values) {
+  for (const value of values) {
+    const source = normalizeUsername(value);
+    if (source) return source;
+  }
+  return '';
+}
+
+function addCount(counts, source, amount = 1) {
+  const cleanSource = normalizeUsername(source);
+  if (!cleanSource || amount <= 0) return;
+  counts[cleanSource] = (counts[cleanSource] || 0) + amount;
+}
+
+function getPublishCompletedSourcesByPin(logs = []) {
+  const sourcesByPin = new Map();
+  if (!Array.isArray(logs)) return sourcesByPin;
+
+  for (const log of logs) {
+    if (log?.type !== 'publish.completed') continue;
+    const pinId = String(log.meta?.pinId || log.meta?.sourcePinId || '').trim();
+    if (!pinId || sourcesByPin.has(pinId)) continue;
+    const source = getFirstSource(
+      log.meta?.sourceAccount,
+      log.meta?.username,
+      log.meta?.sourceUsername
+    );
+    if (source) sourcesByPin.set(pinId, source);
+  }
+
+  return sourcesByPin;
+}
+
+function getPublishCycleSourceHints(logs = []) {
+  const hints = {};
+  if (!Array.isArray(logs)) return hints;
+
+  for (const log of logs) {
+    if (log?.type !== 'publish.cycle_completed') continue;
+    const source = getFirstSource(log.meta?.sourceAccount, log.meta?.username);
+    const posted = Number.parseInt(log.meta?.posted, 10) || 0;
+    if (source && posted > 0) addCount(hints, source, posted);
+  }
+
+  return hints;
+}
+
+function getPinSource(pin = {}) {
+  const record = pin && typeof pin === 'object' ? pin : {};
+  return getFirstSource(
+    record.sourceAccount,
+    record.username,
+    record.sourceUsername,
+    record.owner?.username,
+    record.ownerUsername,
+    record.pinner?.username,
+    record.user?.username
+  );
+}
+
+function getPostSource(record = {}, pin = {}, logSource = '') {
+  const post = record && typeof record === 'object' ? record : {};
+  const sourcePin = pin && typeof pin === 'object' ? pin : {};
+  return getFirstSource(
+    post.sourceAccount,
+    post.username,
+    post.sourceUsername,
+    post.owner?.username,
+    post.ownerUsername,
+    post.pinner?.username,
+    post.user?.username,
+    post.pin?.sourceAccount,
+    post.pin?.username,
+    post.pin?.sourceUsername,
+    sourcePin.sourceAccount,
+    sourcePin.username,
+    sourcePin.sourceUsername,
+    logSource
+  );
+}
+
+function getSourceStats(state = {}, channels = []) {
+  const postedBySource = {};
+  const exactPostedBySource = {};
+  const recoveredPostedBySource = {};
+  const scrapedBySource = {};
+  const queuedBySource = {};
   const posted = state.posted && typeof state.posted === 'object' ? state.posted : {};
   const pins = state.pins && typeof state.pins === 'object' ? state.pins : {};
+  const queue = Array.isArray(state.queue) ? state.queue : [];
+  const logs = Array.isArray(state.logs) ? state.logs : [];
+  const completedLogSources = getPublishCompletedSourcesByPin(logs);
+  const cycleSourceHints = getPublishCycleSourceHints(logs);
+  let totalPosted = 0;
+  let attributedPosted = 0;
+
+  for (const pin of Object.values(pins)) {
+    addCount(scrapedBySource, getPinSource(pin));
+  }
+
+  for (const pin of queue) {
+    addCount(queuedBySource, getPinSource(pin));
+  }
 
   for (const [pinId, record] of Object.entries(posted)) {
-    const source = normalizeUsername(
-      record?.sourceAccount
-      || record?.username
-      || record?.sourceUsername
-      || pins[pinId]?.sourceAccount
-      || pins[pinId]?.username
-      || ''
-    );
+    totalPosted += 1;
+    const postRecord = record && typeof record === 'object' ? record : {};
+    const sourcePinId = String(postRecord.pinId || postRecord.sourcePinId || pinId || '').trim();
+    const pin = pins[pinId] || pins[sourcePinId] || {};
+    const source = getPostSource(postRecord, pin, completedLogSources.get(pinId) || completedLogSources.get(sourcePinId) || '');
     if (!source) continue;
-    counts[source] = (counts[source] || 0) + 1;
+    addCount(postedBySource, source);
+    addCount(exactPostedBySource, source);
+    attributedPosted += 1;
   }
-  return counts;
+
+  const unattributedPosted = Math.max(0, totalPosted - attributedPosted);
+  const normalizedChannels = (channels || []).map(normalizeChannelRecord).filter(Boolean);
+  if (unattributedPosted > 0 && normalizedChannels.length > 0) {
+    const zeroPostedChannels = normalizedChannels.filter((channel) => !postedBySource[channel.username]);
+    const cycleHintCandidates = zeroPostedChannels.filter((channel) => cycleSourceHints[channel.username] > 0);
+    const activeScrapedCandidates = zeroPostedChannels.filter((channel) => (
+      (scrapedBySource[channel.username] || 0) + (queuedBySource[channel.username] || 0)
+    ) > 0);
+
+    let recoveredChannel = null;
+    if (cycleHintCandidates.length === 1) {
+      recoveredChannel = cycleHintCandidates[0];
+    } else if (activeScrapedCandidates.length === 1) {
+      recoveredChannel = activeScrapedCandidates[0];
+    } else if (
+      zeroPostedChannels.length === 1
+      && normalizedChannels.every((channel) => (
+        (scrapedBySource[channel.username] || 0) + (queuedBySource[channel.username] || 0)
+      ) === 0)
+    ) {
+      recoveredChannel = zeroPostedChannels[0];
+    }
+
+    if (recoveredChannel) {
+      addCount(postedBySource, recoveredChannel.username, unattributedPosted);
+      addCount(recoveredPostedBySource, recoveredChannel.username, unattributedPosted);
+    }
+  }
+
+  return {
+    postedBySource,
+    exactPostedBySource,
+    recoveredPostedBySource,
+    scrapedBySource,
+    queuedBySource,
+    totalPosted,
+    unattributedPosted,
+  };
 }
 
 async function saveChannelProfilePatch(usernameInput, patch = {}) {
@@ -224,10 +360,10 @@ async function readChannels(options = {}) {
   const backfillProfiles = options.backfillProfiles !== false;
   const maxProfileBackfills = Math.max(0, Number.parseInt(options.maxProfileBackfills, 10) || 3);
   const state = await storageService.loadState();
-  const postedBySource = getPostedCountsBySource(state);
   const channels = (state.channels || [])
     .map(normalizeChannelRecord)
     .filter(Boolean);
+  const sourceStats = getSourceStats(state, channels);
 
   let changed = false;
   let backfilled = 0;
@@ -272,7 +408,11 @@ async function readChannels(options = {}) {
   return channels
     .map((channel) => ({
       ...channel,
-      postedPins: postedBySource[channel.username] || 0,
+      postedPins: sourceStats.postedBySource[channel.username] || 0,
+      postedPinsExact: sourceStats.exactPostedBySource[channel.username] || 0,
+      legacyRecoveredPostedPins: sourceStats.recoveredPostedBySource[channel.username] || 0,
+      scrapedPins: sourceStats.scrapedBySource[channel.username] || 0,
+      queuedPins: sourceStats.queuedBySource[channel.username] || 0,
     }))
     .sort((a, b) => a.username.localeCompare(b.username));
 }
@@ -366,7 +506,19 @@ async function addChannel(input) {
       }
       state.channels = channels;
       await storageService.saveState(state);
-      return { channel: existing, created: false, reactivated: true };
+      const sourceStats = getSourceStats(state, channels);
+      return {
+        channel: {
+          ...existing,
+          postedPins: sourceStats.postedBySource[existing.username] || 0,
+          postedPinsExact: sourceStats.exactPostedBySource[existing.username] || 0,
+          legacyRecoveredPostedPins: sourceStats.recoveredPostedBySource[existing.username] || 0,
+          scrapedPins: sourceStats.scrapedBySource[existing.username] || 0,
+          queuedPins: sourceStats.queuedBySource[existing.username] || 0,
+        },
+        created: false,
+        reactivated: true,
+      };
     }
 
     const err = new Error(`@${username} is already in Pinterest image sources.`);
@@ -388,8 +540,19 @@ async function addChannel(input) {
   channels.push(channel);
   state.channels = channels;
   await storageService.saveState(state);
-  const postedBySource = getPostedCountsBySource(state);
-  return { channel: { ...channel, postedPins: postedBySource[channel.username] || 0 }, created: true, reactivated: false };
+  const sourceStats = getSourceStats(state, channels);
+  return {
+    channel: {
+      ...channel,
+      postedPins: sourceStats.postedBySource[channel.username] || 0,
+      postedPinsExact: sourceStats.exactPostedBySource[channel.username] || 0,
+      legacyRecoveredPostedPins: sourceStats.recoveredPostedBySource[channel.username] || 0,
+      scrapedPins: sourceStats.scrapedBySource[channel.username] || 0,
+      queuedPins: sourceStats.queuedBySource[channel.username] || 0,
+    },
+    created: true,
+    reactivated: false,
+  };
 }
 
 async function removeChannel(input) {
