@@ -2,6 +2,7 @@ const legacyScraper = require('./pinterestScraperService');
 const channelService = require('./pinterestImageChannelService');
 const queueService = require('./pinterestImageQueueService');
 const stateService = require('./pinterestImageStateService');
+const contentFilter = require('./pinterestImageContentFilterService');
 
 function getAppBaseUrl() {
   const explicit = process.env.APP_BASE_URL || process.env.BASE_URL || '';
@@ -38,10 +39,11 @@ async function fetchLatestImagePins(usernameInput, limit = 2000) {
     if (htmlPins.length > pins.length) pins = htmlPins;
   }
 
-  const imagePins = pins
+  const rawImagePins = pins
     .filter((pin) => pin?.mediaType === 'image' && Array.isArray(pin.imageUrls) && pin.imageUrls.length > 0)
     .slice(0, limit)
     .map((pin) => withBridgeLink(pin, username));
+  const { eligible: imagePins, skipped } = contentFilter.filterPins(rawImagePins);
 
   await stateService.saveScrapedPins(imagePins);
   await channelService.markChannelScan(username, {
@@ -49,10 +51,20 @@ async function fetchLatestImagePins(usernameInput, limit = 2000) {
     status: 'active',
   });
 
-  await stateService.appendLog('scrape.completed', `Scraped ${imagePins.length} Pinterest image pin(s) from @${username}.`, {
+  await stateService.appendLog('scrape.completed', `Scraped ${imagePins.length} eligible Pinterest image pin(s) from @${username}.`, {
     username,
     count: imagePins.length,
+    rawCount: rawImagePins.length,
+    filtered: skipped.length,
   });
+
+  if (skipped.length > 0) {
+    await stateService.appendLog('scrape.filtered', `Skipped ${skipped.length} off-niche Pinterest image pin(s) from @${username}.`, {
+      username,
+      count: skipped.length,
+      sample: skipped.slice(0, 20),
+    });
+  }
 
   return imagePins;
 }

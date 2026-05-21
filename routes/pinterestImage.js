@@ -73,9 +73,10 @@ router.post('/channels', async (req, res) => {
     const result = await channelService.addChannel(rawInput);
     const channels = await channelService.listChannels();
     const bootstrapEnabled = parseBoolean(req.body?.bootstrap ?? req.query?.bootstrap, true);
+    const publishAfterSync = parseBoolean(req.body?.publishAfterSync ?? req.body?.publish_after_sync ?? req.query?.publishAfterSync ?? req.query?.publish_after_sync, false);
     const bootstrap = bootstrapEnabled
       ? await dispatchPinterestImageSync(result.channel.username, {
-        publishAfterSync: true,
+        publishAfterSync,
         maxPosts: getMaxPosts(req),
       })
       : null;
@@ -85,7 +86,9 @@ router.post('/channels', async (req, res) => {
       : `Pinterest image source @${result.channel.username} added.`;
     const bootstrapMessage = bootstrap
       ? (bootstrap.success
-        ? ` Sync started and will publish up to ${bootstrap.maxPosts} queued pins.`
+        ? (publishAfterSync
+          ? ` Sync started and will publish up to ${bootstrap.maxPosts} queued pins.`
+          : ' Sync started; publishing is paused until you run publish manually.')
         : ` Auto sync did not start: ${bootstrap.error || 'GitHub dispatch failed'}.`)
       : '';
 

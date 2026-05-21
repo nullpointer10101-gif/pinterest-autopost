@@ -9,6 +9,13 @@ function readArg(name) {
 }
 
 async function main() {
+  const isScheduledRun = process.env.GITHUB_EVENT_NAME === 'schedule';
+  const autoPublishEnabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.PINTEREST_IMAGE_AUTO_PUBLISH_ENABLED || '').toLowerCase());
+  if (isScheduledRun && !autoPublishEnabled) {
+    console.log('[Pinterest Image Publish] Scheduled auto-publish is paused. Set PINTEREST_IMAGE_AUTO_PUBLISH_ENABLED=true to enable hourly publishing.');
+    return;
+  }
+
   const maxPosts = process.env.PINTEREST_IMAGE_MAX_POSTS_PER_RUN || readArg('max') || 6;
 
   console.log('[Pinterest Image Publish] Starting...');

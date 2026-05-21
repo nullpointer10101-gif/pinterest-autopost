@@ -2,6 +2,7 @@ const aiService = require('./aiService');
 const pinterestService = require('./pinterestService');
 const queueService = require('./pinterestImageQueueService');
 const stateService = require('./pinterestImageStateService');
+const contentFilter = require('./pinterestImageContentFilterService');
 
 const DEFAULT_MAX_POSTS = 6;
 let boardCache = null;
@@ -203,9 +204,29 @@ async function publishNextBatch(options = {}) {
   let posted = 0;
   let failed = 0;
   let deferred = 0;
+  let skipped = 0;
 
   for (const pin of pins) {
     try {
+      const eligibility = contentFilter.evaluatePin(pin);
+      if (!eligibility.eligible) {
+        skipped += 1;
+        await stateService.appendLog('publish.skipped', `Skipped off-niche Pinterest image pin ${pin.pinId}: ${eligibility.keyword || eligibility.reason}.`, {
+          pinId: pin.pinId,
+          sourceAccount: pin.sourceAccount || '',
+          sourceBoardName: pin.boardName || '',
+          reason: eligibility.reason,
+          keyword: eligibility.keyword || '',
+        });
+        items.push({
+          pinId: pin.pinId,
+          status: 'skipped',
+          reason: eligibility.reason,
+          keyword: eligibility.keyword || '',
+        });
+        continue;
+      }
+
       const result = await publishPin(pin, options);
       posted += 1;
       items.push({
@@ -257,6 +278,7 @@ async function publishNextBatch(options = {}) {
     posted,
     failed,
     deferred,
+    skipped,
     items,
     queue: await queueService.getQueueStats(),
   };
