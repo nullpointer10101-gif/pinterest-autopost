@@ -89,19 +89,25 @@ async function triggerInstantEngagement(options = {}) {
   });
 }
 
-async function triggerPinterestImageSync(username = '') {
+async function triggerPinterestImageSync(username = '', options = {}) {
   const inputs = {
     mode: 'sync',
   };
   const cleanUsername = String(username || '').trim();
   if (cleanUsername) inputs.username = cleanUsername;
+  if (options.publishAfterSync === true) inputs.publish_after_sync = 'true';
+  const maxPosts = Number.parseInt(options.maxPosts, 10);
+  if (Number.isFinite(maxPosts) && maxPosts > 0) inputs.max_posts = String(maxPosts);
   return dispatchWorkflow('pinterest-scraper-pipeline.yml', 'Pinterest Image Sync', inputs);
 }
 
-async function triggerPinterestImagePublish() {
-  return dispatchWorkflow('pinterest-scraper-pipeline.yml', 'Pinterest Image Publish', {
+async function triggerPinterestImagePublish(options = {}) {
+  const inputs = {
     mode: 'publish',
-  });
+  };
+  const maxPosts = Number.parseInt(options.maxPosts, 10);
+  if (Number.isFinite(maxPosts) && maxPosts > 0) inputs.max_posts = String(maxPosts);
+  return dispatchWorkflow('pinterest-scraper-pipeline.yml', 'Pinterest Image Publish', inputs);
 }
 
 module.exports = { 

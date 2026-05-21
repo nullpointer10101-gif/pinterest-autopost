@@ -20,6 +20,14 @@ on:
         description: 'Target Pinterest username to scrape in sync mode'
         required: false
         default: ''
+      publish_after_sync:
+        description: 'After sync, immediately publish the first batch'
+        required: false
+        default: 'false'
+      max_posts:
+        description: 'Maximum pins to publish in one run'
+        required: false
+        default: '6'
 
 permissions:
   contents: write
@@ -54,7 +62,7 @@ jobs:
           PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
           PINTEREST_IMAGE_TARGET_BOARD: ${{ secrets.PINTEREST_IMAGE_TARGET_BOARD || secrets.PINTEREST_TARGET_BOARD }}
           PINTEREST_IMAGE_BOARD_NAME: ${{ secrets.PINTEREST_IMAGE_BOARD_NAME || 'pinss' }}
-          PINTEREST_IMAGE_MAX_POSTS_PER_RUN: 6
+          PINTEREST_IMAGE_MAX_POSTS_PER_RUN: ${{ github.event.inputs.max_posts || 6 }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ secrets.AI_MODEL }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
@@ -107,6 +115,26 @@ jobs:
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           APP_PINTEREST_IMAGE_STATE_KEY: ${{ secrets.APP_PINTEREST_IMAGE_STATE_KEY || 'pinterest_image_state_v1' }}
         run: node scripts/pinterest-image-sync.js
+
+      - name: Publish first batch after sync
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_after_sync == 'true' }}
+        env:
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_IMAGE_TARGET_BOARD: ${{ secrets.PINTEREST_IMAGE_TARGET_BOARD || secrets.PINTEREST_TARGET_BOARD }}
+          PINTEREST_IMAGE_BOARD_NAME: ${{ secrets.PINTEREST_IMAGE_BOARD_NAME || 'pinss' }}
+          PINTEREST_IMAGE_MAX_POSTS_PER_RUN: ${{ github.event.inputs.max_posts || 6 }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.AI_API_KEY }}
+          GEMINI_FALLBACK_API_KEY: ${{ secrets.GEMINI_FALLBACK_API_KEY }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL || secrets.BASE_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          APP_PINTEREST_IMAGE_STATE_KEY: ${{ secrets.APP_PINTEREST_IMAGE_STATE_KEY || 'pinterest_image_state_v1' }}
+        run: node scripts/pinterest-image-publish.js
 
       - name: Commit updated Pinterest image queue
         run: |

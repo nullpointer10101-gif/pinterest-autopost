@@ -55,6 +55,7 @@ const MOBILE_VIEWPORT_QUERY = '(max-width: 760px)';
 const MOBILE_WORKING_TABS = new Set(['dashboard', 'studio', 'channels', 'engagements', 'history']);
 const HISTORY_PIN_LIMIT = 10;
 const DASHBOARD_HISTORY_LIMIT = 20;
+const PINTEREST_IMAGE_BOOTSTRAP_POSTS = 6;
 const ENGAGEMENT_LOG_HOURS = 24;
 const ENGAGEMENT_LOG_LIMIT = 50;
 const POSTED_HISTORY_STATUSES = new Set(['success', 'completed', 'posted']);
@@ -2317,7 +2318,15 @@ async function runIgScanNow() {
     const isPinMode = state.currentChannelMode === 'pin';
     const apiPath = isPinMode ? '/api/pinterest/scan' : '/api/ig-tracker/scan';
     const resolvedApiPath = isPinMode ? '/api/pinterest-image/sync' : apiPath;
-    const response = await apiRequest(resolvedApiPath, { method: 'POST' });
+    const response = await apiRequest(resolvedApiPath, {
+      method: 'POST',
+      body: isPinMode
+        ? {
+          publishAfterSync: true,
+          maxPosts: PINTEREST_IMAGE_BOOTSTRAP_POSTS,
+        }
+        : undefined,
+    });
     showToast(response.message || `Independent ${isPinMode ? 'Pinterest image sync' : 'IG repost scan'} dispatched.`, 'success');
     await refreshOverview();
   } catch (error) {
@@ -3400,7 +3409,32 @@ async function handleAddChannel() {
 
   const alreadyAdded = state.channels.some((channel) => getChannelUsername(channel) === normalizedInput);
   if (alreadyAdded) {
-    showToast(`@${normalizedInput} is already in target channels.`, 'info');
+    if (isPinMode) {
+      btn.disabled = true;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i data-lucide="loader-2" class="btn-icon animate-spin"></i><span>Starting...</span>';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      try {
+        const res = await apiRequest('/api/pinterest-image/sync', {
+          method: 'POST',
+          body: {
+            username: normalizedInput,
+            publishAfterSync: true,
+            maxPosts: PINTEREST_IMAGE_BOOTSTRAP_POSTS,
+          },
+        });
+        showToast(res.message || `@${normalizedInput} is already added. Sync and 6-pin publish started.`, 'success');
+        await refreshOverview();
+      } catch (err) {
+        showToast(err.message || `@${normalizedInput} is already in target channels.`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      }
+    } else {
+      showToast(`@${normalizedInput} is already in target channels.`, 'info');
+    }
     input.value = `@${normalizedInput}`;
     input.focus();
     return;
@@ -3418,7 +3452,14 @@ async function handleAddChannel() {
 
     const res = await apiRequest(apiPath, {
       method: 'POST',
-      body: { username: normalizedInput }
+      body: isPinMode
+        ? {
+          username: normalizedInput,
+          bootstrap: true,
+          publishAfterSync: true,
+          maxPosts: PINTEREST_IMAGE_BOOTSTRAP_POSTS,
+        }
+        : { username: normalizedInput }
     });
 
     showToast(res.message || `Channel @${res.username} added.`, 'success');

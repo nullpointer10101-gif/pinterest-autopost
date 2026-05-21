@@ -7,6 +7,37 @@ const stateService = require('../services/pinterestImageStateService');
 const githubService = require('../services/githubService');
 
 const router = express.Router();
+const DEFAULT_BOOTSTRAP_POSTS = 6;
+
+function parseBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'undefined' || value === null || value === '') return fallback;
+  const clean = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(clean)) return true;
+  if (['0', 'false', 'no', 'off'].includes(clean)) return false;
+  return fallback;
+}
+
+function getMaxPosts(req) {
+  const raw = req.body?.maxPosts || req.body?.max_posts || req.query?.maxPosts || req.query?.max_posts;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_BOOTSTRAP_POSTS;
+}
+
+async function dispatchPinterestImageSync(username, options = {}) {
+  const maxPosts = Number.parseInt(options.maxPosts, 10) || DEFAULT_BOOTSTRAP_POSTS;
+  const publishAfterSync = options.publishAfterSync === true;
+  const dispatch = await githubService.triggerPinterestImageSync(username, {
+    publishAfterSync,
+    maxPosts,
+  });
+
+  return {
+    ...dispatch,
+    publishAfterSync,
+    maxPosts,
+  };
+}
 
 router.get('/status', async (req, res) => {
   try {
@@ -41,14 +72,30 @@ router.post('/channels', async (req, res) => {
 
     const result = await channelService.addChannel(rawInput);
     const channels = await channelService.listChannels();
+    const bootstrapEnabled = parseBoolean(req.body?.bootstrap ?? req.query?.bootstrap, true);
+    const bootstrap = bootstrapEnabled
+      ? await dispatchPinterestImageSync(result.channel.username, {
+        publishAfterSync: true,
+        maxPosts: getMaxPosts(req),
+      })
+      : null;
+
+    const baseMessage = result.reactivated
+      ? `Pinterest image source @${result.channel.username} reactivated.`
+      : `Pinterest image source @${result.channel.username} added.`;
+    const bootstrapMessage = bootstrap
+      ? (bootstrap.success
+        ? ` Sync started and will publish up to ${bootstrap.maxPosts} queued pins.`
+        : ` Auto sync did not start: ${bootstrap.error || 'GitHub dispatch failed'}.`)
+      : '';
+
     res.json({
       success: true,
       username: result.channel.username,
       channel: result.channel,
       channels,
-      message: result.reactivated
-        ? `Pinterest image source @${result.channel.username} reactivated.`
-        : `Pinterest image source @${result.channel.username} added.`,
+      bootstrap,
+      message: `${baseMessage}${bootstrapMessage}`,
     });
   } catch (err) {
     if (err.code === 'DUPLICATE_ACCOUNT') {
@@ -105,14 +152,23 @@ router.get('/logs', async (req, res) => {
 router.post('/sync', async (req, res) => {
   try {
     const username = req.body?.username || req.query?.username || '';
-    const dispatch = await githubService.triggerPinterestImageSync(username);
+    const cleanUsername = username ? await channelService.resolveUsername(username) : '';
+    if (username && !cleanUsername) {
+      return res.status(400).json({ success: false, error: 'Enter a valid Pinterest username, profile URL, or pin.it profile invite link.' });
+    }
+
+    const publishAfterSync = parseBoolean(req.body?.publishAfterSync ?? req.body?.publish_after_sync ?? req.query?.publishAfterSync ?? req.query?.publish_after_sync, false);
+    const maxPosts = getMaxPosts(req);
+    const dispatch = await dispatchPinterestImageSync(cleanUsername, { publishAfterSync, maxPosts });
     if (dispatch.success) {
       return res.json({
         success: true,
         queued: true,
+        publishAfterSync,
+        maxPosts,
         message: username
-          ? `Pinterest image sync dispatched for @${channelService.normalizeUsername(username)}.`
-          : 'Pinterest image sync dispatched for all active sources.',
+          ? `Pinterest image sync dispatched for @${cleanUsername}${publishAfterSync ? ` and will publish up to ${maxPosts} pins after sync` : ''}.`
+          : `Pinterest image sync dispatched for all active sources${publishAfterSync ? ` and will publish up to ${maxPosts} pins after sync` : ''}.`,
       });
     }
 
@@ -123,9 +179,12 @@ router.post('/sync', async (req, res) => {
 
     const { exec } = require('child_process');
     const scriptPath = path.join(__dirname, '..', 'scripts', 'pinterest-image-sync.js');
-    const cleanUsername = channelService.normalizeUsername(username);
     const suffix = cleanUsername ? ` --username=${cleanUsername}` : '';
-    exec(`node "${scriptPath}"${suffix}`, (error) => {
+    const publishScriptPath = path.join(__dirname, '..', 'scripts', 'pinterest-image-publish.js');
+    const command = publishAfterSync
+      ? `node "${scriptPath}"${suffix} && node "${publishScriptPath}" --max=${maxPosts}`
+      : `node "${scriptPath}"${suffix}`;
+    exec(command, (error) => {
       if (error) console.error('[Pinterest Image API] Local sync failed:', error);
     });
 
@@ -133,7 +192,11 @@ router.post('/sync', async (req, res) => {
       success: true,
       queued: true,
       local: true,
-      message: 'Pinterest image sync started locally.',
+      publishAfterSync,
+      maxPosts,
+      message: publishAfterSync
+        ? `Pinterest image sync started locally. Publisher will post up to ${maxPosts} pins after sync.`
+        : 'Pinterest image sync started locally.',
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
