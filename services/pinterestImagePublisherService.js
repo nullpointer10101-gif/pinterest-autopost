@@ -17,6 +17,14 @@ function cleanText(value, max) {
   return String(value || '').replace(/\s+/g, ' ').trim().substring(0, max);
 }
 
+function formatCycleEndedAt(date = new Date()) {
+  return date.toLocaleString('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
 function buildHourlySlotKey(date = new Date()) {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -287,15 +295,6 @@ async function publishPin(pin, options = {}) {
     targetBoardName: targetBoard.boardName || '',
     targetBoardId: targetBoard.boardId || '',
   });
-  await stateService.appendLog('publish.completed', `Published Pinterest image pin ${pinId}.`, {
-    pinId,
-    newPinId: result.id,
-    pinUrl: result.url || '',
-    sourceAccount: pin.sourceAccount || '',
-    sourceBoardName: pin.boardName || '',
-    targetBoardName: targetBoard.boardName || '',
-    method: result.method || postingMethod,
-  });
 
   return {
     ...result,
@@ -431,6 +430,21 @@ async function publishNextBatch(options = {}) {
   if (scheduledRun && !publishPlan.explicitSource) {
     await markScheduledPublishSlot(publishPlan, result);
   }
+
+  await stateService.appendLog(
+    'publish.cycle_completed',
+    `Posted ${posted} pin${posted === 1 ? '' : 's'}${sourceAccount ? ` from @${sourceAccount}` : ''}; ended at ${formatCycleEndedAt()}.`,
+    {
+      sourceAccount,
+      attempted: pins.length,
+      posted,
+      failed,
+      deferred,
+      skipped,
+      slotKey: publishPlan.slotKey,
+      endedAt: new Date().toISOString(),
+    }
+  );
 
   return result;
 }

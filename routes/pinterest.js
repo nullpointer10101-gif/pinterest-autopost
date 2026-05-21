@@ -384,7 +384,9 @@ router.delete('/channels', async (req, res) => {
 // ─── Logs ─────────────────────────────────────────────────────────────────────
 router.get('/logs', async (req, res) => {
   try {
-    const rawLogs = await pinterestImageStateService.getLogs(80);
+    const rawLogs = typeof pinterestImageStateService.getDisplayLogs === 'function'
+      ? await pinterestImageStateService.getDisplayLogs(80)
+      : await pinterestImageStateService.getLogs(80);
     const logs = rawLogs.map((entry) => ({
       id: entry.id,
       when: entry.createdAt,

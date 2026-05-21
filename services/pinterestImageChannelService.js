@@ -113,8 +113,17 @@ function shouldRefreshProfilePic(channel = {}, nowMs = Date.now(), force = false
 function getPostedCountsBySource(state = {}) {
   const counts = {};
   const posted = state.posted && typeof state.posted === 'object' ? state.posted : {};
-  for (const record of Object.values(posted)) {
-    const source = normalizeUsername(record?.sourceAccount || '');
+  const pins = state.pins && typeof state.pins === 'object' ? state.pins : {};
+
+  for (const [pinId, record] of Object.entries(posted)) {
+    const source = normalizeUsername(
+      record?.sourceAccount
+      || record?.username
+      || record?.sourceUsername
+      || pins[pinId]?.sourceAccount
+      || pins[pinId]?.username
+      || ''
+    );
     if (!source) continue;
     counts[source] = (counts[source] || 0) + 1;
   }

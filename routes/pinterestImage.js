@@ -201,7 +201,9 @@ router.get('/queue', async (req, res) => {
 
 router.get('/logs', async (req, res) => {
   try {
-    const logs = await stateService.getLogs(100);
+    const logs = typeof stateService.getDisplayLogs === 'function'
+      ? await stateService.getDisplayLogs(100)
+      : await stateService.getLogs(100);
     res.json({ success: true, logs });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

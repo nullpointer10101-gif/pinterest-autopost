@@ -90,11 +90,83 @@ async function getLogs(limit = 80) {
   return Array.isArray(logs) ? logs.slice(0, max) : [];
 }
 
+function formatLogCycleTime(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return 'unknown time';
+  return date.toLocaleString('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
+function summarizePublishCompletedGroup(group = []) {
+  const newest = group[0] || {};
+  const sourceAccount = String(newest.meta?.sourceAccount || '').trim();
+  const posted = group.length;
+  return {
+    id: `pinimgcycle_${newest.id || newest.createdAt || Date.now()}`,
+    type: 'publish.cycle_completed',
+    message: `Posted ${posted} pin${posted === 1 ? '' : 's'}${sourceAccount ? ` from @${sourceAccount}` : ''}; ended at ${formatLogCycleTime(newest.createdAt)}.`,
+    meta: {
+      sourceAccount,
+      posted,
+      endedAt: newest.createdAt || new Date().toISOString(),
+      collapsedFrom: 'publish.completed',
+    },
+    createdAt: newest.createdAt || new Date().toISOString(),
+  };
+}
+
+function getDisplayLogsFromState(state = {}, limit = 80) {
+  const logs = Array.isArray(state.logs) ? state.logs : [];
+  const max = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 80));
+  const displayLogs = [];
+
+  for (let i = 0; i < logs.length && displayLogs.length < max; i += 1) {
+    const log = logs[i];
+    if (log?.type !== 'publish.completed') {
+      displayLogs.push(log);
+      continue;
+    }
+
+    const group = [log];
+    const sourceAccount = String(log.meta?.sourceAccount || '').trim();
+    const startedAt = new Date(log.createdAt || 0).getTime();
+
+    while (i + 1 < logs.length) {
+      const next = logs[i + 1];
+      if (next?.type !== 'publish.completed') break;
+
+      const nextSource = String(next.meta?.sourceAccount || '').trim();
+      const nextAt = new Date(next.createdAt || 0).getTime();
+      const sameSource = nextSource === sourceAccount;
+      const withinCycle = Number.isFinite(startedAt)
+        && Number.isFinite(nextAt)
+        && Math.abs(startedAt - nextAt) <= 2 * 60 * 60 * 1000;
+
+      if (!sameSource || !withinCycle) break;
+
+      group.push(next);
+      i += 1;
+    }
+
+    displayLogs.push(summarizePublishCompletedGroup(group));
+  }
+
+  return displayLogs.slice(0, max);
+}
+
+async function getDisplayLogs(limit = 80) {
+  const state = await storageService.loadState();
+  return getDisplayLogsFromState(state, limit);
+}
+
 async function getStats() {
   const state = await storageService.loadState();
   const pins = state.pins || {};
   const posted = state.posted || {};
-  const logs = Array.isArray(state.logs) ? state.logs.slice(0, 20) : [];
+  const logs = getDisplayLogsFromState(state, 20);
   return {
     scrapedPins: Object.keys(pins).length,
     postedPins: Object.keys(posted).length,
@@ -110,6 +182,7 @@ module.exports = {
   getPostedByPinId,
   markPosted,
   getLogs,
+  getDisplayLogs,
   appendLog,
   getStats,
 };
