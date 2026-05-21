@@ -63,6 +63,62 @@ router.get('/channels', async (req, res) => {
   }
 });
 
+router.get('/profile-pic', async (req, res) => {
+  try {
+    const rawInput = req.query?.username || req.query?.url || '';
+    if (!rawInput) {
+      return res.status(400).json({ success: false, error: 'username is required' });
+    }
+
+    const result = await channelService.ensureChannelProfilePic(rawInput, {
+      force: parseBoolean(req.query?.refresh, false),
+    });
+
+    if (!result.profilePicUrl) {
+      return res.status(404).json({ success: false, username: result.username, error: 'Pinterest profile picture unavailable' });
+    }
+
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/avatar', async (req, res) => {
+  try {
+    const rawInput = req.query?.username || req.query?.url || '';
+    if (!rawInput) {
+      return res.status(400).send('username is required');
+    }
+
+    const result = await channelService.ensureChannelProfilePic(rawInput, {
+      force: parseBoolean(req.query?.refresh, false),
+    });
+    if (!result.profilePicUrl) {
+      return res.status(404).send('Pinterest profile picture unavailable');
+    }
+
+    const imageResponse = await fetch(result.profilePicUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        Referer: `https://www.pinterest.com/${result.username}/`,
+      },
+    });
+    if (!imageResponse.ok) {
+      return res.status(502).send(`Pinterest avatar fetch failed: ${imageResponse.status}`);
+    }
+
+    const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+    const arrayBuffer = await imageResponse.arrayBuffer();
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(arrayBuffer));
+  } catch (err) {
+    res.status(500).send(err.message || 'Pinterest avatar failed');
+  }
+});
+
 router.post('/channels', async (req, res) => {
   try {
     const rawInput = req.body?.username || req.body?.url || '';

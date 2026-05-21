@@ -3049,7 +3049,9 @@ function getAvatarCandidates(profilePicUrl, username = '') {
   const clean = String(profilePicUrl || '').trim();
   const cleanUsername = normalizeUsernameValue(username);
   const avatarEndpoint = cleanUsername
-    ? `/api/ig-tracker/avatar?username=${encodeURIComponent(cleanUsername)}`
+    ? (state.currentChannelMode === 'pin'
+      ? `/api/pinterest-image/avatar?username=${encodeURIComponent(cleanUsername)}`
+      : `/api/ig-tracker/avatar?username=${encodeURIComponent(cleanUsername)}`)
     : '';
 
   return Array.from(new Set([
@@ -3213,6 +3215,10 @@ function renderChannelsList() {
       : '';
     const lastPost = typeof ch === 'object' && ch.lastSuccessfulPostAt ? `Last post ${formatTimeAgo(ch.lastSuccessfulPostAt)}` : '';
     const lastQueued = typeof ch === 'object' && ch.lastQueuedAt ? `Last queued ${formatTimeAgo(ch.lastQueuedAt)}` : '';
+    const postedPins = Math.max(0, Number.parseInt(ch?.postedPins ?? ch?.postedCount ?? '0', 10) || 0);
+    const postedLine = isPinMode
+      ? `${postedPins.toLocaleString()} pin${postedPins === 1 ? '' : 's'} posted from this account`
+      : '';
     const lastError = typeof ch === 'object'
       ? String(ch.validation?.lastError || ch.lastError || '')
       : '';
@@ -3235,6 +3241,7 @@ function renderChannelsList() {
           <div class="channel-card-copy">
             <div class="item-title channel-username">@${escHtml(username)}</div>
             <div class="item-meta">${isPinMode ? 'Pinterest image source' : 'Target channel'} - ${escHtml(statusLabel)}</div>
+            ${postedLine ? `<div class="item-meta channel-posted-count">${escHtml(postedLine)}</div>` : ''}
             <div class="item-meta">${escHtml(metaLine)}</div>
             ${errorLine}
           </div>
@@ -3327,8 +3334,22 @@ async function refreshChannelAvatar(username, options = {}) {
   if (avatarEl) avatarEl.dataset.avatarState = 'loading';
 
   if (state.currentChannelMode === 'pin') {
-    if (avatarEl) avatarEl.dataset.avatarState = 'missing';
-    return false;
+    try {
+      const query = new URLSearchParams({ username: cleanUsername });
+      if (force) query.set('refresh', '1');
+      const res = await apiRequest(`/api/pinterest-image/profile-pic?${query.toString()}`);
+
+      if (res.profilePicUrl) {
+        applyChannelAvatar(res.username || cleanUsername, res.profilePicUrl);
+        return true;
+      }
+
+      if (avatarEl) avatarEl.dataset.avatarState = 'missing';
+      return false;
+    } catch {
+      if (avatarEl) avatarEl.dataset.avatarState = 'missing';
+      return false;
+    }
   }
 
   try {

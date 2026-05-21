@@ -8988,6 +8988,11 @@ body {
   overflow-wrap: anywhere;
 }
 
+.channel-posted-count {
+  color: var(--text-strong);
+  font-weight: 800;
+}
+
 .channel-card-actions {
   display: flex;
   align-items: center;
