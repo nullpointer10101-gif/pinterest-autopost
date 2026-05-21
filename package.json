@@ -9,9 +9,12 @@
     "dev": "nodemon server.js",
     "automation:hourly": "node scripts/run-hourly-automation.js",
     "automation:ig-repost": "node scripts/run-ig-repost-pipeline.js",
-    "pinterest:publish": "node scripts/run-pinterest-pipeline.js",
-    "pinterest:sync": "node scripts/sync-pinterest-queue.js",
-    "pinterest:status": "node scripts/check-pinterest-status.js"
+    "pinterest:publish": "node scripts/pinterest-image-publish.js",
+    "pinterest:sync": "node scripts/pinterest-image-sync.js",
+    "pinterest:status": "node scripts/pinterest-image-status.js",
+    "pinterest-image:publish": "node scripts/pinterest-image-publish.js",
+    "pinterest-image:sync": "node scripts/pinterest-image-sync.js",
+    "pinterest-image:status": "node scripts/pinterest-image-status.js"
   },
   "dependencies": {
     "axios": "^1.6.2",

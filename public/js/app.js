@@ -6,6 +6,7 @@ const state = {
   history: [],
   channels: [],
   igStatus: null,
+  pinterestImageStatus: null,
   engagements: [],
   engagementSummary: null,
   lastExtracted: null,
@@ -98,6 +99,7 @@ const PINTEREST_LIMITS = {
 
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
+  updateChannelModeUi();
   mountStudioPoster();
   initVisualSystem();
   initPerformanceMode();
@@ -178,7 +180,7 @@ function bindEvents() {
       const desc = byId('target-channels-desc');
       if (desc) {
         desc.textContent = state.currentChannelMode === 'pin' 
-          ? 'Add Pinterest sources for automated scraping.' 
+          ? 'Add Pinterest profiles to scrape image pins and repost them to your pinss board.' 
           : 'Add Instagram sources for automated reel-to-pin missions.';
       }
       const input = byId('new-channel-input');
@@ -187,6 +189,9 @@ function bindEvents() {
           ? '@username or https://www.pinterest.com/profile'
           : '@username or https://www.instagram.com/profile';
       }
+      const scanLabel = byId('channels-scan-now-btn')?.querySelector('span');
+      if (scanLabel) scanLabel.textContent = state.currentChannelMode === 'pin' ? 'Run Pin Sync' : 'Run IG Scan';
+      updateChannelModeUi();
       refreshChannels();
     });
   });
@@ -597,13 +602,14 @@ async function refreshAll(options = {}) {
 
 async function refreshOverview() {
   // â”€â”€ Each fetch is isolated so one failure cannot blank the whole dashboard â”€â”€
-  const [queueResp, historyResp, pinterestResp, systemStatus, trackerStatusResp] =
+  const [queueResp, historyResp, pinterestResp, systemStatus, trackerStatusResp, pinterestImageResp] =
     await Promise.all([
       apiRequest('/api/queue').catch(err => { console.warn('[Dashboard] Queue fetch failed:', err.message); return null; }),
       apiRequest(getHistoryApiPath()).catch(err => { console.warn('[Dashboard] History fetch failed:', err.message); return null; }),
       apiRequest('/api/pinterest/status').catch(err => { console.warn('[Dashboard] Pinterest status failed:', err.message); return {}; }),
       apiRequest('/api/system/status').catch(err => { console.warn('[Dashboard] System status failed:', err.message); return {}; }),
       apiRequest('/api/ig-tracker/status').catch(() => null),
+      apiRequest('/api/pinterest-image/status').catch(() => null),
     ]);
 
   // Only update state if the fetch succeeded (non-null response)
@@ -616,6 +622,7 @@ async function refreshOverview() {
   }
 
   state.igStatus = trackerStatusResp?.status || null;
+  state.pinterestImageStatus = pinterestImageResp?.success ? pinterestImageResp : state.pinterestImageStatus;
 
   // Always update channel count from tracker status (not tab-dependent)
   if (trackerStatusResp?.status) {
@@ -626,7 +633,7 @@ async function refreshOverview() {
     setText('stat-targets', String(chCount));
     setText('rail-nav-channels-badge', String(chCount));
     // Sync state.channels so channel tab is pre-populated
-    if (Array.isArray(trackerStatusResp.status.channels)) {
+    if (state.currentChannelMode !== 'pin' && Array.isArray(trackerStatusResp.status.channels)) {
       state.channels = trackerStatusResp.status.channels;
     }
   }
@@ -635,6 +642,7 @@ async function refreshOverview() {
   updateConnectionBar(pinterestResp || {}, systemStatus || {});
   updateHealthDashboard(pinterestResp || {}, systemStatus || {});
   updateIgPipelineUI();
+  updatePinterestImageChannelUI();
   renderMiniQueue();
 
   if (!isMobileViewport()) {
@@ -918,9 +926,11 @@ function updateIgPipelineUI(status = state.igStatus) {
   setText('ig-dashboard-ready', String(ready));
   setText('ig-dashboard-posts', String(totalPosts));
   setText('ig-dashboard-failed', String(failed));
-  setText('channels-status-accounts', String(channelCount));
-  setText('channels-status-ready', String(ready));
-  setText('channels-status-failed', String(failed));
+  if (state.currentChannelMode !== 'pin') {
+    setText('channels-status-accounts', String(channelCount));
+    setText('channels-status-ready', String(ready));
+    setText('channels-status-failed', String(failed));
+  }
 
   const lastRun = scheduler.lastRunCompletedAt || scheduler.lastRunStartedAt || scheduler.lastDispatchAt;
   setText('ig-dashboard-last-run', lastRun ? `Last activity ${formatTimeAgo(lastRun)}` : 'No runs yet');
@@ -966,6 +976,55 @@ function updateIgPipelineUI(status = state.igStatus) {
       </div>
     `;
   }).join('');
+}
+
+function updatePinterestImageChannelUI(status = state.pinterestImageStatus) {
+  if (state.currentChannelMode !== 'pin') return;
+
+  const channels = Array.isArray(status?.channels) ? status.channels : state.channels;
+  const channelCount = channels.length || 0;
+  const queueTotal = Math.max(0, Number(status?.queue?.total || 0));
+  const failed = Array.isArray(status?.recentLogs)
+    ? status.recentLogs.filter((log) => String(log?.type || '').includes('failed')).length
+    : 0;
+
+  setText('channels-status-accounts', String(channelCount));
+  setText('channels-status-ready', String(queueTotal));
+  setText('channels-status-failed', String(failed));
+  setText('hero-channel-count', String(channelCount));
+  setText('stat-targets', String(channelCount));
+  setText('rail-nav-channels-badge', String(channelCount));
+}
+
+function updateChannelModeUi() {
+  const isPinMode = state.currentChannelMode === 'pin';
+  setText(
+    'target-channels-desc',
+    isPinMode
+      ? 'Add Pinterest profiles to scrape image pins and repost them to your pinss board.'
+      : 'Add sources for automated reel-to-pin missions.'
+  );
+  setText('channel-add-label', isPinMode ? 'Add Pinterest Target Channel' : 'Add Instagram Target Channel');
+  setText('channel-monitor-title', isPinMode ? 'Pinterest Image Automation' : 'Independent Repost Monitor');
+  setText(
+    'channel-monitor-copy',
+    isPinMode
+      ? 'Scrapes image pins from target Pinterest accounts, queues new pins, and publishes them with bridge links.'
+      : 'New channels validate instantly; scheduled scans continue separately from FirePost.'
+  );
+  setText('active-channels-title', isPinMode ? 'Pinterest Target Channels' : 'Active Channels');
+
+  const input = byId('new-channel-input');
+  if (input) {
+    input.placeholder = isPinMode
+      ? '@username or https://www.pinterest.com/profile'
+      : '@username or https://www.instagram.com/profile';
+  }
+
+  const scanLabel = byId('channels-scan-now-btn')?.querySelector('span');
+  if (scanLabel) scanLabel.textContent = isPinMode ? 'Run Pin Sync' : 'Run IG Scan';
+
+  updatePinterestImageChannelUI();
 }
 
 function syncCreatorUrlToStudio() {
@@ -2243,8 +2302,9 @@ async function runIgScanNow() {
   try {
     const isPinMode = state.currentChannelMode === 'pin';
     const apiPath = isPinMode ? '/api/pinterest/scan' : '/api/ig-tracker/scan';
-    const response = await apiRequest(apiPath, { method: 'POST' });
-    showToast(response.message || `Independent ${isPinMode ? 'Pinterest' : 'IG'} repost scan dispatched.`, 'success');
+    const resolvedApiPath = isPinMode ? '/api/pinterest-image/sync' : apiPath;
+    const response = await apiRequest(resolvedApiPath, { method: 'POST' });
+    showToast(response.message || `Independent ${isPinMode ? 'Pinterest image sync' : 'IG repost scan'} dispatched.`, 'success');
     await refreshOverview();
   } catch (error) {
     showToast(error.message || 'Failed to dispatch scan.', 'error');
@@ -3069,10 +3129,19 @@ async function refreshChannels() {
 
   try {
     const apiPath = state.currentChannelMode === 'pin' 
-      ? '/api/pinterest/channels' 
+      ? '/api/pinterest-image/channels' 
       : '/api/ig-tracker/channels';
     const res = await apiRequest(apiPath);
     state.channels = Array.isArray(res.channels) ? res.channels : [];
+    if (state.currentChannelMode === 'pin') {
+      state.pinterestImageStatus = {
+        ...(state.pinterestImageStatus || {}),
+        success: true,
+        channels: state.channels,
+        queue: res.queue || state.pinterestImageStatus?.queue || {},
+      };
+    }
+    updateChannelModeUi();
     renderChannelsList();
   } catch (err) {
     list.innerHTML = `<div class="pulse-item error-text">Failed to load channels: ${err.message}</div>`;
@@ -3086,20 +3155,28 @@ function renderChannelsList() {
   if (state.channels.length === 0) {
     list.innerHTML = '<div class="pulse-item">No target channels added yet.</div>';
     setText('hero-channel-count', '0');
+    updateChannelModeUi();
     return;
   }
 
   list.innerHTML = state.channels.map(ch => {
+    const isPinMode = state.currentChannelMode === 'pin';
     const username = getChannelUsername(ch);
     if (!username) return '';
     const pic = typeof ch === 'object' && ch.profilePicUrl ? ch.profilePicUrl : '';
     const channelStatus = typeof ch === 'object' ? String(ch.status || 'active') : 'active';
     const statusTone = getChannelStatusTone(channelStatus);
     const statusLabel = formatChannelStatusLabel(channelStatus);
-    const lastScan = typeof ch === 'object' && ch.lastScannedAt ? `Last scan ${formatTimeAgo(ch.lastScannedAt)}` : '';
+    const lastScan = typeof ch === 'object' && ch.lastScannedAt
+      ? `${isPinMode ? 'Last sync' : 'Last scan'} ${formatTimeAgo(ch.lastScannedAt)}`
+      : '';
     const lastPost = typeof ch === 'object' && ch.lastSuccessfulPostAt ? `Last post ${formatTimeAgo(ch.lastSuccessfulPostAt)}` : '';
-    const lastError = typeof ch === 'object' && ch.validation?.lastError ? String(ch.validation.lastError) : '';
-    const metaLine = [lastPost, lastScan].filter(Boolean).join(' - ') || 'Awaiting next scan';
+    const lastQueued = typeof ch === 'object' && ch.lastQueuedAt ? `Last queued ${formatTimeAgo(ch.lastQueuedAt)}` : '';
+    const lastError = typeof ch === 'object'
+      ? String(ch.validation?.lastError || ch.lastError || '')
+      : '';
+    const metaLine = (isPinMode ? [lastQueued, lastScan] : [lastPost, lastScan]).filter(Boolean).join(' - ')
+      || (isPinMode ? 'Ready for next pin sync' : 'Awaiting next scan');
     const errorLine = lastError ? `<div class="item-meta error-text">${escHtml(lastError)}</div>` : '';
     const avatarLabel = (username.charAt(0) || '@').toUpperCase();
     const avatarImageHtml = channelAvatarImageHtml(username, pic);
@@ -3116,7 +3193,7 @@ function renderChannelsList() {
           ${avatarHtml}
           <div class="channel-card-copy">
             <div class="item-title channel-username">@${escHtml(username)}</div>
-            <div class="item-meta">Target channel - ${escHtml(statusLabel)}</div>
+            <div class="item-meta">${isPinMode ? 'Pinterest image source' : 'Target channel'} - ${escHtml(statusLabel)}</div>
             <div class="item-meta">${escHtml(metaLine)}</div>
             ${errorLine}
           </div>
@@ -3304,7 +3381,7 @@ async function handleAddChannel() {
 
   try {
     const apiPath = state.currentChannelMode === 'pin' 
-      ? '/api/pinterest/channels' 
+      ? '/api/pinterest-image/channels' 
       : '/api/ig-tracker/channels';
 
     const res = await apiRequest(apiPath, {
@@ -3330,7 +3407,7 @@ async function handleRemoveChannel(username) {
 
   try {
     const apiPath = state.currentChannelMode === 'pin' 
-      ? '/api/pinterest/channels' 
+      ? '/api/pinterest-image/channels' 
       : '/api/ig-tracker/channels';
 
     await apiRequest(apiPath, {

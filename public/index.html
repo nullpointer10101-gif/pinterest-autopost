@@ -502,7 +502,7 @@
                     </div>
 
                     <div class="field-wrap">
-                        <label for="new-channel-input">Add New Channel</label>
+                        <label id="channel-add-label" for="new-channel-input">Add New Channel</label>
                         <div class="inline-field">
                             <input type="text" id="new-channel-input" placeholder="@username or https://www.instagram.com/profile">
                             <button id="add-channel-btn" class="btn btn-primary" type="button">
@@ -514,8 +514,8 @@
 
                     <div class="channel-pipeline-panel">
                         <div>
-                            <div class="sub-title">Independent Repost Monitor</div>
-                            <p class="muted-text">New channels validate instantly; scheduled scans continue separately from FirePost.</p>
+                            <div id="channel-monitor-title" class="sub-title">Independent Repost Monitor</div>
+                            <p id="channel-monitor-copy" class="muted-text">New channels validate instantly; scheduled scans continue separately from FirePost.</p>
                         </div>
                         <div class="channel-pipeline-actions">
                             <div class="pipeline-mini-stats">
@@ -530,7 +530,7 @@
                         </div>
                     </div>
 
-                    <div class="sub-title">Active Channels</div>
+                    <div id="active-channels-title" class="sub-title">Active Channels</div>
                     <div id="channels-list" class="list channel-list-grid">
                         <div class="pulse-item">Loading channels...</div>
                     </div>

@@ -13,6 +13,7 @@ const automationRoutes = require('./automation');
 const autopostRoutes = require('./autopost');
 const igTrackerRoutes = require('./igTrackerApi');
 const studioRoutes = require('./studio');
+const pinterestImageRoutes = require('./pinterestImage');
 
 // Mount sub-routers - System first for priority
 router.use('/system', systemRoutes);
@@ -30,6 +31,7 @@ router.post('/system/workflows', async (req, res) => {
 router.use('/', authRoutes);
 router.use('/', contentRoutes);
 router.use('/pinterest', pinterestRoutes);
+router.use('/pinterest-image', pinterestImageRoutes);
 router.use('/', historyRoutes);
 router.use('/autopost', autopostRoutes);
 router.use('/studio', studioRoutes);

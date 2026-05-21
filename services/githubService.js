@@ -89,9 +89,26 @@ async function triggerInstantEngagement(options = {}) {
   });
 }
 
+async function triggerPinterestImageSync(username = '') {
+  const inputs = {
+    mode: 'sync',
+  };
+  const cleanUsername = String(username || '').trim();
+  if (cleanUsername) inputs.username = cleanUsername;
+  return dispatchWorkflow('pinterest-scraper-pipeline.yml', 'Pinterest Image Sync', inputs);
+}
+
+async function triggerPinterestImagePublish() {
+  return dispatchWorkflow('pinterest-scraper-pipeline.yml', 'Pinterest Image Publish', {
+    mode: 'publish',
+  });
+}
+
 module.exports = { 
   triggerFirePost, 
   triggerAutomation, 
   triggerInstantMission, 
-  triggerInstantEngagement
+  triggerInstantEngagement,
+  triggerPinterestImageSync,
+  triggerPinterestImagePublish,
 };

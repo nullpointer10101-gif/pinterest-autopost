@@ -1,10 +1,10 @@
-name: Pinterest Repost Pipeline
+name: Pinterest Image Automation
 
 on:
   schedule:
-    # ── Publisher: runs every hour and posts up to 6 pins ──────────────────
+    # Publisher: runs every hour and posts queued image pins.
     - cron: '0 * * * *'
-    # ── Ingestor: runs once a week (Sunday midnight UTC) to refill the queue ─
+    # Sync: runs once a week (Sunday midnight UTC) to refill the image queue.
     - cron: '0 0 * * 0'
   workflow_dispatch:
     inputs:
@@ -17,7 +17,7 @@ on:
           - publish
           - sync
       username:
-        description: 'Target Pinterest Username to scrape (sync mode only, leave blank for all)'
+        description: 'Target Pinterest username to scrape in sync mode'
         required: false
         default: ''
 
@@ -28,14 +28,10 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ────────────────────────────────────────────────────────────────────────────
-  # JOB 1: PUBLISHER — Runs every hour, pops 6 pins from the queue and posts them
-  # ────────────────────────────────────────────────────────────────────────────
   publisher:
-    name: "Hourly Publisher (6 pins/hr)"
+    name: Pinterest Image Publisher
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Run this job on the hourly cron OR on manual dispatch in "publish" mode
     if: |
       (github.event_name == 'schedule' && github.event.schedule == '0 * * * *') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'publish')
@@ -53,31 +49,34 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Pinterest Publisher (pop 6 pins from queue)
+      - name: Publish queued Pinterest image pins
         env:
-          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
-          PINTEREST_TARGET_BOARD: ${{ secrets.PINTEREST_TARGET_BOARD }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          BASE_URL: ${{ secrets.BASE_URL }}
-        run: node scripts/run-pinterest-pipeline.js
+          PINTEREST_IMAGE_TARGET_BOARD: ${{ secrets.PINTEREST_IMAGE_TARGET_BOARD || secrets.PINTEREST_TARGET_BOARD }}
+          PINTEREST_IMAGE_BOARD_NAME: ${{ secrets.PINTEREST_IMAGE_BOARD_NAME || 'pinss' }}
+          PINTEREST_IMAGE_MAX_POSTS_PER_RUN: 6
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.AI_API_KEY }}
+          GEMINI_FALLBACK_API_KEY: ${{ secrets.GEMINI_FALLBACK_API_KEY }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL || secrets.BASE_URL }}
+        run: node scripts/pinterest-image-publish.js
 
-      - name: Commit Updated State (queue + reposted log)
+      - name: Commit updated Pinterest image state
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add data/pinterest_queue.json data/pinterest_reposted.json || true
-          git diff --quiet && git diff --staged --quiet || git commit -m "chore: auto-update Pinterest queue and repost log [skip ci]"
+          git add data/pinterest-image-queue.json data/pinterest-image-posted.json data/pinterest-image-logs.json || true
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update Pinterest image publish state [skip ci]"
           git push
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # JOB 2: INGESTOR — Runs once a week to refill the queue from target accounts
-  # ────────────────────────────────────────────────────────────────────────────
-  ingestor:
-    name: "Weekly Ingestor (fill queue from target accounts)"
+  sync:
+    name: Pinterest Image Sync
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Run this job on the weekly cron OR on manual dispatch in "sync" mode
     if: |
       (github.event_name == 'schedule' && github.event.schedule == '0 0 * * 0') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'sync')
@@ -95,17 +94,18 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Queue Ingestor (scrape up to 2000 pins)
+      - name: Sync Pinterest image sources
         env:
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
-          PINTEREST_TARGET_USERNAME: ${{ github.event.inputs.username }}
-          BASE_URL: ${{ secrets.BASE_URL }}
-        run: node scripts/sync-pinterest-queue.js
+          PINTEREST_IMAGE_USERNAME: ${{ github.event.inputs.username }}
+          PINTEREST_IMAGE_SCRAPE_LIMIT: 2000
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL || secrets.BASE_URL }}
+        run: node scripts/pinterest-image-sync.js
 
-      - name: Commit Filled Queue to Repository
+      - name: Commit updated Pinterest image queue
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add data/pinterest_queue.json data/pinterest_pins.json || true
-          git diff --quiet && git diff --staged --quiet || git commit -m "chore: refill Pinterest queue from target accounts [skip ci]"
+          git add data/pinterest-image-accounts.json data/pinterest-image-queue.json data/pinterest-image-pins.json data/pinterest-image-logs.json || true
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: sync Pinterest image sources [skip ci]"
           git push

@@ -240,7 +240,9 @@ router.post('/unlink', async (req, res) => {
   }
 });
 
-const pinterestTargetService = require('../services/pinterestTargetService');
+const pinterestImageChannelService = require('../services/pinterestImageChannelService');
+const pinterestImageQueueService = require('../services/pinterestImageQueueService');
+const pinterestImageStateService = require('../services/pinterestImageStateService');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -327,9 +329,10 @@ router.get('/resolve-url', async (req, res) => {
 // ─── Target Channels Management ───────────────────────────────────────────────
 router.get('/channels', async (req, res) => {
   try {
-    const channels = await pinterestTargetService.listChannels();
+    const channels = await pinterestImageChannelService.listChannels();
+    const queue = await pinterestImageQueueService.getQueueStats();
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.json({ success: true, channels });
+    res.json({ success: true, channels, queue });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -341,13 +344,16 @@ router.post('/channels', async (req, res) => {
     if (!rawInput) {
       return res.status(400).json({ success: false, error: 'username is required' });
     }
-    const account = await pinterestTargetService.addChannel(rawInput);
-    const channels = await pinterestTargetService.listChannels();
+    const result = await pinterestImageChannelService.addChannel(rawInput);
+    const account = result.channel;
+    const channels = await pinterestImageChannelService.listChannels();
     res.json({
       success: true,
       username: account.username,
       channels,
-      message: `Pinterest channel @${account.username} added. Scraper will process it on the next run.`,
+      message: result.reactivated
+        ? `Pinterest image source @${account.username} reactivated.`
+        : `Pinterest image source @${account.username} added. Scraper will process it on the next sync.`,
     });
   } catch (err) {
     if (err.code === 'DUPLICATE_ACCOUNT') {
@@ -363,8 +369,13 @@ router.delete('/channels', async (req, res) => {
     if (!username) {
       return res.status(400).json({ success: false, error: 'username is required' });
     }
-    const channels = await pinterestTargetService.removeChannel(username);
-    res.json({ success: true, channels });
+    const result = await pinterestImageChannelService.removeChannel(username);
+    res.json({
+      success: true,
+      channels: result.channels,
+      removedQueuedPins: result.removedQueuedPins,
+      message: `Pinterest image source @${result.username} removed${result.removedQueuedPins ? ` with ${result.removedQueuedPins} queued pin(s)` : ''}.`,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -373,20 +384,17 @@ router.delete('/channels', async (req, res) => {
 // ─── Logs ─────────────────────────────────────────────────────────────────────
 router.get('/logs', async (req, res) => {
   try {
-    const pinsFile = path.join(__dirname, '..', 'data', 'pinterest_pins.json');
-    let logs = [];
-    if (fs.existsSync(pinsFile)) {
-      const pins = JSON.parse(fs.readFileSync(pinsFile, 'utf8'));
-      logs = pins.slice(0, 50).map(pin => ({
-        id: pin.id || Date.now(),
-        when: pin.scrapedAt || new Date().toISOString(),
-        action: 'SCRAPED',
-        url: pin.pinUrl || '',
-        pinTitle: pin.pinId,
-        boardName: pin.authorUsername || 'unknown',
-        status: 'success'
-      }));
-    }
+    const rawLogs = await pinterestImageStateService.getLogs(80);
+    const logs = rawLogs.map((entry) => ({
+      id: entry.id,
+      when: entry.createdAt,
+      action: entry.type,
+      url: entry.meta?.pinUrl || entry.meta?.bridgeLink || '',
+      pinTitle: entry.meta?.pinId || entry.message,
+      boardName: entry.meta?.username || entry.meta?.sourceAccount || 'pinterest_image',
+      status: entry.type.includes('failed') ? 'error' : 'success',
+      message: entry.message,
+    }));
     res.json({ success: true, logs });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -397,13 +405,68 @@ router.get('/logs', async (req, res) => {
 router.post('/scan', async (req, res) => {
   try {
     const { exec } = require('child_process');
-    const scriptPath = path.join(__dirname, '..', 'scripts', 'sync-pinterest-queue.js');
-    exec(`node "${scriptPath}"`, (error, stdout, stderr) => {
-      if (error) {
-        console.error('Pinterest scan error:', error);
-      }
+    const username = req.body?.username || req.query?.username || '';
+    const dispatch = await githubService.triggerPinterestImageSync(username);
+    if (dispatch.success) {
+      return res.json({
+        success: true,
+        queued: true,
+        message: username
+          ? `Pinterest image sync dispatched for @${pinterestImageChannelService.normalizeUsername(username)}.`
+          : 'Pinterest image sync dispatched for all active sources.',
+      });
+    }
+
+    const isServerless = !!(process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    if (isServerless) {
+      return res.status(502).json({
+        success: false,
+        error: `GitHub dispatch failed: ${dispatch.error || 'token missing'}`,
+      });
+    }
+
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'pinterest-image-sync.js');
+    const cleanUsername = pinterestImageChannelService.normalizeUsername(username);
+    const suffix = cleanUsername ? ` --username=${cleanUsername}` : '';
+    exec(`node "${scriptPath}"${suffix}`, (error) => {
+      if (error) console.error('Pinterest image sync error:', error);
     });
-    res.json({ success: true, message: 'Pinterest queue scan dispatched.' });
+    res.json({
+      success: true,
+      queued: true,
+      local: true,
+      message: 'Pinterest image sync started locally.',
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/image/status', async (req, res) => {
+  try {
+    const [channels, queue, state] = await Promise.all([
+      pinterestImageChannelService.listChannels(),
+      pinterestImageQueueService.getQueueStats(),
+      pinterestImageStateService.getStats(),
+    ]);
+    res.json({
+      success: true,
+      channels,
+      queue,
+      ...state,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/image/publish', async (req, res) => {
+  try {
+    const dispatch = await githubService.triggerPinterestImagePublish();
+    if (!dispatch.success) {
+      return res.status(502).json({ success: false, error: dispatch.error || 'GitHub dispatch failed' });
+    }
+    res.json({ success: true, queued: true, message: 'Pinterest image publisher dispatched.' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const pinterestStateService = require('../services/pinterestStateService');
+const pinterestImageStateService = require('../services/pinterestImageStateService');
 const leadStorageService = require('../services/leadStorageService');
 
 // Serve the bridge landing page
 router.get('/:pinId', async (req, res) => {
   const { pinId } = req.params;
-  const pin = await pinterestStateService.getPinById(pinId);
+  const pin = await pinterestImageStateService.getPinById(pinId)
+    || await pinterestStateService.getPinById(pinId);
 
   if (!pin) {
     return res.status(404).send('Pin not found');
@@ -217,12 +219,13 @@ router.post('/api/leads', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Email and Pin ID are required' });
   }
 
-  const pin = await pinterestStateService.getPinById(pinId);
-  if (!pin) {
+  const imagePin = await pinterestImageStateService.getPinById(pinId)
+    || await pinterestStateService.getPinById(pinId);
+  if (!imagePin) {
     return res.status(404).json({ success: false, error: 'Pin not found' });
   }
 
-  const targetUrl = pin.link || '#'; // Original affiliate/product link
+  const targetUrl = imagePin.originalLink || imagePin.targetUrl || imagePin.sourceUrl || imagePin.link || '#';
 
   try {
     await leadStorageService.addLead({ email, pinId, targetUrl });
