@@ -71,6 +71,56 @@ async function resolveTargetBoard(pin = {}, options = {}) {
   return { boardId: fallbackBoardId, boardName: preferredName };
 }
 
+function getPreferredBoardName() {
+  return process.env.PINTEREST_IMAGE_BOARD_NAME || 'pinss';
+}
+
+async function resolvePostingMethod() {
+  const configured = String(process.env.PINTEREST_IMAGE_POSTING_METHOD || process.env.PINTEREST_POSTING_METHOD || 'auto').trim().toLowerCase();
+  if (['api', 'pinterest_api'].includes(configured)) return 'api';
+  if (['bot', 'browser', 'browser_bot'].includes(configured)) return 'browser_bot';
+
+  try {
+    const historyService = require('./historyService');
+    const session = await historyService.getSessionCookie();
+    if (session?.hasSession) return 'browser_bot';
+  } catch (err) {
+    console.warn('[Pinterest Image Publish] Session lookup failed:', err.message);
+  }
+
+  return 'api';
+}
+
+async function createPinWithBrowserBot(pin, content, targetBoard) {
+  const { createPinWithBot } = require('./puppeteerService');
+  if (!createPinWithBot) {
+    throw new Error('Pinterest browser bot is not available in this runtime. Run publisher in GitHub Actions.');
+  }
+
+  const mediaUrl = Array.isArray(pin.imageUrls) ? pin.imageUrls[0] : '';
+  if (!mediaUrl) throw new Error(`Pin ${pin.pinId || pin.sourcePinId || ''} has no image URL for bot upload.`);
+
+  const botResult = await createPinWithBot({
+    title: content.title,
+    description: content.description,
+    alt_text: content.altText || '',
+    link: content.link || '',
+    boardName: targetBoard.boardName || getPreferredBoardName(),
+    media_source: {
+      url: mediaUrl,
+    },
+  });
+
+  const pinId = botResult?.pin?.id || botResult?.id || `bot_${Date.now()}`;
+  const pinUrl = botResult?.pin?.url || botResult?.url || '';
+  return {
+    id: pinId,
+    url: pinUrl,
+    isDemoMode: false,
+    method: 'browser_bot',
+  };
+}
+
 async function publishPin(pin, options = {}) {
   const pinId = String(pin.pinId || pin.sourcePinId || '').trim();
   if (!pinId) throw new Error('Queued pin is missing pinId.');
@@ -87,20 +137,32 @@ async function publishPin(pin, options = {}) {
   const title = cleanText(aiResult.title || pin.title || 'Pinterest Inspiration', 100);
   const description = cleanText(aiResult.description || pin.description || '', 800);
   const hashtags = Array.isArray(aiResult.hashtags) ? aiResult.hashtags : [];
-  const targetBoard = await resolveTargetBoard(pin, options);
   const link = pin.link || '';
+  const postingMethod = await resolvePostingMethod();
+  const content = { title, description, altText: pin.altText || '', link };
+  let targetBoard;
+  let result;
 
-  const result = await pinterestService.createPin({
-    title,
-    description,
-    hashtags,
-    imageUrls: pin.imageUrls,
-    link,
-    boardId: targetBoard.boardId,
-  });
+  if (postingMethod === 'browser_bot') {
+    targetBoard = {
+      boardId: '',
+      boardName: getPreferredBoardName(),
+    };
+    result = await createPinWithBrowserBot(pin, content, targetBoard);
+  } else {
+    targetBoard = await resolveTargetBoard(pin, options);
+    result = await pinterestService.createPin({
+      title,
+      description,
+      hashtags,
+      imageUrls: pin.imageUrls,
+      link,
+      boardId: targetBoard.boardId,
+    });
 
-  if (result?.isDemoMode && process.env.PINTEREST_IMAGE_ALLOW_DEMO !== 'true') {
-    throw new Error('Pinterest API token missing; demo pin was not recorded as posted.');
+    if (result?.isDemoMode && process.env.PINTEREST_IMAGE_ALLOW_DEMO !== 'true') {
+      throw new Error('Pinterest API token missing; demo pin was not recorded as posted.');
+    }
   }
 
   await stateService.markPosted(pinId, result.id, {
@@ -108,6 +170,7 @@ async function publishPin(pin, options = {}) {
     sourceAccount: pin.sourceAccount || '',
     bridgeLink: link,
     title,
+    method: result.method || postingMethod,
     sourceBoardName: pin.boardName || '',
     targetBoardName: targetBoard.boardName || '',
     targetBoardId: targetBoard.boardId || '',
@@ -119,6 +182,7 @@ async function publishPin(pin, options = {}) {
     sourceAccount: pin.sourceAccount || '',
     sourceBoardName: pin.boardName || '',
     targetBoardName: targetBoard.boardName || '',
+    method: result.method || postingMethod,
   });
 
   return {
