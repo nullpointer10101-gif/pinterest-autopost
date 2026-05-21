@@ -1,8 +1,15 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const pinterestStateService = require('../services/pinterestStateService');
 const pinterestImageStateService = require('../services/pinterestImageStateService');
 const leadStorageService = require('../services/leadStorageService');
+
+const PINTEREST_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+const livePinCache = new Map();
 
 function escapeHtml(value) {
   return String(value || '')
@@ -24,6 +31,43 @@ function safeJson(value) {
 
 function cleanText(value, fallback = '') {
   return String(value || fallback).replace(/\s+/g, ' ').trim();
+}
+
+function decodeHtml(value) {
+  return String(value || '')
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number.parseInt(dec, 10)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractMetaContent(html, keys = []) {
+  const tags = String(html || '').match(/<meta\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    const isMatch = keys.some((key) => {
+      const escaped = escapeRegex(key);
+      return new RegExp(`(?:property|name)=["']${escaped}["']`, 'i').test(tag);
+    });
+    if (!isMatch) continue;
+
+    const content = tag.match(/\bcontent=["']([^"']*)["']/i);
+    if (content?.[1]) return cleanText(decodeHtml(content[1]));
+  }
+
+  return '';
+}
+
+function extractTitleTag(html) {
+  const match = String(html || '').match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match?.[1] ? cleanText(decodeHtml(match[1])) : '';
 }
 
 function canonicalImageKey(url) {
@@ -56,11 +100,53 @@ function getPinImages(pin = {}) {
 
 function getDisplayTitle(value) {
   const title = cleanText(value, 'Shop this look');
-  return title
+  const withoutPrefix = title.replace(/^Pin on\s+/i, '');
+  return withoutPrefix
     .split('|')[0]
     .replace(/\s+\d{4}$/, '')
     .trim()
     .slice(0, 86);
+}
+
+async function fetchLivePinterestPin(pinId) {
+  const cleanPinId = String(pinId || '').trim();
+  if (!/^\d{6,}$/.test(cleanPinId)) return null;
+  if (livePinCache.has(cleanPinId)) return livePinCache.get(cleanPinId);
+
+  try {
+    const response = await axios.get(`https://www.pinterest.com/pin/${encodeURIComponent(cleanPinId)}/`, {
+      headers: PINTEREST_HEADERS,
+      timeout: 12000,
+      maxRedirects: 5,
+    });
+    const html = String(response.data || '');
+    const imageUrl = extractMetaContent(html, ['og:image', 'twitter:image:src', 'twitter:image']);
+    const title = extractMetaContent(html, ['og:title', 'twitter:title']) || extractTitleTag(html);
+    const description = extractMetaContent(html, ['og:description', 'description', 'twitter:description']);
+
+    if (!imageUrl && !title && !description) return null;
+
+    const recoveredPin = {
+      pinId: cleanPinId,
+      title: title || 'Shop this look',
+      description: description || 'Leave your email and we will send the product link shortly.',
+      mediaUrl: imageUrl || '',
+      thumbnailUrl: imageUrl || '',
+      imageUrls: imageUrl ? [imageUrl] : [],
+      originalLink: '',
+      targetUrl: '',
+      sourceUrl: '',
+      boardName: '',
+      sourceAccount: '',
+      recoveredFromPinterest: true,
+    };
+    livePinCache.set(cleanPinId, recoveredPin);
+    return recoveredPin;
+  } catch (err) {
+    console.warn(`[Bridge] Live Pinterest recovery failed for ${cleanPinId}: ${err.message}`);
+    livePinCache.set(cleanPinId, null);
+    return null;
+  }
 }
 
 async function getBridgePin(pinId) {
@@ -71,21 +157,25 @@ async function getBridgePin(pinId) {
   const posted = typeof pinterestImageStateService.getPostedByPinId === 'function'
     ? await pinterestImageStateService.getPostedByPinId(pinId)
     : null;
+  const livePin = await fetchLivePinterestPin(pinId);
   if (posted) {
     return {
       recovered: true,
       pin: {
+        ...(livePin || {}),
         pinId,
-        title: posted.title || 'Shop this look',
-        description: 'Leave your email and we will send the product link shortly.',
+        title: posted.title || livePin?.title || 'Shop this look',
+        description: livePin?.description || 'Leave your email and we will send the product link shortly.',
         sourceAccount: posted.sourceAccount || '',
-        boardName: posted.sourceBoardName || '',
+        boardName: posted.sourceBoardName || livePin?.boardName || '',
         targetUrl: posted.targetUrl || '',
         originalLink: posted.originalLink || '',
         sourceUrl: posted.sourceUrl || '',
       },
     };
   }
+
+  if (livePin) return { pin: livePin, recovered: true };
 
   return {
     recovered: true,
