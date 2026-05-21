@@ -21,6 +21,12 @@ on:
         required: false
         default: ''
 
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
   # JOB 1: PUBLISHER — Runs every hour, pops 6 pins from the queue and posts them
